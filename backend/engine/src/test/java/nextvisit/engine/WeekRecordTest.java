@@ -107,4 +107,28 @@ class WeekRecordTest {
         assertEquals(2, Labels.maxValue(Axis.CONSISTENCY));
         assertEquals(2, Labels.maxValue(Axis.HAND));
     }
+
+    @Test
+    void toWeeksKeepsWeeksThatHaveOnlySignalsOrNotes() {
+        SignalKey grimace = new SignalKey(SignalAction.STANDING, SignalKind.GRIMACE);
+        List<WeekRecord> weeks = List.of(
+            new WeekRecord(1, values(1, "toilet", 2), Set.of(), null),
+            new WeekRecord(2, Map.of(), Set.of(grimace), TimeTag.AFTERNOON),
+            new WeekRecord(3, values(3, "toilet", 2), null, null));
+        CaseInput in = CaseInput.fromWeeks(ObservationSet.STROKE, weeks);
+        assertEquals(3, in.notes().size());
+        assertEquals(2, in.signals().size());
+
+        List<WeekRecord> back = in.toWeeks();
+        assertEquals(List.of(1, 2, 3), back.stream().map(WeekRecord::week).toList());
+        WeekRecord w2 = back.get(1);
+        assertTrue(w2.values().isEmpty());
+        assertEquals(Set.of(grimace), w2.signals());
+        assertEquals(TimeTag.AFTERNOON, w2.noteTag());
+        assertNull(back.get(2).signals());
+
+        CaseInput again = CaseInput.fromWeeks(ObservationSet.STROKE, back);
+        assertEquals(in.notes(), again.notes());
+        assertEquals(in.signals(), again.signals());
+    }
 }

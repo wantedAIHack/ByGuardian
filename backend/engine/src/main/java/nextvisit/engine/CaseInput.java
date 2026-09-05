@@ -93,6 +93,12 @@ public record CaseInput(
         for (WeeklyNote n : notes) {
             tags.put(n.week(), n.tag());
         }
+        for (SignalWeek s : signals) {
+            byWeek.computeIfAbsent(s.week(), k -> new java.util.LinkedHashMap<>());
+        }
+        for (WeeklyNote n : notes) {
+            byWeek.computeIfAbsent(n.week(), k -> new java.util.LinkedHashMap<>());
+        }
         List<WeekRecord> out = new java.util.ArrayList<>();
         for (var e : byWeek.entrySet()) {
             out.add(new WeekRecord(e.getKey(), e.getValue(), sig.get(e.getKey()), tags.get(e.getKey())));
