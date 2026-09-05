@@ -83,4 +83,105 @@ class CrossDetectorTest {
         assertTrue(ofType(out, DetectionType.RISE_VS_STALL).isEmpty());
         assertTrue(ofType(out, DetectionType.RISE_VS_DECLINE).isEmpty());
     }
+
+    static final SignalKey STAND_GRIMACE = new SignalKey(SignalAction.STANDING, SignalKind.GRIMACE);
+    static final SignalKey STAND_GUARD = new SignalKey(SignalAction.STANDING, SignalKind.GUARDING);
+    static final SignalPattern GRIMACE_3_OF_4 = new SignalPattern(STAND_GRIMACE, 3, 4, true);
+    static final SignalPattern GUARD_3_OF_4 = new SignalPattern(STAND_GUARD, 3, 4, true);
+    static final SignalPattern GRIMACE_1_OF_4 = new SignalPattern(STAND_GRIMACE, 1, 4, false);
+
+    @Test
+    void stallWithPainPairsPatternWithLongestStalledItem() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("ambulation", "2 2 2 2 2 2"),
+            item("stairs", "1 1 1 1 1 1"),
+            item("bathing", "1 1 _ 1 1 1")),  // 기록 5주 → duration 5
+            List.of(GRIMACE_3_OF_4, GUARD_3_OF_4), List.of());
+
+        List<Detection> c = ofType(out, DetectionType.STALL_WITH_PAIN);
+        assertEquals(2, c.size());
+        assertEquals(List.of("ambulation"), c.get(0).items());
+        assertEquals(STAND_GRIMACE, c.get(0).signal());
+        assertEquals(3, c.get(0).observedWeeks());
+        assertEquals(4, c.get(0).windowWeeks());
+        assertEquals(STAND_GUARD, c.get(1).signal());
+    }
+
+    @Test
+    void nonPatternSignalsDoNotFire() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("ambulation", "2 2 2 2 2 2")), List.of(GRIMACE_1_OF_4), List.of());
+        assertTrue(ofType(out, DetectionType.STALL_WITH_PAIN).isEmpty());
+    }
+
+    @Test
+    void riseWithPainPairsPatternWithLongestRiser() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("transfer", "1 1 1 2 2 2"),
+            item("toilet", "2 2 3 3 3 3")), List.of(GRIMACE_3_OF_4), List.of());
+
+        List<Detection> c = ofType(out, DetectionType.RISE_WITH_PAIN);
+        assertEquals(1, c.size());
+        assertEquals(List.of("toilet"), c.get(0).items());  // duration 4 > 3
+    }
+
+    @Test
+    void declineWithoutAnySignalFiresPerDecliningItem() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("dressing", "3 3 3 2 2 2"),
+            item("feeding", "3 3 2 2 2 2")), List.of(), List.of());
+
+        List<Detection> c = ofType(out, DetectionType.DECLINE_NO_SIGNAL);
+        assertEquals(2, c.size());
+        assertEquals(List.of("dressing"), c.get(0).items());
+    }
+
+    @Test
+    void declineWithPatternDoesNotFireNoSignalRule() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("dressing", "3 3 3 2 2 2")), List.of(GRIMACE_3_OF_4), List.of());
+        assertTrue(ofType(out, DetectionType.DECLINE_NO_SIGNAL).isEmpty());
+    }
+
+    @Test
+    void fluctuationNeedsTwoReversals() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("grooming", "2 2 3 3 2 3"),   // reversals 2
+            item("toilet", "2 2 3 3 2")),      // reversals 1
+            List.of(), List.of());
+
+        List<Detection> d = ofType(out, DetectionType.FLUCTUATION);
+        assertEquals(1, d.size());
+        assertEquals(List.of("grooming"), d.get(0).items());
+        assertEquals(6, d.get(0).duration());
+    }
+
+    @Test
+    void timeOfDayNeedsThreeOfLastFourRecordedWeeks() {
+        List<WeeklyNote> notes = List.of(
+            new WeeklyNote(1, null),
+            new WeeklyNote(2, TimeTag.MORNING),
+            new WeeklyNote(3, TimeTag.AFTERNOON),
+            new WeeklyNote(4, TimeTag.AFTERNOON),
+            new WeeklyNote(5, null),
+            new WeeklyNote(6, TimeTag.AFTERNOON));
+        List<Detection> out = CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2 2")), List.of(), notes);
+
+        List<Detection> e = ofType(out, DetectionType.TIME_OF_DAY);
+        assertEquals(1, e.size());
+        assertEquals(TimeTag.AFTERNOON, e.get(0).timeTag());
+        assertEquals(3, e.get(0).observedWeeks());
+        assertEquals(4, e.get(0).windowWeeks());
+        assertTrue(e.get(0).items().isEmpty());
+    }
+
+    @Test
+    void timeOfDayIgnoresAnyTagAndTwoWeeks() {
+        List<WeeklyNote> notes = List.of(
+            new WeeklyNote(1, TimeTag.ANY), new WeeklyNote(2, TimeTag.ANY),
+            new WeeklyNote(3, TimeTag.ANY), new WeeklyNote(4, TimeTag.AFTERNOON),
+            new WeeklyNote(5, TimeTag.AFTERNOON));
+        List<Detection> out = CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2")), List.of(), notes);
+        assertTrue(ofType(out, DetectionType.TIME_OF_DAY).isEmpty());
+    }
 }
