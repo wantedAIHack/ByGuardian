@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: nextvisit-api
+  datasource:
+    url: ${NEXTVISIT_DB_URL:jdbc:postgresql://localhost:5432/nextvisit}
+    username: ${NEXTVISIT_DB_USER:nextvisit}
+    password: ${NEXTVISIT_DB_PASSWORD:nextvisit}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration/{vendor}
+server:
+  port: 8080
+nextvisit:
+  timezone: Asia/Seoul
