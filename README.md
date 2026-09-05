@@ -829,6 +829,19 @@ Ollama의 OpenAI 호환 엔드포인트에 맞춰 인터페이스를 하나 두�
 
 **infra/** — EC2에 Docker Compose(api + postgres + Caddy). 프론트는 Cloudflare Pages. 노트북은 §8 배포 환경 참고.
 
+**로컬 실행**
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # 이 맥은 기본 java가 26
+cd backend
+docker compose up -d                                # Postgres 16
+./gradlew :api:bootRun                              # http://localhost:8080
+curl -s -X POST localhost:8080/demo | jq            # 시드 케이스 + 보호자 토큰 + 치료사 링크
+curl -s localhost:8080/me/prep-card -H "X-Guardian-Token: <guardianToken>" | jq
+```
+
+테스트는 도커 없이 돈다(H2). `./gradlew test`.
+
 데모 데이터를 시드로 넣어두면 심사위원 앞에서 6주치 기록을 즉시 보여줄 수 있습니다.
 
 ### 데모 시드 데이터
