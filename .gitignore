@@ -1,0 +1,8 @@
+.DS_Store
+.gradle/
+build/
+*.iml
+.idea/
+node_modules/
+dist/
+.superpowers/
