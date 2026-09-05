@@ -110,4 +110,17 @@ class TemplatesTest {
         assertFalse(Templates.isSafe("낙상 위험이 줄었을까요?"));
         assertTrue(Templates.isSafe("걷기는 왜 안 늘고 있을까요?"));
     }
+
+    @Test
+    void isSafeRejectsContractedPastTenseForms() {
+        assertFalse(Templates.isSafe("확실히 좋아졌습니다."));
+        assertFalse(Templates.isSafe("요즘 많이 좋아졌나요?"));
+        assertFalse(Templates.isSafe("전보다 나빠졌을까요?"));
+        assertFalse(Templates.isSafe("걷기가 나아지고 있을까요?"));
+    }
+
+    @Test
+    void isSafeRejectsMissingQuestionMarkEvenWithoutForbiddenWords() {
+        assertFalse(Templates.isSafe("집 안에서 걷는 걸 6주째 보고 있습니다."));
+    }
 }

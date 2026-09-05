@@ -9,9 +9,14 @@ import java.util.Map;
  */
 public final class Templates {
 
-    /** README §8 가드레일 2번. api의 LLM 출력 검증도 이 목록을 쓴다. */
+    /**
+     * README §8 가드레일 2번. api의 LLM 출력 검증도 이 목록을 쓴다.
+     * 좋아졌/나빠졌/나아졌은 별도로 올린다. 지+었 → 졌로 축약되는 한국어 과거형 때문에
+     * 어간(좋아지, 나빠지, 나아지)만으로는 부분 문자열 검사를 피해갈 수 있다.
+     */
     public static final List<String> FORBIDDEN =
-        List.of("개선", "악화", "호전", "위험", "정상", "비정상", "회복", "좋아지", "나빠지");
+        List.of("개선", "악화", "호전", "위험", "정상", "비정상", "회복",
+            "좋아지", "좋아졌", "나빠지", "나빠졌", "나아지", "나아졌");
 
     private Templates() {}
 
