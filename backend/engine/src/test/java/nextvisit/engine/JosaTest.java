@@ -22,6 +22,12 @@ class JosaTest {
     }
 
     @Test
+    void euroRoWithRieulFinalUsesRoNotEuro() {
+        // 받침이 ㄹ이면 "으로"가 아니라 "로". 카탈로그 단어 중엔 이 분기를 타는 게 없어 별도로 검증한다
+        assertEquals("서울로", Josa.euroRo("서울"));
+    }
+
+    @Test
     void nonHangulEndingTreatedAsNoFinal() {
         assertEquals("level 3는", Josa.eunNeun("level 3"));
     }

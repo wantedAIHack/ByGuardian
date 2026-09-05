@@ -1,5 +1,6 @@
 package nextvisit.engine;
 
+import java.text.Normalizer;
 import java.util.List;
 import java.util.Map;
 
@@ -13,23 +14,39 @@ public final class Templates {
      * README §8 가드레일 2번. api의 LLM 출력 검증도 이 목록을 쓴다.
      * 좋아졌/나빠졌/나아졌은 별도로 올린다. 지+었 → 졌로 축약되는 한국어 과거형 때문에
      * 어간(좋아지, 나빠지, 나아지)만으로는 부분 문자열 검사를 피해갈 수 있다.
+     * 같은 이유로 지+어 → 져 축약형(좋아져, 나빠져, 나아져)과 그 명사형(좋아짐, 나빠짐, 나아짐)도 따로 올린다.
+     * "좋아짐"은 좋·아·짐이라 "좋아지"를 부분 문자열로 포함하지 않으므로 어간만으로는 걸러지지 않는다.
+     * 검사 전에 {@link Normalizer.Form#NFC}로 정규화한다. JSON 왕복이나 파일시스템을 거치며
+     * 한글이 분해형(NFD)으로 도착하면 부분 문자열 검사를 피해갈 수 있기 때문이다.
      */
     public static final List<String> FORBIDDEN =
         List.of("개선", "악화", "호전", "위험", "정상", "비정상", "회복",
-            "좋아지", "좋아졌", "나빠지", "나빠졌", "나아지", "나아졌");
+            "좋아지", "좋아졌", "나빠지", "나빠졌", "나아지", "나아졌",
+            "좋아져", "나빠져", "나아져", "좋아짐", "나빠짐", "나아짐");
 
     private Templates() {}
 
-    public static boolean isSafe(String sentence) {
-        if (sentence == null || !sentence.trim().endsWith("?")) {
+    /** 정규화 후 금지 어휘 포함 여부. */
+    public static boolean containsForbiddenWord(String text) {
+        if (text == null) {
             return false;
         }
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFC);
         for (String w : FORBIDDEN) {
-            if (sentence.contains(w)) {
-                return false;
+            if (normalized.contains(w)) {
+                return true;
             }
         }
-        return true;
+        return false;
+    }
+
+    /** 질문형으로 끝나는지. */
+    public static boolean isQuestion(String text) {
+        return text != null && text.trim().endsWith("?");
+    }
+
+    public static boolean isSafe(String sentence) {
+        return isQuestion(sentence) && !containsForbiddenWord(sentence);
     }
 
     public static String render(Detection d, ObservationSet set, Map<String, ItemVerdicts> byCode) {

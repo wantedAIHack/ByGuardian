@@ -2,6 +2,7 @@ package nextvisit.engine;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 
 /** README §7 교차 감지. 규칙 엔진. 문장은 만들지 않는다. */
@@ -83,7 +84,11 @@ public final class CrossDetector {
                 out.add(Detection.ofSignal(DetectionType.STALL_WITH_PAIN, y.code(), y.level().duration(), p));
             }
         }
+        EnumSet<SignalAction> seenActions = EnumSet.noneOf(SignalAction.class);
         for (SignalPattern p : firing) {
+            if (!seenActions.add(p.key().action())) {
+                continue;
+            }
             if (!risers.isEmpty()) {
                 ItemVerdicts x = risers.get(0);
                 out.add(Detection.ofSignal(DetectionType.RISE_WITH_PAIN, x.code(), x.level().duration(), p));
@@ -131,8 +136,16 @@ public final class CrossDetector {
 
     /** (e) 1단계. 최근 기록된 4주 중 같은 시간대 태그 3주 이상. ANY·null은 세지 않는다. */
     private static void timeOfDay(List<WeeklyNote> notes, List<Detection> out) {
-        int from = Math.max(0, notes.size() - TIME_WINDOW_WEEKS);
-        List<WeeklyNote> window = notes.subList(from, notes.size());
+        List<WeeklyNote> sorted = new ArrayList<>(notes);
+        sorted.sort(Comparator.comparingInt(WeeklyNote::week));
+        for (int i = 1; i < sorted.size(); i++) {
+            if (sorted.get(i).week() == sorted.get(i - 1).week()) {
+                throw new IllegalArgumentException("duplicate week: " + sorted.get(i).week());
+            }
+        }
+
+        int from = Math.max(0, sorted.size() - TIME_WINDOW_WEEKS);
+        List<WeeklyNote> window = sorted.subList(from, sorted.size());
         for (TimeTag tag : List.of(TimeTag.MORNING, TimeTag.AFTERNOON, TimeTag.EVENING)) {
             int n = (int) window.stream().filter(w -> w.tag() == tag).count();
             if (n >= TIME_THRESHOLD) {

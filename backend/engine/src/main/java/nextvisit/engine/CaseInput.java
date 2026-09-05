@@ -19,9 +19,28 @@ public record CaseInput(
         signals = List.copyOf(signals);
         notes = List.copyOf(notes);
         for (var e : series.entrySet()) {
-            set.item(e.getKey());
-            if (!e.getValue().containsKey(Axis.LEVEL)) {
-                throw new IllegalArgumentException("LEVEL series required for " + e.getKey());
+            String code = e.getKey();
+            Item item = set.item(code);
+            Map<Axis, List<Observation>> byAxis = e.getValue();
+            if (!byAxis.containsKey(Axis.LEVEL)) {
+                throw new IllegalArgumentException("LEVEL series required for " + code);
+            }
+            for (Axis axis : byAxis.keySet()) {
+                if (!item.axes().contains(axis)) {
+                    throw new IllegalArgumentException(
+                        "item " + code + " does not declare axis " + axis);
+                }
+            }
+            for (var axisEntry : byAxis.entrySet()) {
+                Axis axis = axisEntry.getKey();
+                int max = Labels.maxValue(axis);
+                for (Observation o : axisEntry.getValue()) {
+                    if (o.value() < 0 || o.value() > max) {
+                        throw new IllegalArgumentException(
+                            "item " + code + " axis " + axis + " week " + o.week()
+                                + " value out of range: " + o.value());
+                    }
+                }
             }
         }
     }

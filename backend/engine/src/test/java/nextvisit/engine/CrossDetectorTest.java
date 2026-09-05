@@ -1,6 +1,7 @@
 package nextvisit.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.EnumMap;
@@ -126,6 +127,27 @@ class CrossDetectorTest {
     }
 
     @Test
+    void riseWithPainEmitsAtMostOnePerActionEvenWithMultiplePatterns() {
+        // 두 패턴 다 STANDING이면서 kind만 다르다 → RISE_WITH_PAIN은 action당 하나만
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("toilet", "2 2 3 3 3 3")), List.of(GRIMACE_3_OF_4, GUARD_3_OF_4), List.of());
+
+        List<Detection> c = ofType(out, DetectionType.RISE_WITH_PAIN);
+        assertEquals(1, c.size());
+        assertEquals(STAND_GRIMACE, c.get(0).signal());  // 먼저 나온(kind 순서상 앞선) 패턴을 유지
+    }
+
+    @Test
+    void firingPatternWithNoQualifyingCandidateProducesNoSignalPairedDetection() {
+        // sustained DOWN뿐이라 정체(stalled)도 상승(riser)도 없다 → 둘 다 발화하지 않는다
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("dressing", "3 3 3 2 2 2")), List.of(GRIMACE_3_OF_4), List.of());
+
+        assertTrue(ofType(out, DetectionType.STALL_WITH_PAIN).isEmpty());
+        assertTrue(ofType(out, DetectionType.RISE_WITH_PAIN).isEmpty());
+    }
+
+    @Test
     void declineWithoutAnySignalFiresPerDecliningItem() {
         List<Detection> out = CrossDetector.detect(SET, List.of(
             item("dressing", "3 3 3 2 2 2"),
@@ -183,6 +205,42 @@ class CrossDetectorTest {
             new WeeklyNote(5, TimeTag.AFTERNOON));
         List<Detection> out = CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2")), List.of(), notes);
         assertTrue(ofType(out, DetectionType.TIME_OF_DAY).isEmpty());
+    }
+
+    @Test
+    void timeOfDayUnsortedNotesYieldSameResultAsSorted() {
+        List<WeeklyNote> sorted = List.of(
+            new WeeklyNote(1, null),
+            new WeeklyNote(2, TimeTag.MORNING),
+            new WeeklyNote(3, TimeTag.AFTERNOON),
+            new WeeklyNote(4, TimeTag.AFTERNOON),
+            new WeeklyNote(5, null),
+            new WeeklyNote(6, TimeTag.AFTERNOON));
+        List<WeeklyNote> shuffled = List.of(
+            new WeeklyNote(6, TimeTag.AFTERNOON),
+            new WeeklyNote(5, null),
+            new WeeklyNote(1, null),
+            new WeeklyNote(2, TimeTag.MORNING),
+            new WeeklyNote(3, TimeTag.AFTERNOON),
+            new WeeklyNote(4, TimeTag.AFTERNOON));
+
+        List<Detection> sortedOut = ofType(
+            CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2 2")), List.of(), sorted),
+            DetectionType.TIME_OF_DAY);
+        List<Detection> shuffledOut = ofType(
+            CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2 2")), List.of(), shuffled),
+            DetectionType.TIME_OF_DAY);
+
+        assertEquals(sortedOut, shuffledOut);
+        assertEquals(1, sortedOut.size());
+    }
+
+    @Test
+    void timeOfDayDuplicateWeekThrows() {
+        List<WeeklyNote> notes = List.of(new WeeklyNote(1, TimeTag.MORNING), new WeeklyNote(1, TimeTag.AFTERNOON));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2 2")), List.of(), notes));
+        assertTrue(ex.getMessage().contains("1"), ex.getMessage());
     }
 
     @Test

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.text.Normalizer;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -122,5 +123,36 @@ class TemplatesTest {
     @Test
     void isSafeRejectsMissingQuestionMarkEvenWithoutForbiddenWords() {
         assertFalse(Templates.isSafe("집 안에서 걷는 걸 6주째 보고 있습니다."));
+    }
+
+    @Test
+    void isSafeRejectsNewJyeoAndJimForms() {
+        assertFalse(Templates.isSafe("걷기가 많이 좋아져 보이나요?"));
+        assertFalse(Templates.isSafe("전보다 나빠져 보이나요?"));
+        assertFalse(Templates.isSafe("걷기가 나아져 보이는 걸까요?"));
+        assertFalse(Templates.isSafe("좋아짐이 느껴지시나요?"));
+        assertFalse(Templates.isSafe("나빠짐이 걱정되시나요?"));
+        assertFalse(Templates.isSafe("나아짐이 있었을까요?"));
+    }
+
+    @Test
+    void isSafeRejectsNfdDecomposedForbiddenWord() {
+        // JSON 왕복이나 파일시스템을 거치며 한글이 분해형(NFD)으로 도착해도 걸러야 한다
+        String nfd = Normalizer.normalize("보행 기능이 개선되었나요?", Normalizer.Form.NFD);
+        assertFalse(Templates.isSafe(nfd));
+    }
+
+    @Test
+    void isQuestionAcceptsQuestionsAndRejectsStatementsRegardlessOfVocabulary() {
+        assertTrue(Templates.isQuestion("걷기는 왜 안 늘고 있을까요?"));
+        assertTrue(Templates.isQuestion("보행 기능이 개선되었나요?"));  // 어휘와 무관하게 질문형 여부만 본다
+        assertFalse(Templates.isQuestion("집 안에서 걷는 걸 6주째 보고 있습니다."));
+        assertFalse(Templates.isQuestion("보행 기능이 개선되었습니다."));
+    }
+
+    @Test
+    void containsForbiddenWordWorksOnStatementsNotJustQuestions() {
+        assertTrue(Templates.containsForbiddenWord("보행 기능이 개선되었습니다."));
+        assertFalse(Templates.containsForbiddenWord("집 안에서 걷는 걸 6주째 보고 있습니다."));
     }
 }

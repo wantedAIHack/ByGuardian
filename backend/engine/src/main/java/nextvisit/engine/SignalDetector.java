@@ -1,6 +1,7 @@
 package nextvisit.engine;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -13,8 +14,16 @@ public final class SignalDetector {
     private SignalDetector() {}
 
     public static List<SignalPattern> judge(List<SignalWeek> weeks) {
-        int from = Math.max(0, weeks.size() - WINDOW_WEEKS);
-        List<SignalWeek> window = weeks.subList(from, weeks.size());
+        List<SignalWeek> sorted = new ArrayList<>(weeks);
+        sorted.sort(Comparator.comparingInt(SignalWeek::week));
+        for (int i = 1; i < sorted.size(); i++) {
+            if (sorted.get(i).week() == sorted.get(i - 1).week()) {
+                throw new IllegalArgumentException("duplicate week: " + sorted.get(i).week());
+            }
+        }
+
+        int from = Math.max(0, sorted.size() - WINDOW_WEEKS);
+        List<SignalWeek> window = sorted.subList(from, sorted.size());
 
         TreeMap<SignalKey, Integer> counts = new TreeMap<>();
         for (SignalWeek w : window) {

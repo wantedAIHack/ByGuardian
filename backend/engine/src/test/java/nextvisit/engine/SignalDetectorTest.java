@@ -2,6 +2,7 @@ package nextvisit.engine;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -12,6 +13,7 @@ class SignalDetectorTest {
 
     private static final SignalKey STAND_GRIMACE = new SignalKey(SignalAction.STANDING, SignalKind.GRIMACE);
     private static final SignalKey STAND_GUARD = new SignalKey(SignalAction.STANDING, SignalKind.GUARDING);
+    private static final SignalKey WALK_GRIMACE = new SignalKey(SignalAction.WALKING, SignalKind.GRIMACE);
 
     private static SignalWeek week(int w, SignalKey... keys) {
         return new SignalWeek(w, Set.of(keys));
@@ -70,5 +72,36 @@ class SignalDetectorTest {
     void noSignalsGivesEmptyList() {
         assertTrue(SignalDetector.judge(List.of(week(1), week(2))).isEmpty());
         assertTrue(SignalDetector.judge(List.of()).isEmpty());
+    }
+
+    @Test
+    void unsortedInputYieldsSameResultAsSorted() {
+        // 리뷰에서 지적된 순서: 6,5,1,2,3,4
+        List<SignalPattern> sorted = SignalDetector.judge(List.of(
+            week(1), week(2, STAND_GRIMACE), week(3, STAND_GRIMACE),
+            week(4), week(5, STAND_GRIMACE), week(6, STAND_GRIMACE)));
+        List<SignalPattern> shuffled = SignalDetector.judge(List.of(
+            week(6, STAND_GRIMACE), week(5, STAND_GRIMACE), week(1),
+            week(2, STAND_GRIMACE), week(3, STAND_GRIMACE), week(4)));
+
+        assertEquals(sorted, shuffled);
+        assertFalse(sorted.isEmpty());
+    }
+
+    @Test
+    void duplicateWeekThrows() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> SignalDetector.judge(List.of(week(1, STAND_GRIMACE), week(2), week(2, STAND_GUARD))));
+        assertTrue(ex.getMessage().contains("2"), ex.getMessage());
+    }
+
+    @Test
+    void sortsAcrossDifferentActivitiesNotJustKindsWithinOne() {
+        // STANDING(action 순서 0)이 WALKING(action 순서 1)보다 먼저 나와야 한다
+        List<SignalPattern> out = SignalDetector.judge(List.of(
+            week(1, WALK_GRIMACE), week(2, WALK_GRIMACE, STAND_GRIMACE), week(3, STAND_GRIMACE), week(4)));
+        assertEquals(2, out.size());
+        assertEquals(STAND_GRIMACE, out.get(0).key());
+        assertEquals(WALK_GRIMACE, out.get(1).key());
     }
 }
