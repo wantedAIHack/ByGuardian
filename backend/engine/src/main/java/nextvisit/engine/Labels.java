@@ -24,7 +24,7 @@ public final class Labels {
     }
 
     /** 해당 축의 합법적인 최댓값. 최솟값은 항상 0. */
-    static int maxValue(Axis axis) {
+    public static int maxValue(Axis axis) {
         return TABLE.get(axis).size() - 1;
     }
 }
