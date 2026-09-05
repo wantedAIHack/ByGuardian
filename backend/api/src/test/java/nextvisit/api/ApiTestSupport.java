@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 /** MockMvc 도우미. 온보딩 JSON을 만들고 토큰 헤더를 붙인다. */
 public final class ApiTestSupport {
 
-    public static final String HEADER = "X-Guardian-Token";
+    public static final String HEADER = nextvisit.api.auth.GuardianAuthFilter.HEADER;
 
     private ApiTestSupport() {}
 
