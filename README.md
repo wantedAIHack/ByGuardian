@@ -825,7 +825,7 @@ Ollama의 OpenAI 호환 엔드포인트에 맞춰 인터페이스를 하나 두�
 **backend/** — Gradle 멀티모듈, Java 21.
 
 - `engine` — 순수 Java. §6 침묵 게이트, §7 교차 감지, 질문 3개 선택. **Spring 의존성 0.** §6 예시 표가 그대로 JUnit 파라미터 테스트
-- `api` — Spring Boot 3, Spring Data JPA, PostgreSQL. 주차 스냅샷은 JSONB 컬럼 하나. LLM은 Spring AI OpenAI 스타터를 Ollama의 OpenAI 호환 엔드포인트에 물림. base-url 한 줄로 호스팅 API 전환
+- `api` — Spring Boot 3.5, Spring Data JPA, PostgreSQL. 주차 스냅샷은 JSONB 컬럼 하나. LLM은 `RestClient`로 Ollama의 OpenAI 호환 엔드포인트를 직접 호출. 호출이 한 종류뿐이라 Spring AI를 쓰지 않는다(의존성·버전 궁합 위험 제거). base-url 한 줄로 호스팅 API 전환은 그대로 성립. 상세 계약은 `docs/superpowers/specs/2026-09-05-api-design.md`
 
 **infra/** — EC2에 Docker Compose(api + postgres + Caddy). 프론트는 Cloudflare Pages. 노트북은 §8 배포 환경 참고.
 
