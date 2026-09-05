@@ -184,4 +184,65 @@ class CrossDetectorTest {
         List<Detection> out = CrossDetector.detect(SET, List.of(item("toilet", "2 2 2 2 2")), List.of(), notes);
         assertTrue(ofType(out, DetectionType.TIME_OF_DAY).isEmpty());
     }
+
+    @Test
+    void aidChangeWithStableLevel() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("ambulation", "2 2 2 2 2 2", Axis.AID, "1 1 1 1 2 2")), List.of(), List.of());
+
+        List<Detection> f = ofType(out, DetectionType.AID_CHANGE);
+        assertEquals(1, f.size());
+        assertEquals(List.of("ambulation"), f.get(0).items());
+        assertEquals(2, f.get(0).duration());
+    }
+
+    @Test
+    void aidChangeFiresForEitherDirection() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("ambulation", "2 2 2 2 2 2", Axis.AID, "2 2 2 1 1 1")), List.of(), List.of());
+        assertEquals(1, ofType(out, DetectionType.AID_CHANGE).size());
+    }
+
+    @Test
+    void aidChangeNotWhenLevelAlsoMoved() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("ambulation", "1 1 1 2 2 2", Axis.AID, "1 1 1 1 2 2")), List.of(), List.of());
+        assertTrue(ofType(out, DetectionType.AID_CHANGE).isEmpty());
+    }
+
+    @Test
+    void handDisuseWhenLevelUpAndHandDown() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("feeding", "2 2 2 3 3 3", Axis.HAND, "1 1 1 0 0 0")), List.of(), List.of());
+
+        List<Detection> g = ofType(out, DetectionType.HAND_DISUSE);
+        assertEquals(1, g.size());
+        assertEquals(List.of("feeding"), g.get(0).items());
+        assertEquals(3, g.get(0).duration());
+    }
+
+    @Test
+    void handDisuseNotWhenHandStable() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("feeding", "2 2 2 3 3 3", Axis.HAND, "1 1 1 1 1 1")), List.of(), List.of());
+        assertTrue(ofType(out, DetectionType.HAND_DISUSE).isEmpty());
+    }
+
+    @Test
+    void consistencyDropWithStableLevel() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("stairs", "1 1 1 1 1 1", Axis.CONSISTENCY, "2 2 1 0 0 0")), List.of(), List.of());
+
+        List<Detection> h = ofType(out, DetectionType.CONSISTENCY_DROP);
+        assertEquals(1, h.size());
+        assertEquals(List.of("stairs"), h.get(0).items());
+        assertEquals(4, h.get(0).duration());
+    }
+
+    @Test
+    void consistencyRiseDoesNotFire() {
+        List<Detection> out = CrossDetector.detect(SET, List.of(
+            item("stairs", "1 1 1 1 1 1", Axis.CONSISTENCY, "0 0 1 2 2 2")), List.of(), List.of());
+        assertTrue(ofType(out, DetectionType.CONSISTENCY_DROP).isEmpty());
+    }
 }

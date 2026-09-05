@@ -29,6 +29,7 @@ public final class CrossDetector {
         riseVsDecline(items, out);
         participationVsSignal(set, items, firing, out);
         fluctuation(items, out);
+        axisRules(items, out);
         timeOfDay(notes, out);
         return List.copyOf(out);
     }
@@ -103,6 +104,28 @@ public final class CrossDetector {
             if (x.level().reversals() >= FLUCTUATION_REVERSALS) {
                 out.add(Detection.ofItems(DetectionType.FLUCTUATION, List.of(x.code()), x.level().trajectory().size()));
             }
+        }
+    }
+
+    /** (f)(g)(h). 항목마다 각 규칙 최대 하나. 순서: 항목 표 순서, 그 안에서 f → g → h. */
+    private static void axisRules(List<ItemVerdicts> items, List<Detection> out) {
+        for (ItemVerdicts x : items) {
+            Verdict level = x.level();
+            x.axis(Axis.AID).ifPresent(aid -> {
+                if (level.status() == Status.NO_CHANGE && aid.status() == Status.SUSTAINED) {
+                    out.add(Detection.ofItems(DetectionType.AID_CHANGE, List.of(x.code()), aid.duration()));
+                }
+            });
+            x.axis(Axis.HAND).ifPresent(hand -> {
+                if (level.is(Status.SUSTAINED, Direction.UP) && hand.is(Status.SUSTAINED, Direction.DOWN)) {
+                    out.add(Detection.ofItems(DetectionType.HAND_DISUSE, List.of(x.code()), hand.duration()));
+                }
+            });
+            x.axis(Axis.CONSISTENCY).ifPresent(c -> {
+                if (level.status() == Status.NO_CHANGE && c.is(Status.SUSTAINED, Direction.DOWN)) {
+                    out.add(Detection.ofItems(DetectionType.CONSISTENCY_DROP, List.of(x.code()), c.duration()));
+                }
+            });
         }
     }
 
