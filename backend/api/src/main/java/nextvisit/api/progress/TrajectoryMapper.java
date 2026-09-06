@@ -24,12 +24,13 @@ public class TrajectoryMapper {
     }
 
     public List<TrajectoryDto> items(List<Snapshot> snapshots) {
+        List<SnapshotBody> bodies = parseAll(snapshots);
         List<TrajectoryDto> out = new ArrayList<>();
         for (Item item : ObservationSet.STROKE.items()) {
             List<TrajectoryDto.AxisSeries> axes = new ArrayList<>();
             boolean changed = false;
             for (Axis axis : AxisLabels.ORDER) {
-                TrajectoryDto.AxisSeries s = series(snapshots, item.code(), axis);
+                TrajectoryDto.AxisSeries s = series(snapshots, bodies, item.code(), axis);
                 if (s.values().isEmpty()) {
                     continue;
                 }
@@ -46,9 +47,14 @@ public class TrajectoryMapper {
     }
 
     public TrajectoryDto.AxisSeries series(List<Snapshot> snapshots, String code, Axis axis) {
+        return series(snapshots, parseAll(snapshots), code, axis);
+    }
+
+    private TrajectoryDto.AxisSeries series(List<Snapshot> snapshots, List<SnapshotBody> bodies, String code, Axis axis) {
         List<TrajectoryDto.Point> points = new ArrayList<>();
-        for (Snapshot s : snapshots) {
-            SnapshotBody body = json.fromJson(s.getBody(), SnapshotBody.class);
+        for (int i = 0; i < snapshots.size(); i++) {
+            Snapshot s = snapshots.get(i);
+            SnapshotBody body = bodies.get(i);
             SnapshotBody.ItemValues iv = body.items().get(code);
             if (iv == null) {
                 continue;
@@ -59,5 +65,13 @@ public class TrajectoryMapper {
             }
         }
         return new TrajectoryDto.AxisSeries(axis.name(), AxisLabels.of(axis), points);
+    }
+
+    private List<SnapshotBody> parseAll(List<Snapshot> snapshots) {
+        List<SnapshotBody> bodies = new ArrayList<>(snapshots.size());
+        for (Snapshot s : snapshots) {
+            bodies.add(json.fromJson(s.getBody(), SnapshotBody.class));
+        }
+        return bodies;
     }
 }

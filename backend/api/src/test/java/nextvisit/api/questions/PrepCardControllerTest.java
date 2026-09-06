@@ -94,10 +94,10 @@ class PrepCardControllerTest {
 
         JsonNode glance = card.get("therapistGlance");
         assertEquals(4, glance.size());
-        assertEquals("침대·의자에서 옮겨 앉기: 손 잡아드림 → 지켜보면 됨 (4주차부터)", glance.get(0).asText());
-        assertEquals("집 안에서 걷기: 보조 도구: 워커 → 지팡이 (5주차부터)", glance.get(1).asText());
-        assertEquals("문턱·계단: 한 주 일관성: 매번 → 좋은 날만 (3주차부터)", glance.get(2).asText());
-        assertEquals("화장실 이용: 지켜보면 됨 → 혼자 하심 (3주차부터)", glance.get(3).asText());
+        assertEquals("집 안에서 걷기: 보조 도구: 워커 → 지팡이 (5주차부터)", glance.get(0).asText());
+        assertEquals("화장실 이용: 지켜보면 됨 → 혼자 하심 (3주차부터)", glance.get(1).asText());
+        assertEquals("식사: 지켜보면 됨 → 혼자 하심 (4주차부터), 마비 쪽 손: 거들기만 → 안 씀 (4주차부터)", glance.get(2).asText());
+        assertEquals("침대·의자에서 옮겨 앉기: 손 잡아드림 → 지켜보면 됨 (4주차부터)", glance.get(3).asText());
         for (JsonNode g : glance) {
             assertFalse(g.asText().contains("SUSTAINED"));
             assertFalse(g.asText().contains("상승"));

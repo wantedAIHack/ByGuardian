@@ -89,7 +89,7 @@ public final class Templates {
                 ItemVerdicts v = byCode.get(d.x());
                 String level = Labels.of(Axis.LEVEL, v.level().currentValue());
                 Verdict aid = v.axis(Axis.AID).orElseThrow();
-                String before = Labels.of(Axis.AID, valueBefore(aid));
+                String before = Labels.of(Axis.AID, aid.valueBefore());
                 String after = Labels.of(Axis.AID, aid.currentValue());
                 yield Josa.eunNeun(x) + " " + level + " 그대로인데 " + before + "에서 " + Josa.euroRo(after)
                     + " 바뀐 지 " + d.duration() + "주째입니다. 이대로 괜찮을까요?";
@@ -110,19 +110,5 @@ public final class Templates {
                 yield Josa.eunNeun(x) + " " + level + " 그대로인데 요즘은 " + c + "입니다. 어떻게 보시나요?";
             }
         };
-    }
-
-    /** since 주 직전 관찰값. since가 없으면(변화 없음) 현재값. */
-    private static int valueBefore(Verdict v) {
-        if (v.since() == null) {
-            return v.currentValue();
-        }
-        List<Observation> t = v.trajectory();
-        for (int i = 0; i < t.size(); i++) {
-            if (t.get(i).week() == v.since()) {
-                return i == 0 ? t.get(0).value() : t.get(i - 1).value();
-            }
-        }
-        return v.currentValue();
     }
 }

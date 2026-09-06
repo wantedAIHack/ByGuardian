@@ -19,6 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class CatalogController {
 
+    /** README §5: sleep은 0..2, 값이 클수록 좋다(다른 모든 축과 같은 방향). 치료사 화면에서도 이 라벨을 쓴다. */
+    public static final List<CatalogDto.CodeLabel> SLEEP_LEVELS = List.of(
+        new CatalogDto.CodeLabel("0", "자주 깨심"),
+        new CatalogDto.CodeLabel("1", "가끔 깨심"),
+        new CatalogDto.CodeLabel("2", "잘 주무심"));
+
     @GetMapping("/catalog")
     public CatalogDto catalog() {
         ObservationSet set = ObservationSet.STROKE;
@@ -52,6 +58,6 @@ public class CatalogController {
         for (TimeTag t : TimeTag.values()) {
             tags.add(new CatalogDto.CodeLabel(t.name(), t.phrase()));
         }
-        return new CatalogDto(set.id(), items, axes, actions, kinds, tags);
+        return new CatalogDto(set.id(), items, axes, actions, kinds, tags, SLEEP_LEVELS);
     }
 }

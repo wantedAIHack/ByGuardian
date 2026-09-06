@@ -10,28 +10,28 @@ import nextvisit.api.common.ConflictException;
 import nextvisit.api.common.Json;
 import nextvisit.api.common.ValidationException;
 import nextvisit.api.common.WeekCalculator;
-import nextvisit.api.questions.QuestionService;
 import nextvisit.engine.ObservationSet;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 설계 3절 주차 규칙과 복사 규칙. 저장 직후 질문 캐시를 갱신한다(README §8). */
+/**
+ * 설계 3절 주차 규칙과 복사 규칙. 질문 캐시 갱신은 여기서 하지 않는다 — 실패해도 이 기록은 커밋돼야
+ * 하므로 컨트롤러가 별도로, 실패를 삼키며 갱신한다(README §4 층 1).
+ */
 @Service
 @Transactional
 public class SnapshotService {
 
     private final SnapshotRepository snapshots;
     private final SnapshotAssembler assembler;
-    private final QuestionService questions;
     private final WeekCalculator weeks;
     private final Json json;
     private final Clock clock;
 
-    public SnapshotService(SnapshotRepository snapshots, SnapshotAssembler assembler, QuestionService questions,
+    public SnapshotService(SnapshotRepository snapshots, SnapshotAssembler assembler,
                            WeekCalculator weeks, Json json, Clock clock) {
         this.snapshots = snapshots;
         this.assembler = assembler;
-        this.questions = questions;
         this.weeks = weeks;
         this.json = json;
         this.clock = clock;
@@ -81,7 +81,6 @@ public class SnapshotService {
             .orElseGet(() -> new Snapshot(kase.getId(), week, kind, req.noChange(), author, js, now));
         snapshots.save(s);
 
-        questions.refresh(kase.getId());
-        return new WeeklyRecordResponse(week, kind, true);
+        return new WeeklyRecordResponse(week, kind, false);
     }
 }

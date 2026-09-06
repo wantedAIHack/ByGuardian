@@ -14,6 +14,8 @@ import java.util.UUID;
 import nextvisit.api.auth.Guardian;
 import nextvisit.api.auth.GuardianRepository;
 import nextvisit.api.auth.TokenService;
+import nextvisit.api.catalog.CatalogController;
+import nextvisit.api.catalog.CatalogDto;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.common.Json;
@@ -26,6 +28,7 @@ import nextvisit.api.questions.QuestionService;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotBody;
 import nextvisit.api.snapshots.SnapshotRepository;
+import nextvisit.engine.Axis;
 import nextvisit.engine.SignalAction;
 import nextvisit.engine.SignalKey;
 import nextvisit.engine.SignalKind;
@@ -91,6 +94,7 @@ public class TherapistSummaryService {
 
         TreeMap<SignalKey, List<Integer>> signalWeeks = new TreeMap<>();
         List<TherapistSummaryDto.FreeNote> notes = new ArrayList<>();
+        List<TherapistSummaryDto.Sleep> sleep = new ArrayList<>();
         int confirmed = 0;
         for (Snapshot s : snaps) {
             SnapshotBody body = json.fromJson(s.getBody(), SnapshotBody.class);
@@ -107,7 +111,10 @@ public class TherapistSummaryService {
                 notes.add(new TherapistSummaryDto.FreeNote(s.getWeek(), body.freeNote().text(), tag,
                     tag == null ? null : TimeTag.valueOf(tag).phrase()));
             }
-            if (!s.isNoChange()) {
+            if (body.sleep() != null) {
+                sleep.add(new TherapistSummaryDto.Sleep(s.getWeek(), body.sleep(), sleepLabel(body.sleep())));
+            }
+            if (hasConfirmedAxis(body)) {
                 confirmed++;
             }
         }
@@ -143,7 +150,29 @@ public class TherapistSummaryService {
         List<String> extra = Arrays.asList(json.fromJson(kase.getExtraQuestions(), String[].class));
 
         String generatedAt = ZonedDateTime.now(clock).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
-        return new TherapistSummaryDto(generatedAt, weekNumbers, trajectories.items(snaps), signals, kase.signalsEnabled(),
+        return new TherapistSummaryDto(generatedAt, weekNumbers, trajectories.items(snaps), signals, sleep, kase.signalsEnabled(),
             notes, qs, extra, new TherapistSummaryDto.Density(totalWeeks, snaps.size(), confirmed, authors), changes, DISCLAIMER);
+    }
+
+    private static String sleepLabel(int value) {
+        for (CatalogDto.CodeLabel cl : CatalogController.SLEEP_LEVELS) {
+            if (cl.code().equals(String.valueOf(value))) {
+                return cl.label();
+            }
+        }
+        return null;
+    }
+
+    /** README §4 층 1: noChange 플래그가 아니라 실제 값에서 센다. 값 하나라도 CONFIRMED면 그 주는 확인된 관찰이다. */
+    private static boolean hasConfirmedAxis(SnapshotBody body) {
+        for (SnapshotBody.ItemValues iv : body.items().values()) {
+            for (Axis axis : Axis.values()) {
+                SnapshotBody.Val v = iv.axis(axis);
+                if (v != null && "CONFIRMED".equals(v.source())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

@@ -2,8 +2,12 @@ package nextvisit.api.questions;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import nextvisit.api.auth.AuthContext;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
@@ -13,7 +17,6 @@ import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.engine.EngineBridge;
 import nextvisit.api.progress.AxisLabels;
 import nextvisit.api.progress.TrajectoryMapper;
-import nextvisit.api.progress.VerdictUtil;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotBody;
 import nextvisit.api.snapshots.SnapshotRepository;
@@ -82,8 +85,12 @@ public class PrepCardService {
         }
 
         List<String> extra = Arrays.asList(json.fromJson(kase.getExtraQuestions(), String[].class));
+        Set<String> preferredCodes = new HashSet<>();
+        for (QuestionCacheBody.Q q : cache.questions()) {
+            preferredCodes.addAll(q.items());
+        }
         return new PrepCardDto(weeks.currentWeek(kase.getStartDate()), kase.getNextVisitDate(), qs, extra,
-            qs.isEmpty() ? EMPTY_MESSAGE : null, glance(r));
+            qs.isEmpty() ? EMPTY_MESSAGE : null, glance(r, preferredCodes));
     }
 
     public List<String> saveExtra(AuthContext ctx, List<String> given) {
@@ -143,9 +150,13 @@ public class PrepCardService {
         };
     }
 
-    /** 설계 5절 therapistGlance. SUSTAINED 항목마다 한 줄, 최대 4줄, 값만. */
-    static List<String> glance(PipelineResult r) {
-        List<String> lines = new ArrayList<>();
+    /**
+     * 설계 5절 therapistGlance. SUSTAINED 항목마다 한 줄, 값만.
+     * 선택된 질문이 가리키는 항목(preferredCodes)을 카탈로그 순서로 먼저, 나머지를 카탈로그 순서로 이어 붙이고
+     * 최대 GLANCE_MAX_LINES줄로 자른다 — 질문의 근거가 되는 소견이 잘려나가지 않도록.
+     */
+    static List<String> glance(PipelineResult r, Set<String> preferredCodes) {
+        Map<String, String> byCode = new LinkedHashMap<>();
         for (ItemVerdicts iv : r.verdicts()) {
             Item item = ObservationSet.STROKE.item(iv.code());
             List<String> parts = new ArrayList<>();
@@ -156,16 +167,24 @@ public class PrepCardService {
                 }
                 Verdict v = ov.get();
                 String prefix = axis == Axis.LEVEL ? "" : AxisLabels.of(axis) + ": ";
-                parts.add(prefix + Labels.of(axis, VerdictUtil.valueBefore(v)) + " → " + Labels.of(axis, v.currentValue())
+                parts.add(prefix + Labels.of(axis, v.valueBefore()) + " → " + Labels.of(axis, v.currentValue())
                     + " (" + v.since() + "주차부터)");
             }
             if (!parts.isEmpty()) {
-                lines.add(item.label() + ": " + String.join(", ", parts));
-                if (lines.size() == GLANCE_MAX_LINES) {
-                    break;
-                }
+                byCode.put(iv.code(), item.label() + ": " + String.join(", ", parts));
             }
         }
-        return lines;
+        List<String> lines = new ArrayList<>();
+        for (var e : byCode.entrySet()) {
+            if (preferredCodes.contains(e.getKey())) {
+                lines.add(e.getValue());
+            }
+        }
+        for (var e : byCode.entrySet()) {
+            if (!preferredCodes.contains(e.getKey())) {
+                lines.add(e.getValue());
+            }
+        }
+        return lines.size() > GLANCE_MAX_LINES ? lines.subList(0, GLANCE_MAX_LINES) : lines;
     }
 }

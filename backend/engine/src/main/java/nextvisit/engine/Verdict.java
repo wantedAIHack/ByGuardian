@@ -29,4 +29,17 @@ public record Verdict(
     public int currentValue() {
         return trajectory.get(trajectory.size() - 1).value();
     }
+
+    /** since 주 직전 관찰값. since가 없으면(변화 없음) 현재값. */
+    public int valueBefore() {
+        if (since == null) {
+            return currentValue();
+        }
+        for (int i = 0; i < trajectory.size(); i++) {
+            if (trajectory.get(i).week() == since) {
+                return i == 0 ? trajectory.get(0).value() : trajectory.get(i - 1).value();
+            }
+        }
+        return currentValue();
+    }
 }

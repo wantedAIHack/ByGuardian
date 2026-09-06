@@ -81,6 +81,7 @@ class TherapistControllerTest {
         assertEquals(2, s.get("signals").size());
         assertEquals("GRIMACE", s.get("signals").get(0).get("kind").asText());
         assertEquals(List.of(2, 3, 5, 6), mapper.convertValue(s.get("signals").get(0).get("weeks"), List.class));
+        assertEquals(0, s.get("sleep").size());
         assertEquals(3, s.get("freeNotes").size());
         assertEquals("오후만 되면 오른쪽 어깨를 자꾸 만지신다", s.get("freeNotes").get(0).get("text").asText());
         assertEquals("오후", s.get("freeNotes").get(0).get("timeTagLabel").asText());
@@ -132,6 +133,15 @@ class TherapistControllerTest {
         mvc.perform(get("/t/" + first)).andExpect(status().isNotFound());
         mvc.perform(get("/t/" + second)).andExpect(status().isOk());
         mvc.perform(get("/t/nope")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void catalogReturnsThreeSleepLevelsWithBestLast() throws Exception {
+        JsonNode c = json(mapper, mvc.perform(get("/catalog")).andExpect(status().isOk()).andReturn());
+        JsonNode levels = c.get("sleepLevels");
+        assertEquals(3, levels.size());
+        assertEquals("자주 깨심", levels.get(0).get("label").asText());
+        assertEquals("잘 주무심", levels.get(2).get("label").asText());
     }
 
     @Test

@@ -65,7 +65,7 @@ public class ProgressService {
                 }
                 Verdict v = ov.get();
                 if (v.status() == Status.OBSERVED_ONCE || v.status() == Status.SUSTAINED) {
-                    String from = Labels.of(axis, VerdictUtil.valueBefore(v));
+                    String from = Labels.of(axis, v.valueBefore());
                     String to = Labels.of(axis, v.currentValue());
                     changes.add(new ProgressDto.Change(item.code(), item.label(), axis.name(), AxisLabels.of(axis),
                         v.status().name(), v.duration(), from, to, message(item, axis, v, from, to)));
