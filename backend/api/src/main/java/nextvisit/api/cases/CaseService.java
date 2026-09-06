@@ -75,6 +75,15 @@ public class CaseService {
             week >= 2, recordedThisWeek, latest.map(Snapshot::getWeek).orElse(null), kase.getNextVisitDate());
     }
 
+    /** ctx의 case 엔티티는 필터가 요청 시작 시 붙인 것이라 detach 상태일 수 있어, 여기서 다시 읽어 저장한다. */
+    public MeResponse updateCase(AuthContext ctx, UpdateCaseRequest req) {
+        CaseEntity kase = cases.findById(ctx.kase().getId())
+            .orElseThrow(() -> new NotFoundException("케이스를 찾을 수 없습니다"));
+        kase.setNextVisitDate(req.nextVisitDate());
+        cases.save(kase);
+        return me(new AuthContext(ctx.guardian(), kase));
+    }
+
     public RecoverResponse recover(RecoverRequest req) {
         String code = req.recoveryCode().trim().toUpperCase();
         CaseEntity kase = cases.findByRecoveryCodeHash(tokens.hash(code))

@@ -1,6 +1,7 @@
 package nextvisit.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -81,6 +82,10 @@ public final class ApiTestSupport {
 
     public static MockHttpServletRequestBuilder putJson(String token, String path, ObjectMapper mapper, Object body) throws Exception {
         return authed(put(path).contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(body)), token);
+    }
+
+    public static MockHttpServletRequestBuilder patchJson(String token, String path, ObjectMapper mapper, Object body) throws Exception {
+        return authed(patch(path).contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(body)), token);
     }
 
     public static MockHttpServletRequestBuilder postJson(String path, ObjectMapper mapper, Object body) throws Exception {

@@ -6,6 +6,7 @@ import static nextvisit.api.ApiTestSupport.json;
 import static nextvisit.api.ApiTestSupport.onboard;
 import static nextvisit.api.ApiTestSupport.onboardDefault;
 import static nextvisit.api.ApiTestSupport.onboardingBody;
+import static nextvisit.api.ApiTestSupport.patchJson;
 import static nextvisit.api.ApiTestSupport.postJson;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 import nextvisit.api.ApiTestSupport.Onboarded;
@@ -121,6 +123,23 @@ class CaseControllerTest {
         assertFalse(me.get("recordedThisWeek").asBoolean());
         clock.advanceDays(14);
         assertTrue(json(mapper, mvc.perform(getMe(o.token(), "/me")).andReturn()).get("fullRecheck").asBoolean());
+    }
+
+    @Test
+    void patchUpdatesNextVisitDateAndClearsOnNull() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+
+        JsonNode patched = json(mapper, mvc.perform(patchJson(o.token(), "/me", mapper, Collections.singletonMap("nextVisitDate", "2026-10-15")))
+            .andExpect(status().isOk()).andReturn());
+        assertEquals("2026-10-15", patched.get("nextVisitDate").asText());
+        JsonNode me = json(mapper, mvc.perform(getMe(o.token(), "/me")).andExpect(status().isOk()).andReturn());
+        assertEquals("2026-10-15", me.get("nextVisitDate").asText());
+
+        JsonNode cleared = json(mapper, mvc.perform(patchJson(o.token(), "/me", mapper, Collections.singletonMap("nextVisitDate", null)))
+            .andExpect(status().isOk()).andReturn());
+        assertTrue(cleared.get("nextVisitDate").isNull());
+        JsonNode meAfterClear = json(mapper, mvc.perform(getMe(o.token(), "/me")).andExpect(status().isOk()).andReturn());
+        assertTrue(meAfterClear.get("nextVisitDate").isNull());
     }
 
     @Test

@@ -5,6 +5,7 @@ import nextvisit.api.auth.AuthContext;
 import nextvisit.api.auth.CurrentGuardian;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -28,6 +29,11 @@ public class CaseController {
     @GetMapping("/me")
     public MeResponse me(@CurrentGuardian AuthContext ctx) {
         return service.me(ctx);
+    }
+
+    @PatchMapping("/me")
+    public MeResponse updateCase(@CurrentGuardian AuthContext ctx, @RequestBody @Valid UpdateCaseRequest req) {
+        return service.updateCase(ctx, req);
     }
 
     @PostMapping("/guardians/recover")

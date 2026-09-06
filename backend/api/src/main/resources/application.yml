@@ -17,3 +17,5 @@ nextvisit:
   timezone: Asia/Seoul
   cors:
     allowed-origins: ${NEXTVISIT_CORS_ORIGINS:http://localhost:5173}
+  demo:
+    enabled: ${NEXTVISIT_DEMO_ENABLED:true}
