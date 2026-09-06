@@ -80,5 +80,9 @@ class DemoFlowTest {
         assertEquals(6, c.get("signalActions").size());
         assertEquals("찡그림", c.get("signalKinds").get(0).get("label").asText());
         assertEquals(4, c.get("timeTags").size());
+        assertEquals(4, c.get("axisLabels").size());
+        assertEquals("LEVEL", c.get("axisLabels").get(0).get("code").asText());
+        assertEquals("도움 수준", c.get("axisLabels").get(0).get("label").asText());
+        assertEquals("마비 쪽 손", c.get("axisLabels").get(3).get("label").asText());
     }
 }

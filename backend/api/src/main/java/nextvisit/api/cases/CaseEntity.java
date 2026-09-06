@@ -89,4 +89,5 @@ public class CaseEntity {
 
     public void setNextVisitDate(LocalDate nextVisitDate) { this.nextVisitDate = nextVisitDate; }
     public void setExtraQuestions(String extraQuestions) { this.extraQuestions = extraQuestions; }
+    public void setRecoveryCodeHash(String recoveryCodeHash) { this.recoveryCodeHash = recoveryCodeHash; }
 }
