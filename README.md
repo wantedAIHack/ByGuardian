@@ -829,7 +829,7 @@ Ollama의 OpenAI 호환 엔드포인트에 맞춰 인터페이스를 하나 두�
 계정 없음. 온보딩 때 만든 보호자 토큰을 기기에 저장하고 복구 코드를 보여줍니다. 치료사용 요약은 별도 읽기 전용 링크.
 첫 화면의 "데모 보기" 버튼이 아래 시드를 바로 엽니다.
 
-**backend/** — Gradle 멀티모듈, Java 21.
+**backend/** — Gradle 멀티모듈, Java 21. **구현된 코드의 안내는 `backend/README.md`에 있습니다.**
 
 - `engine` — 순수 Java. §6 침묵 게이트, §7 교차 감지, 질문 3개 선택. **Spring 의존성 0.** §6 예시 표가 그대로 JUnit 파라미터 테스트
 - `api` — Spring Boot 3.5, Spring Data JPA, PostgreSQL. 주차 스냅샷은 JSONB 컬럼 하나. LLM은 `RestClient`로 Ollama의 OpenAI 호환 엔드포인트를 직접 호출. 호출이 한 종류뿐이라 Spring AI를 쓰지 않는다(의존성·버전 궁합 위험 제거). base-url 한 줄로 호스팅 API 전환은 그대로 성립. 상세 계약은 `docs/superpowers/specs/2026-09-05-api-design.md`
