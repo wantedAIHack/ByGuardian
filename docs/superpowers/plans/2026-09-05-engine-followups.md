@@ -129,6 +129,7 @@ export JAVA_HOME=$(/usr/libexec/java_home -v 21)
 **(b) 금지 어휘 목록은 언어 모델 모듈이 합류하기 전에 넓혀야 합니다.**
 `QuestionCacheBody`의 주석대로 `sentence`/`source`는 api-llm 모듈이 덮어쓰는 자리이고, 지금은 아무것도 그 자리를 채우지 않습니다 —
 이번 물결까지 모든 질문의 `source`는 `TEMPLATE`입니다. 엔진의 `Templates.FORBIDDEN` 19개(위 2번 항목에서 이미 지적한 그 목록)는
-지금 `ReadmeConformanceTest`가 템플릿 자신을 검증하는 데만 쓰이고, 생성된 문장을 실제로 거르는 자리에는 아직 연결돼 있지 않습니다.
+지금 `ReadmeConformanceTest`(템플릿 자신의 검증), 엔진의 `TemplatesTest`, API의 `ProgressControllerTest`(층 2 문구 검증)에서
+이미 검사되고 있지만, 셋 다 테스트이고 생성된 문장을 실제로 거르는 프로덕션 런타임 경로에는 아직 연결돼 있지 않습니다.
 언어 모델 모듈이 합류하는 순간부터는 그 목록이 실제 방어선이 되므로, 넓히는 작업을 그 전에 끝내야 합니다 —
 그러지 않으면 목록이 있다는 사실만으로 아무것도 막지 못하는 채로 병합됩니다.

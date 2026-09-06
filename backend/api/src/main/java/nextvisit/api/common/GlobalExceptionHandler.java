@@ -6,9 +6,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -44,6 +46,21 @@ public class GlobalExceptionHandler {
         log.warn("data integrity violation", e);
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(new ApiError("CONFLICT", "이미 저장된 기록입니다. 새로고침 후 다시 시도해 주세요"));
+    }
+
+    /** 매핑되는 곳이 없는 경로. 흔한 404 트래픽이므로 debug로만 남기고 catch-all에 삼켜지기 전에 잡는다. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiError> noHandler(NoResourceFoundException e) {
+        log.debug("no handler for request", e);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ApiError("NOT_FOUND", "요청한 경로를 찾을 수 없습니다"));
+    }
+
+    /** 있는 경로에 지원하지 않는 메서드. 흔한 405 트래픽이므로 debug로만 남긴다. */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> methodNotAllowed(HttpRequestMethodNotSupportedException e) {
+        log.debug("method not supported", e);
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(new ApiError("METHOD_NOT_ALLOWED", "이 경로에서 지원하지 않는 방식입니다"));
     }
 
     /** 마지막 방어선. 예외 메시지를 그대로 내보내지 않는다 — 내부 구현이 새어나갈 수 있다. */

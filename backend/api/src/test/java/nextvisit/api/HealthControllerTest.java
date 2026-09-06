@@ -1,5 +1,6 @@
 package nextvisit.api;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,5 +32,20 @@ class HealthControllerTest {
             "select count(*) from information_schema.tables where lower(table_name) in ('cases','guardians','therapist_links','snapshots','question_cache')",
             Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(5, n);
+    }
+
+    @Test
+    void unmappedPathReturnsNotFoundInTheApiErrorShape() throws Exception {
+        mvc.perform(get("/definitely-not-a-route"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+            .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void wrongMethodOnARealPathReturnsMethodNotAllowedInTheApiErrorShape() throws Exception {
+        mvc.perform(delete("/catalog"))
+            .andExpect(status().isMethodNotAllowed())
+            .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
 }
