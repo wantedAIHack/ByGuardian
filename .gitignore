@@ -5,4 +5,5 @@ build/
 .idea/
 node_modules/
 dist/
+*.tsbuildinfo
 .superpowers/
