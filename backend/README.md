@@ -60,7 +60,7 @@ Observation(week, value, source)   한 주 한 축의 관찰값
 SilenceGate.judge(List<Observation>) → Verdict
 ```
 
-`SilenceGate`(75줄)가 제품의 심장입니다. 주차별 값 배열을 받아 넷 중 하나로 분류합니다.
+`SilenceGate`(78줄)가 제품의 심장입니다. 주차별 값 배열을 받아 넷 중 하나로 분류합니다.
 
 | 판정 | 뜻 |
 | --- | --- |
