@@ -1,7 +1,13 @@
 import { createBrowserRouter } from 'react-router';
 import { App } from './App';
+import { useCatalog } from './lib/catalog';
+import { Onboarding } from './screens/Onboarding';
 
 const Soon = ({ name }: { name: string }) => <p className="p-gutter">{name} — 준비 중</p>;
+
+function OnboardingRoute() {
+  return <Onboarding catalog={useCatalog()} />;
+}
 
 export const router = createBrowserRouter([
   {
@@ -9,7 +15,7 @@ export const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Soon name="홈" /> },
-      { path: 'onboarding', element: <Soon name="온보딩" /> },
+      { path: 'onboarding', element: <OnboardingRoute /> },
       { path: 'record', element: <Soon name="주간 기록" /> },
       { path: 'trajectory', element: <Soon name="전체 궤적" /> },
       { path: 'prep-card', element: <Soon name="진료 준비 카드" /> },
