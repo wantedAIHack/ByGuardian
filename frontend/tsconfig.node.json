@@ -5,8 +5,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
-    "noEmit": true,
+    "composite": true,
     "skipLibCheck": true,
+    "outDir": "./node_modules/.tsbuild-node",
     "types": ["node"]
   },
   "include": ["vite.config.ts"]
