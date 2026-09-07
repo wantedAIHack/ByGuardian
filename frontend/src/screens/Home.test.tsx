@@ -41,6 +41,16 @@ describe('홈', () => {
     expect(screen.getByRole('link', { name: /이어받기/ })).toBeInTheDocument();
   });
 
+  it('다시 온 보호자에게 시작 화면을 번쩍이지 않는다', async () => {
+    setToken('t');
+    // /me 를 붙들어 두어 로딩 상태를 그대로 본다
+    server.use(http.get(`${BASE}/me`, () => new Promise(() => {})));
+    renderHome();
+
+    expect(screen.getByText('불러오는 중입니다…')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '시작하기' })).not.toBeInTheDocument();
+  });
+
   it('이번 주 기록이 없으면 기록 버튼 하나만 크게 둔다', async () => {
     setToken('t');
     serve({ me: me({ recordedThisWeek: false, week: 6 }) });
@@ -114,6 +124,23 @@ describe('홈', () => {
     expect(await screen.findByText('여쭤볼 것 2가지를 준비했습니다.')).toBeInTheDocument();
     // 질문 문장 자체는 홈에 내지 않는다. 근거와 함께 봐야 뜻이 산다.
     expect(screen.queryByText('왜 안 늘고 있을까요?')).not.toBeInTheDocument();
+  });
+
+  it('기록 전에는 준비 카드가 눈에 띄는 행동을 뺏지 않는다', async () => {
+    setToken('t');
+    serve({
+      me: me({ recordedThisWeek: false, nextVisitDate: '2026-09-08', today: '2026-09-06' }),
+      prepCard: {
+        week: 6, nextVisitDate: '2026-09-08', questions: [], extraQuestions: [],
+        emptyMessage: '이번에는 특별히 여쭤볼 것이 없습니다.', therapistGlance: [],
+      },
+    });
+    renderHome();
+
+    const record = await screen.findByRole('link', { name: '3분 기록하기' });
+    const prep = screen.getByRole('link', { name: '진료 준비 카드 보기' });
+    expect(record.className).toContain('btn');
+    expect(prep.className).not.toContain('btn');
   });
 
   it('질문이 없으면 서버의 빈 문구를 그대로 쓴다', async () => {

@@ -1,9 +1,12 @@
 import type { Me, Progress } from './types';
 
-export type HomeState = 'ONBOARDING' | 'NOT_RECORDED' | 'SILENT' | 'CHANGES';
+export type HomeState = 'ONBOARDING' | 'LOADING' | 'NOT_RECORDED' | 'SILENT' | 'CHANGES';
 
 export function homeState(hasToken: boolean, me: Me | null, progress: Progress | null): HomeState {
-  if (!hasToken || !me) return 'ONBOARDING';
+  // 토큰 없음과 "토큰은 있는데 아직 안 왔음"은 다르다. 하나로 묶으면 다시 온 보호자에게
+  // 시작 화면이 한 번 번쩍이고, 느린 연결에서는 그 사이 '시작하기'를 눌러 온보딩으로 들어간다.
+  if (!hasToken) return 'ONBOARDING';
+  if (!me) return 'LOADING';
   if (!me.recordedThisWeek) return 'NOT_RECORDED';
   // 경과를 못 받았으면 침묵으로 둔다. 없는 변화를 지어내는 것보다 안전하다.
   if (!progress || progress.changes.length === 0) return 'SILENT';

@@ -41,7 +41,7 @@ export function Home() {
     );
   }
 
-  if (!me) {
+  if (state === 'LOADING' || !me) {
     return <main className="mx-auto max-w-lg px-gutter py-12"><p>불러오는 중입니다…</p></main>;
   }
 
@@ -56,7 +56,19 @@ export function Home() {
           <p className="font-semibold">{dDayPhrase(me.nextVisitDate, me.today)}</p>
           {prepPhrase ? <p className="pt-3">{prepPhrase}</p> : null}
           <div className="pt-5">
-            <Link className="btn" to="/prep-card">진료 준비 카드 보기</Link>
+            {/* 기록이 우선이다: 이번 주 기록이 없으면 준비 카드는 눈에 띄는 행동을 뺏지 않는다.
+                기록이 들어와야 카드도 이번 주를 반영하니, 먼저 보내면 낡은 카드를 보여주고
+                정작 할 일은 안 한 채로 둔다. */}
+            {state === 'NOT_RECORDED' ? (
+              <Link
+                className="inline-flex min-h-[48px] items-center text-accent underline"
+                to="/prep-card"
+              >
+                진료 준비 카드 보기
+              </Link>
+            ) : (
+              <Link className="btn" to="/prep-card">진료 준비 카드 보기</Link>
+            )}
           </div>
         </section>
       ) : null}

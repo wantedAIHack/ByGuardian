@@ -18,6 +18,11 @@ describe('homeState', () => {
     expect(homeState(false, null, null)).toBe('ONBOARDING');
   });
 
+  it('토큰은 있는데 아직 못 받았으면 불러오는 중이다', () => {
+    // 온보딩과 묶으면 다시 온 보호자에게 시작 화면이 번쩍인다
+    expect(homeState(true, null, null)).toBe('LOADING');
+  });
+
   it('이번 주 기록이 없으면 기록을 청한다', () => {
     expect(homeState(true, me({ recordedThisWeek: false }), null)).toBe('NOT_RECORDED');
   });
