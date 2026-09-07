@@ -90,9 +90,10 @@ export function PrepCard() {
         <div className="flex flex-col gap-3 pt-4">
           {extra.map((q, i) => (
             <label key={i} className="block">
-              <span className="sr-only">여쭤보고 싶은 것</span>
+              {/* 칸마다 같은 이름이면 스크린 리더가 여러 칸을 구분하지 못한다. 순번을 붙인다. */}
+              <span className="sr-only">여쭤보고 싶은 것 {i + 1}</span>
               <input
-                aria-label="여쭤보고 싶은 것"
+                aria-label={`여쭤보고 싶은 것 ${i + 1}`}
                 className="min-h-[56px] w-full rounded-lg border border-line px-4"
                 value={q}
                 maxLength={MAX_LEN}

@@ -32,6 +32,39 @@ const full: Card = {
   therapistGlance: ['화장실 이용 · 도움 수준 4주째 유지'],
 };
 
+// 질문도 추가 질문도 다음 진료일도 요약도 없는, 완전히 빈 상태. 고정 UI 문구
+// 밖에 남는 게 없어야 화이트리스트의 기대 문자열이 작고 안정적으로 유지된다.
+const empty: Card = {
+  week: 6, nextVisitDate: null,
+  questions: [],
+  extraQuestions: [],
+  emptyMessage: null,
+  therapistGlance: [],
+};
+
+// 통증 신호 근거(evidence.signal) 줄은 다른 어떤 표본에도 없어 커버되지 않았다.
+const withSignal: Card = {
+  week: 6, nextVisitDate: '2026-09-08',
+  questions: [{
+    rank: 1, type: 'PLATEAU', source: 'engine',
+    sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?',
+    evidence: {
+      items: [{
+        code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
+        values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
+      }],
+      signal: {
+        action: 'STANDING', actionLabel: '일어설 때',
+        kind: 'GRIMACE', kindLabel: '찡그림',
+        weeks: [5, 6], window: 2,
+      },
+    },
+  }],
+  extraQuestions: [],
+  emptyMessage: null,
+  therapistGlance: [],
+};
+
 function renderIt(card: Card) {
   setToken('t');
   server.use(http.get(`${BASE}/me/prep-card`, () => HttpResponse.json(card)));
@@ -79,10 +112,8 @@ describe('진료 준비 카드', () => {
 
     await screen.findByText('내가 더 여쭤보고 싶은 것');
     await user.click(screen.getByRole('button', { name: '+ 추가' }));
-    // 기존 추가 질문과 새로 붙은 빈 칸이 같은 aria-label을 공유한다 — 방금 붙은
-    // 마지막 칸(빈 칸)에 입력한다.
-    const fields = screen.getAllByLabelText('여쭤보고 싶은 것');
-    await user.type(fields[fields.length - 1]!, '약을 바꿔야 할까요?');
+    // 칸마다 순번이 붙어 있어 방금 붙은 두 번째(빈) 칸을 이름으로 바로 집을 수 있다.
+    await user.type(screen.getByLabelText('여쭤보고 싶은 것 2'), '약을 바꿔야 할까요?');
     await user.click(screen.getByRole('button', { name: '저장' }));
 
     expect(sent.questions).toEqual(['밤에 자주 깨시는데 괜찮은가요?', '약을 바꿔야 할까요?']);
@@ -99,5 +130,28 @@ describe('진료 준비 카드', () => {
     expect(await screen.findByText('진료실에서 보여드릴 요약')).toBeInTheDocument();
     expect(screen.getByText('화장실 이용 · 도움 수준 4주째 유지')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
+  });
+
+  it('판정 문구를 만들지 않는다', async () => {
+    renderIt(empty);
+    await screen.findByText('내가 더 여쭤보고 싶은 것');
+    const main = screen.getByRole('main');
+
+    // 금지어 나열이 아니라 전체를 화이트리스트로 건다(Home.test.tsx·Trajectory.test.tsx와 같은
+    // 방식). 질문도 추가 질문도 다음 진료일도 없는 빈 상태라 화면에는 고정 UI 문구만
+    // 남아야 한다 — 서버가 보내지 않은 문장이 한 글자라도 끼어들면 이 assertion이 걸린다.
+    expect(main.textContent).toBe(
+      '← 홈진료 준비내가 더 여쭤보고 싶은 것+ 추가치료사에게 보여드리기',
+    );
+  });
+
+  it('통증 신호 근거도 함께 보여준다', async () => {
+    const user = userEvent.setup();
+    renderIt(withSignal);
+    await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
+
+    expect(screen.queryByText('일어설 때 · 찡그림 — 5주, 6주')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '근거 보기' }));
+    expect(screen.getByText('일어설 때 · 찡그림 — 5주, 6주')).toBeInTheDocument();
   });
 });
