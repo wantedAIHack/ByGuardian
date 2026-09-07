@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClient;
 
 class LlmConfigurationTest {
 
@@ -31,6 +32,7 @@ class LlmConfigurationTest {
             assertThat(properties.maxOutputTokens()).isEqualTo(512);
             assertThat(context.containsBean("llmTaskExecutor")).isFalse();
             assertThat(context).doesNotHaveBean(LlmClient.class);
+            assertThat(context).doesNotHaveBean(RestClient.class);
         });
     }
 
@@ -50,6 +52,7 @@ class LlmConfigurationTest {
             assertThat(ReflectionTestUtils.getField(executor, "awaitTerminationMillis"))
                 .isEqualTo(5_000L);
             assertThat(context).hasSingleBean(LlmClient.class);
+            assertThat(context).hasSingleBean(RestClient.class);
         });
     }
 

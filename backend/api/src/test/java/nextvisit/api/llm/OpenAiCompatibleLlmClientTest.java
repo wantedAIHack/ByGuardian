@@ -79,6 +79,40 @@ class OpenAiCompatibleLlmClientTest {
     }
 
     @Test
+    void sendsNoAuthorizationHeaderWhenApiKeyIsBlank() {
+        RestClient.Builder builder = RestClient.builder();
+        server = MockRestServiceServer.bindTo(builder).build();
+        client = new OpenAiCompatibleLlmClient(properties("", "", ""), mapper,
+            builder.build());
+        server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andExpect(request ->
+                assertThat(request.getHeaders()).doesNotContainKey("Authorization"))
+            .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                MediaType.APPLICATION_JSON));
+
+        client.complete(new QuestionRewritePrompt.Prompt("system", "user"));
+        server.verify();
+    }
+
+    @Test
+    void sendsNoCloudflareHeaderWhenOnlySecretExists() {
+        RestClient.Builder builder = RestClient.builder();
+        server = MockRestServiceServer.bindTo(builder).build();
+        client = new OpenAiCompatibleLlmClient(properties("test-key", "", "access-secret"),
+            mapper, builder.build());
+        server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andExpect(request -> {
+                assertThat(request.getHeaders()).doesNotContainKey("CF-Access-Client-Id");
+                assertThat(request.getHeaders()).doesNotContainKey("CF-Access-Client-Secret");
+            })
+            .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                MediaType.APPLICATION_JSON));
+
+        client.complete(new QuestionRewritePrompt.Prompt("system", "user"));
+        server.verify();
+    }
+
+    @Test
     void mapsHttpAndMalformedEnvelopeWithoutLeakingTheBody() {
         server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
             .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("RESPONSE_SENTINEL"));
@@ -119,9 +153,26 @@ class OpenAiCompatibleLlmClientTest {
         assertThat(timeout.code()).isEqualTo(LlmFailureCode.TIMEOUT);
     }
 
+    @Test
+    void mapsTrailingGarbageToInvalidResponse() {
+        server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andRespond(withSuccess(
+                "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]} trailing",
+                MediaType.APPLICATION_JSON));
+
+        LlmClientException invalid = assertThrows(LlmClientException.class,
+            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+
+        assertThat(invalid.code()).isEqualTo(LlmFailureCode.INVALID_RESPONSE);
+    }
+
     private static LlmProperties properties(String accessId, String accessSecret) {
+        return properties("test-key", accessId, accessSecret);
+    }
+
+    private static LlmProperties properties(String apiKey, String accessId, String accessSecret) {
         return new LlmProperties(true, URI.create("http://localhost:11434/v1"),
-            "qwen3:4b-q8_0", "test-key", accessId, accessSecret,
+            "qwen3:4b-q8_0", apiKey, accessId, accessSecret,
             Duration.ofSeconds(3), Duration.ofSeconds(45), 3, 512);
     }
 }

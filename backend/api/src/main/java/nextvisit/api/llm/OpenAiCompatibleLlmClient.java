@@ -2,6 +2,7 @@ package nextvisit.api.llm;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.SocketTimeoutException;
@@ -68,7 +69,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             throw new LlmClientException(LlmFailureCode.EMPTY_CONTENT);
         }
         try {
-            JsonNode root = mapper.readTree(envelope);
+            JsonNode root = mapper.readerFor(JsonNode.class)
+                .with(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .readValue(envelope);
             JsonNode choices = root.get("choices");
             if (choices == null || !choices.isArray() || choices.isEmpty()) {
                 throw new LlmClientException(LlmFailureCode.EMPTY_CONTENT);
