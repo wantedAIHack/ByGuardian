@@ -100,4 +100,15 @@ body {
 
 @media print {
   .no-print { display: none !important; }
+
+  /* 화면에서는 가로 스크롤, 인쇄에서는 다 보이게 */
+  main { max-width: none !important; padding: 0 !important; }
+  .overflow-x-auto { overflow: visible !important; }
+  table { font-size: 12px; }
+  section { break-inside: avoid; }
+  a[href]::after { content: none !important; }
+}
+
+@page {
+  margin: 14mm;
 }
