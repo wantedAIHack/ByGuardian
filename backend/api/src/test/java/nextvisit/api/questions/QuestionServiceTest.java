@@ -51,7 +51,9 @@ class QuestionServiceTest {
         assertTrue(body.questions().isEmpty());
         assertEquals(0, body.engineDetectionCount());
         assertEquals(1, caches.findByCaseId(caseId).orElseThrow().getWeek());
-        assertEquals("READY", caches.findByCaseId(caseId).orElseThrow().getStatus());
+        assertEquals(QuestionCacheStatus.READY,
+            caches.findByCaseId(caseId).orElseThrow().getStatus());
+        assertTrue(caches.findByCaseId(caseId).orElseThrow().getGenerationId() != null);
         assertTrue(questions.current(caseId).orElseThrow().questions().isEmpty());
     }
 

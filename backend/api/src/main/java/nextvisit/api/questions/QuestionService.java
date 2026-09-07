@@ -23,8 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 public class QuestionService {
 
-    public static final String STATUS_READY = "READY";
-
     private final CaseRepository cases;
     private final SnapshotRepository snapshots;
     private final QuestionCacheRepository caches;
@@ -60,12 +58,14 @@ public class QuestionService {
         int week = snaps.isEmpty() ? 0 : snaps.get(snaps.size() - 1).getWeek();
         String js = json.toJson(body);
         Instant now = Instant.now(clock);
+        UUID generationId = UUID.randomUUID();
         Optional<QuestionCache> existing = caches.findByCaseId(caseId);
         if (existing.isPresent()) {
-            existing.get().update(week, STATUS_READY, js, now);
+            existing.get().update(week, QuestionCacheStatus.READY, generationId, js, now);
             caches.save(existing.get());
         } else {
-            caches.save(new QuestionCache(caseId, week, STATUS_READY, js, now));
+            caches.save(new QuestionCache(caseId, week, QuestionCacheStatus.READY,
+                generationId, js, now));
         }
         return body;
     }

@@ -1,6 +1,7 @@
 package nextvisit.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +17,7 @@ import nextvisit.api.cases.PareticSide;
 import nextvisit.api.cases.VerbalDifficulty;
 import nextvisit.api.questions.QuestionCache;
 import nextvisit.api.questions.QuestionCacheRepository;
+import nextvisit.api.questions.QuestionCacheStatus;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotKind;
 import nextvisit.api.snapshots.SnapshotRepository;
@@ -79,12 +81,48 @@ class PersistenceTest {
     }
 
     @Test
-    void questionCacheIsOnePerCase() {
+    void questionCachePersistsTypedStatusAndGeneration() {
         CaseEntity kase = newCase("rc-" + UUID.randomUUID());
-        caches.save(new QuestionCache(kase.getId(), 3, "READY", "{\"questions\":[]}", Instant.now()));
-        QuestionCache c = caches.findByCaseId(kase.getId()).orElseThrow();
-        c.update(4, "READY", "{\"questions\":[1]}", Instant.now());
-        caches.save(c);
-        assertEquals(4, caches.findByCaseId(kase.getId()).orElseThrow().getWeek());
+        UUID generationId = UUID.randomUUID();
+        caches.saveAndFlush(new QuestionCache(kase.getId(), 3, QuestionCacheStatus.LLM_PENDING,
+            generationId, "{\"questions\":[]}", Instant.now()));
+
+        QuestionCache loaded = caches.findByCaseId(kase.getId()).orElseThrow();
+        assertEquals(QuestionCacheStatus.LLM_PENDING, loaded.getStatus());
+        assertEquals(generationId, loaded.getGenerationId());
+
+        UUID nextGeneration = UUID.randomUUID();
+        loaded.update(4, QuestionCacheStatus.READY, nextGeneration,
+            "{\"questions\":[1]}", Instant.now());
+        caches.saveAndFlush(loaded);
+        assertEquals(nextGeneration, caches.findByCaseId(kase.getId()).orElseThrow().getGenerationId());
+    }
+
+    @Test
+    void onlyTheCurrentPendingGenerationCanFinish() {
+        CaseEntity kase = newCase("rc-" + UUID.randomUUID());
+        UUID currentGeneration = UUID.randomUUID();
+        String templates = "{\"questions\":[]}";
+        caches.saveAndFlush(new QuestionCache(kase.getId(), 3, QuestionCacheStatus.LLM_PENDING,
+            currentGeneration, templates, Instant.parse("2026-09-07T00:00:00Z")));
+
+        int stale = caches.completeGenerationIfPending(kase.getId(), UUID.randomUUID(),
+            QuestionCacheStatus.LLM_PENDING, QuestionCacheStatus.LLM_DONE,
+            "{\"questions\":[\"stale\"]}", Instant.parse("2026-09-07T00:00:01Z"));
+        assertEquals(0, stale);
+        assertEquals(templates, caches.findByCaseId(kase.getId()).orElseThrow().getBody());
+
+        int completed = caches.completeGenerationIfPending(kase.getId(), currentGeneration,
+            QuestionCacheStatus.LLM_PENDING, QuestionCacheStatus.LLM_DONE,
+            "{\"questions\":[\"current\"]}", Instant.parse("2026-09-07T00:00:02Z"));
+        assertEquals(1, completed);
+        assertEquals(QuestionCacheStatus.LLM_DONE, caches.findByCaseId(kase.getId()).orElseThrow().getStatus());
+
+        int secondFinalization = caches.failGenerationIfPending(kase.getId(), currentGeneration,
+            QuestionCacheStatus.LLM_PENDING, QuestionCacheStatus.LLM_FAILED,
+            Instant.parse("2026-09-07T00:00:03Z"));
+        assertEquals(0, secondFinalization);
+        assertFalse(caches.existsByCaseIdAndGenerationIdAndStatus(
+            kase.getId(), currentGeneration, QuestionCacheStatus.LLM_PENDING));
     }
 }
