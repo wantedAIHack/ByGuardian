@@ -42,4 +42,12 @@ describe('weeklyReminderIcs', () => {
     // 접힌 줄은 공백으로 시작한다
     expect(long).toContain('\r\n ');
   });
+
+  it('appName에 단독 CR이 들어 있어도 줄 경계로 새지 않는다', () => {
+    // \r\n(진짜 줄 구분자)이 아닌, 사용자 텍스트 속 날것 \r 하나만 있는 경우.
+    const withCr = weeklyReminderIcs({ startDate: '2026-09-06', appName: '집\r본것' });
+    // 진짜 줄 구분자를 모두 걷어내면 사용자 텍스트에서 온 CR·LF가 하나도 남으면 안 된다.
+    expect(withCr.replace(/\r\n/g, '')).not.toMatch(/[\r\n]/);
+    expect(withCr).toContain('집\\n본것');
+  });
 });

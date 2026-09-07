@@ -31,9 +31,14 @@ export function weeklyReminderIcs(opts: { startDate: string; appName: string }):
   return lines.map(fold).join('\r\n') + '\r\n';
 }
 
-/** RFC 5545 §3.3.11. 쉼표·세미콜론·역슬래시·줄바꿈은 뜻이 있는 글자다. */
+/**
+ * RFC 5545 §3.3.11. 쉼표·세미콜론·역슬래시·줄바꿈은 뜻이 있는 글자다.
+ * 줄바꿈은 \r\n, 단독 \r, 단독 \n 세 가지로 들어올 수 있다 — 셋 다 같은 \n 이스케이프로
+ * 모은다. 그대로 두면 날것 CR이 줄 안에 남아 캘린더 파서가 줄 경계로 오인할 수 있다.
+ */
 function escapeText(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,')
+    .replace(/\r\n|\r|\n/g, '\\n');
 }
 
 /**

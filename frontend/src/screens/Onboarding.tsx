@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ApiError, api, getToken, setToken } from '../lib/api';
@@ -44,6 +44,13 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
     navigate('/', { replace: true });
   }, [recoveryCode, navigate]);
 
+  // create.isPending을 disabled 판단에 그대로 믿을 수 없다 — @tanstack/react-query 5.62는
+  // notifyManager.schedule()을 실제 setTimeout(fn, 0)으로 미루므로, mutate() 직후
+  // 매크로태스크 하나가 지나기 전까지는 이 렌더에 반영되지 않는다. 그 틈에 들어오는
+  // 두 번째 클릭(대상 사용자의 저가 안드로이드 기기에서 흔한 중복·유령 터치 포함)을
+  // 막으려면 ref로 동기 잠금을 걸어야 한다.
+  const submitting = useRef(false);
+
   const create = useMutation({
     mutationFn: () => api.post<OnboardingResponse>('/cases', toOnboardingRequest(s)),
     onSuccess: (res) => {
@@ -53,8 +60,12 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
       clearDraft(ONBOARDING_DRAFT);
       setSaveError(null);
       setS((prev) => ({ ...prev, step: RECOVERY_STEP }));
+      // RECOVERY_STEP으로 넘어가 이 버튼은 다시 보이지 않는다. 풀 필요가 없다.
     },
-    onError: (e) => setSaveError(e instanceof ApiError ? e.message : '저장하지 못했습니다.'),
+    onError: (e) => {
+      submitting.current = false; // 재시도할 수 있어야 한다
+      setSaveError(e instanceof ApiError ? e.message : '저장하지 못했습니다.');
+    },
   });
 
   // 위 효과가 홈으로 보내는 동안, 이미 끝난 온보딩의 단계 화면이 한 프레임이라도 그려지면
@@ -222,7 +233,18 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
             {saveError ? <p className="text-ink">{saveError}</p> : null}
             <Button
               disabled={!canAdvance(catalog, s) || create.isPending}
-              onClick={() => (isLast ? create.mutate() : go(1))}
+              onClick={() => {
+                setSaveError(null); // 재시도인 경우 지난 실패 문구를 남겨두지 않는다
+                if (!isLast) {
+                  go(1);
+                  return;
+                }
+                // isPending은 아직 이 렌더에 반영되지 않았을 수 있다(위 주석 참고).
+                // disabled만 믿지 않고 동기 ref로 한 번 더 막는다.
+                if (submitting.current) return;
+                submitting.current = true;
+                create.mutate();
+              }}
             >
               {create.isPending ? '저장하는 중입니다…' : '다음'}
             </Button>
