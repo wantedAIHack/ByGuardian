@@ -1,4 +1,6 @@
 export const ONBOARDING_DRAFT = 'draft:onboarding';
+/** 마이크 안내를 첫 사용 때 한 번만 보여주기 위한 플래그 키. 값은 boolean, 케이스에 묶이지 않는다. */
+export const DICTATION_HINT_SEEN = 'seen:dictation-hint';
 
 export function weeklyDraftKey(caseId: string, week: number): string {
   return `draft:${caseId}:${week}`;

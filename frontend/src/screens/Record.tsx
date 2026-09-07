@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '../lib/api';
 import { axisName, axisValues, itemByCode } from '../lib/catalog';
-import { clearDraft, loadDraft, saveDraft, weeklyDraftKey } from '../lib/draft';
+import { DICTATION_HINT_SEEN, clearDraft, loadDraft, saveDraft, weeklyDraftKey } from '../lib/draft';
 import { useMe, useSaveWeek, useTrajectory } from '../lib/queries';
 import {
   axesFor, initialRecord, itemComplete, previousValue, steps, toWeeklyRequest,
-  type RecordState,
+  type RecordState, type Step,
 } from '../lib/record';
 import type { Catalog } from '../lib/types';
 import { Button } from '../ui/Button';
@@ -26,15 +26,35 @@ export function Record({ catalog }: { catalog: Catalog }) {
   const [weekMismatch, setWeekMismatch] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  // React Query의 isPending은 알림이 setTimeout(0)으로 미뤄져 다음 매크로태스크에나 참이 된다.
-  // 버튼 disabled만으로는 빠른 두 번째 탭을 못 막는다. 동기 플래그로 잠근다.
-  // 안드로이드 저가 기기의 유령 터치가 실제로 이 창을 때린다.
+  // 마이크 안내를 보여줄지는 마운트 시점에 딱 한 번 정해서 이 방문 내내 고정한다.
+  // 매 렌더 loadDraft를 다시 읽으면, 안내가 뜬 바로 그 방문에서 아래 효과가 플래그를
+  // 쓰자마자(글자 하나만 입력해도 재렌더된다) 안내가 문장 중간에 사라진다.
+  const [hintAlreadySeen] = useState(() => loadDraft<boolean>(DICTATION_HINT_SEEN) === true);
+
+  // 온보딩(Task 5)에서는 disabled={isPending}만으로 빠른 두 번째 탭을 못 막았다 —
+  // notifyManager가 알림을 setTimeout(0)으로 미뤄, 두 번째 클릭이 isPending 반영 전에
+  // 도착했다(세 번 클릭에 세 번의 POST). 이 화면에서 직접 확인해 보면 다른 결과가 나온다:
+  // save.isPending이 클릭과 같은 커밋 안에서 이미 반영돼, disabled만으로도 빠른 두 번째
+  // 클릭이 막힌다(테스트 참고: '중복 제출 방지' — 잠금을 지워도 요청은 한 번만 나간다).
+  // 그래도 이 동기 ref는 남겨둔다 — 방어적 조치이지 이 조합에서 검증된 필수 조치는
+  // 아니다: notifyManager의 스케줄링 방식이나 React/TanStack Query 버전에 기대지 않는
+  // 두 번째 방어선이 거의 공짜이고, 안드로이드 저가 기기의 유령 터치처럼 React 렌더
+  // 타이밍과 무관하게 들어오는 중복 이벤트에는 여전히 유효하다.
+  // 아래 onError의 `sending.current = false` 리셋은 이야기가 다르다 — 이건 중복 제출
+  // 방지가 아니라 순수하게 재시도를 위한 것이고, 지우면 첫 실패 뒤 저장 버튼이 다시는
+  // 동작하지 않는다(직접 확인함 — 이번 라운드의 '저장에 실패한 뒤 다시 누르면 성공한다').
   // Hooks 규칙 때문에 아래의 조건부 return들보다 위에 있어야 한다 — 훅 호출 순서는
   // 렌더마다 같아야 한다(로딩 중/저장 완료로 일찍 return하는 렌더에서도 이 훅은 불려야 한다).
   const sending = useRef(false);
 
   const me = meQ.data;
   const draftKey = me ? weeklyDraftKey(me.caseId, me.week) : null;
+
+  // 화면 차례는 me가 있어야 계산할 수 있다. 아직 없으면 빈 배열로 둔다 — 훅 규칙 때문에
+  // 아래 조건부 return보다 앞에서, 매 렌더 같은 순서로 계산해 둬야 한다(마이크 안내를
+  // 한 번만 보여주는 효과가 지금이 몇 번째 단계인지 알아야 하기 때문).
+  const flow: Step[] = me ? steps(me, catalog, s) : [];
+  const step: Step | undefined = flow[Math.min(s.index, Math.max(flow.length - 1, 0))];
 
   // 초안 불러오기. 주차가 바뀌면 키가 달라져 옛 초안은 자연히 보이지 않는다.
   useEffect(() => {
@@ -47,6 +67,16 @@ export function Record({ catalog }: { catalog: Catalog }) {
     if (draftKey && !saved) saveDraft(draftKey, s);
   }, [draftKey, s, saved]);
 
+  // 마이크 안내는 첫 사용 때 한 번만(설계서 §5: "자유 기록 칸은... 첫 사용 때 한 번만").
+  // 이번 방문에 보여줄지는 위의 hintAlreadySeen(마운트 시점 고정값)이 이미 정했다 — 여기서는
+  // "다음 주부터는 안 보이게" 표시만 남긴다. 지금 렌더의 판단에는 관여하지 않는다.
+  // 읽기·쓰기 모두 draft.ts의 방어적 try/catch를 그대로 쓴다 — 실패해도 화면은 안 죽는다.
+  useEffect(() => {
+    if (step?.kind === 'note' && !hintAlreadySeen) {
+      saveDraft(DICTATION_HINT_SEEN, true);
+    }
+  }, [step?.kind, hintAlreadySeen]);
+
   if (!me) return <Screen><p>불러오는 중입니다…</p></Screen>;
   if (saved) {
     return (
@@ -55,9 +85,8 @@ export function Record({ catalog }: { catalog: Catalog }) {
       </Screen>
     );
   }
+  if (!step) return <Screen><p>불러오는 중입니다…</p></Screen>; // me가 있으면 항상 있다 — 타입만 좁힌다.
 
-  const flow = steps(me, catalog, s);
-  const step = flow[Math.min(s.index, flow.length - 1)]!;
   const isLast = s.index >= flow.length - 1;
   const set = (patch: Partial<RecordState>) => setS((p) => ({ ...p, ...patch }));
   const go = (d: number) => setS((p) => ({ ...p, index: Math.max(0, p.index + d) }));
@@ -94,9 +123,13 @@ export function Record({ catalog }: { catalog: Catalog }) {
         <p className="pt-4">{weekMismatch}</p>
         <p className="pt-4">방금 적으신 내용은 어느 주의 것인가요?</p>
         <div className="flex flex-col gap-3 pt-8">
+          {/* 둘 다 refetch가 끝날 때까지 잠근다. 자정 무렵의 새 /me 응답이 아직 안 왔는데
+              먼저 눌리면, 이번 주가 실은 전체 재확인 주인데도 옛 me.fullRecheck로 판단해
+              부분 흐름을 열게 된다 — 그 갱신 자체는 스스로 고쳐지지만, 보호자는 약속받은
+              재확인 흐름 대신 도중에 놓인다. sending의 동기 잠금과 같은 이유, 다른 자원이다. */}
           <Button
+            disabled={meQ.isFetching}
             onClick={() => {
-              sending.current = false;
               setWeekMismatch(null);
               // 새 주차가 전체 재확인 주면 부분 기록으로는 저장할 수 없다. 흐름을 처음부터 연다.
               if (meQ.data?.fullRecheck) {
@@ -109,6 +142,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
           </Button>
           <Button
             variant="plain"
+            disabled={meQ.isFetching}
             onClick={() => {
               if (draftKey) clearDraft(draftKey);
               navigate('/', { replace: true });
@@ -328,7 +362,10 @@ export function Record({ catalog }: { catalog: Catalog }) {
           onChange={(e) => set({ freeNote: { ...s.freeNote, text: e.target.value } })}
         />
       </label>
-      <Notice>키보드의 마이크를 누르면 말로 적을 수 있어요.</Notice>
+      {/* 첫 사용 때 한 번만. 마운트 시점에 고정한 값이라 이 방문 중에는 입력해도 사라지지 않는다. */}
+      {hintAlreadySeen ? null : (
+        <Notice>키보드의 마이크를 누르면 말로 적을 수 있어요.</Notice>
+      )}
       <div className="pt-8">
         <h3 className="font-semibold">주로 언제였나요? (안 고르셔도 됩니다)</h3>
         <div className="flex flex-col gap-3 pt-3">
