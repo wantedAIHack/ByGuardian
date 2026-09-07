@@ -88,6 +88,8 @@ class QuestionServiceTest {
         assertEquals(List.of("toilet", "ambulation"), body.questions().get(0).items());
         assertEquals(20, body.engineDetectionCount());
         assertEquals(6, caches.findByCaseId(caseId).orElseThrow().getWeek());
+        assertEquals(QuestionCacheStatus.READY,
+            caches.findByCaseId(caseId).orElseThrow().getStatus());
     }
 
     @Test
