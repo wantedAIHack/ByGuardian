@@ -4,10 +4,11 @@ import { APP_NAME } from '../lib/constants';
 import { dDayPhrase, formatDate, isVisitSoon } from '../lib/format';
 import { densityPhrase, homeState, prepCardPhrase } from '../lib/home';
 import { useMe, usePrepCard, useProgress } from '../lib/queries';
+import type { Catalog } from '../lib/types';
 import { Notice } from '../ui/Notice';
 import { TherapistLinkPanel } from '../ui/TherapistLinkPanel';
 
-export function Home() {
+export function Home({ catalog }: { catalog: Catalog }) {
   // 토큰이 바뀌는 순간은 온보딩·이어받기 뒤의 이동뿐이라 이동이 곧 재렌더다.
   const hasToken = getToken() !== null;
 
@@ -73,17 +74,19 @@ export function Home() {
         </section>
       ) : null}
 
-      <section className="flex-1">
+      <section className="flex-1" data-testid="home-main">
         {state === 'NOT_RECORDED' ? (
           <>
             <h1 className="text-title font-semibold">이번 주 관찰을 남겨주세요</h1>
             <p className="pt-3 text-ink-soft">
-              {me.fullRecheck ? '이번 주는 8가지를 모두 여쭤봅니다' : `${me.week}주차 · 3분이면 됩니다`}
+              {me.fullRecheck
+                ? `이번 주는 ${catalog.items.length}가지를 모두 여쭤봅니다`
+                : `${me.week}주차 · 3분이면 됩니다`}
             </p>
             {me.fullRecheck ? <p className="text-small text-ink-faint">{me.week}주차</p> : null}
             <div className="pt-8">
               <Link className="btn" to="/record">
-                {me.fullRecheck ? '8가지 확인하기' : '3분 기록하기'}
+                {me.fullRecheck ? `${catalog.items.length}가지 확인하기` : '3분 기록하기'}
               </Link>
             </div>
           </>

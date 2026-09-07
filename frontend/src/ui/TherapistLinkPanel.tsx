@@ -42,6 +42,20 @@ export function TherapistLinkPanel() {
         </a>
       </div>
       <Notice>새로 만들면 먼저 드린 주소는 열리지 않습니다.</Notice>
+      {/* 위 경고가 실제로 할 수 있는 일을 가리켜야 한다. 주소를 잃어버린 보호자를 위한
+          조용한 탈출구다 — 눈에 띄는 행동은 여전히 주소 복사하기다. */}
+      <button
+        type="button"
+        disabled={issue.isPending}
+        className="inline-flex min-h-[48px] items-center pt-1 text-small text-ink-soft underline"
+        onClick={() => {
+          setCopied(false);
+          issue.mutate();
+        }}
+      >
+        {issue.isPending ? '만드는 중입니다…' : '새 주소 만들기'}
+      </button>
+      {issue.isError ? <Notice>링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
     </div>
   );
 }

@@ -10,12 +10,19 @@ function OnboardingRoute() {
   return <Onboarding catalog={useCatalog()} />;
 }
 
+// Onboarding과 같은 이유다: 홈도 관찰 항목 개수(현재 8가지)를 카탈로그에서 받는다.
+// 화면 스스로 useCatalog()를 부르면 화면 테스트가 CatalogProvider의 비동기 로딩까지
+// 떠안는다. 라우트 쪽에서 한 번 받아 그냥 prop으로 내린다.
+function HomeRoute() {
+  return <Home catalog={useCatalog()} />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/',
     element: <App />,
     children: [
-      { index: true, element: <Home /> },
+      { index: true, element: <HomeRoute /> },
       { path: 'onboarding', element: <OnboardingRoute /> },
       { path: 'record', element: <Soon name="주간 기록" /> },
       { path: 'trajectory', element: <Soon name="전체 궤적" /> },

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/server';
 import { Home } from './Home';
-import { me } from '../test/fixtures';
+import { catalogFixture, me } from '../test/fixtures';
 import { setToken } from '../lib/api';
 import type { Me, PrepCard, Progress } from '../lib/types';
 
@@ -25,9 +25,11 @@ function serve(opts: { me?: Me; progress?: Progress; prepCard?: PrepCard }) {
 
 function renderHome() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // 카탈로그는 라우트가 useCatalog()로 받아 prop으로 내린다(routes.tsx의 HomeRoute).
+  // 화면 테스트는 CatalogProvider의 비동기 로딩을 떠안지 않는다 — Onboarding.test.tsx와 같다.
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter><Home /></MemoryRouter>
+      <MemoryRouter><Home catalog={catalogFixture} /></MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -73,9 +75,10 @@ describe('홈', () => {
     serve({ me: me({ recordedThisWeek: true }), progress: silent });
     renderHome();
 
-    expect(await screen.findByText('이번 기간에는 바뀐 항목이 없습니다.')).toBeInTheDocument();
-    // 침묵인데 변화 제목이 서 있으면 안 된다
-    expect(screen.queryByText('지켜보고 있는 변화')).not.toBeInTheDocument();
+    const main = await screen.findByTestId('home-main');
+    // 금지어 나열이 아니라 전체를 화이트리스트로 건다. 침묵 상태에 스트릭 문구든
+    // 뭐든 한 글자라도 더 넣으면 이 assertion이 걸린다 — 그 여백이 이 제품의 주장이다.
+    expect(main.textContent).toBe('이번 주 기록을 남기셨어요 ✓이번 기간에는 바뀐 항목이 없습니다.');
   });
 
   it('변화는 서버 문장을 그대로 보여준다', async () => {
