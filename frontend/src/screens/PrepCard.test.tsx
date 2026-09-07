@@ -132,7 +132,7 @@ describe('진료 준비 카드', () => {
     expect(screen.getByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
   });
 
-  it('판정 문구를 만들지 않는다', async () => {
+  it('판정 문구를 만들지 않는다 — 빈 상태', async () => {
     renderIt(empty);
     await screen.findByText('내가 더 여쭤보고 싶은 것');
     const main = screen.getByRole('main');
@@ -140,9 +140,66 @@ describe('진료 준비 카드', () => {
     // 금지어 나열이 아니라 전체를 화이트리스트로 건다(Home.test.tsx·Trajectory.test.tsx와 같은
     // 방식). 질문도 추가 질문도 다음 진료일도 없는 빈 상태라 화면에는 고정 UI 문구만
     // 남아야 한다 — 서버가 보내지 않은 문장이 한 글자라도 끼어들면 이 assertion이 걸린다.
+    //
+    // 이 표본은 questions: []라 data.questions.map(...) 분기(서버가 보낸 질문 문장이
+    // 실제로 찍히는 자리)를 아예 타지 않는다 — 판정 문구가 가장 위험한 자리를 비켜간다.
+    // 질문이 있는 상태는 아래의 '질문이 있는 상태' 테스트가 별도로 건다.
     expect(main.textContent).toBe(
       '← 홈진료 준비내가 더 여쭤보고 싶은 것+ 추가치료사에게 보여드리기',
     );
+  });
+
+  it('판정 문구를 만들지 않는다 — 질문이 있는 상태', async () => {
+    const user = userEvent.setup();
+    renderIt(full);
+    await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
+    const main = screen.getByRole('main');
+
+    const q = full.questions[0]!;
+    const evItem = q.evidence.items[0]!;
+    const evValue = evItem.values[0]!;
+    const glance = full.therapistGlance[0]!;
+
+    // 표본 값에서 기대 문자열을 조립한다 — 문구를 통째로 다시 타이핑하면 오타로
+    // 스스로 속을 수 있다. '9월 8일 진료'만은 리터럴로 둔다: 위 '질문 문장을 서버
+    // 그대로 낸다' 테스트가 이미 같은 리터럴로 이 표시를 고정하고 있다.
+    //
+    // 접힌 상태: data.questions.map(...) 분기가 실제로 실행된다 — 여기가 재검토가
+    // 조작된 문구를 심어 통과시켰던 바로 그 자리다. extraQuestions의 실제 텍스트는
+    // <input value=...>뿐이라 textContent에 안 잡힌다(입력 요소는 자식 텍스트 노드를
+    // 가질 수 없다) — sr-only 라벨("여쭤보고 싶은 것 1")만 잡힌다.
+    const collapsed = [
+      '← 홈',
+      '9월 8일 진료',
+      `${q.rank}. ${q.sentence}`,
+      '근거 보기',
+      '내가 더 여쭤보고 싶은 것',
+      '여쭤보고 싶은 것 1',
+      '+ 추가',
+      '진료실에서 보여드릴 요약',
+      glance,
+      '치료사에게 보여드리기',
+    ].join('');
+    expect(main.textContent).toBe(collapsed);
+
+    // 펼친 상태: 근거(값들)도 실제 렌더 경로를 탄다 — 캐어기버가 진료실에서 실제로
+    // 펼쳐 보일 상태이기도 하다. Collapse는 열리면 버튼 문구가 "라벨 접기"로 바뀐다.
+    await user.click(screen.getByRole('button', { name: '근거 보기' }));
+    const expanded = [
+      '← 홈',
+      '9월 8일 진료',
+      `${q.rank}. ${q.sentence}`,
+      '근거 보기 접기',
+      `${evItem.label} · ${evItem.axisLabel}`,
+      `${evValue.week}주${evValue.label}`,
+      '내가 더 여쭤보고 싶은 것',
+      '여쭤보고 싶은 것 1',
+      '+ 추가',
+      '진료실에서 보여드릴 요약',
+      glance,
+      '치료사에게 보여드리기',
+    ].join('');
+    expect(main.textContent).toBe(expanded);
   });
 
   it('통증 신호 근거도 함께 보여준다', async () => {
