@@ -18,9 +18,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import nextvisit.api.ApiTestSupport.Onboarded;
 import nextvisit.api.MutableClock;
@@ -54,6 +57,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RecordApplicationEvents
 class QuestionAsyncIntegrationTest {
 
+    private static final String OLDER_SENTINEL = "OLDERSENTINEL ";
+    private static final String NEWER_SENTINEL = "NEWERSENTINEL ";
+
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired MutableClock clock;
@@ -68,17 +74,20 @@ class QuestionAsyncIntegrationTest {
     @MockitoBean LlmClient client;
 
     private final AtomicReference<CountDownLatch> release = new AtomicReference<>();
+    private final Queue<CountDownLatch> cleanupReleases = new ConcurrentLinkedQueue<>();
 
     @BeforeEach
     void resetClient() {
         reset(client);
         release.set(new CountDownLatch(0));
+        cleanupReleases.clear();
         clock.set(TestClockConfig.DEFAULT_TODAY);
     }
 
     @AfterEach
     void unblockWorkerAndWaitUntilIdle() throws Exception {
         release.get().countDown();
+        cleanupReleases.forEach(CountDownLatch::countDown);
         long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
         while (System.nanoTime() < deadline) {
             if (executor.getActiveCount() == 0
@@ -185,22 +194,55 @@ class QuestionAsyncIntegrationTest {
     @Test
     void slowOlderGenerationCannotFinalizeOverANewerRefresh() throws Exception {
         UUID caseId = seededCase();
-        CountDownLatch firstCall = new CountDownLatch(1);
-        release.set(new CountDownLatch(1));
-        stubSuccessfulRewrite(firstCall);
+        CountDownLatch firstEntered = new CountDownLatch(1);
+        CountDownLatch firstRelease = cleanupRelease();
+        CountDownLatch secondEntered = new CountDownLatch(1);
+        CountDownLatch secondRelease = cleanupRelease();
+        AtomicInteger calls = new AtomicInteger();
+        when(client.complete(any())).thenAnswer(invocation -> {
+            int call = calls.incrementAndGet();
+            CountDownLatch entered = call == 1 ? firstEntered : secondEntered;
+            CountDownLatch callRelease = call == 1 ? firstRelease : secondRelease;
+            String sentinel = call == 1 ? OLDER_SENTINEL : NEWER_SENTINEL;
+            entered.countDown();
+            if (!callRelease.await(5, TimeUnit.SECONDS)) {
+                throw new LlmClientException(LlmFailureCode.TIMEOUT);
+            }
+            return successfulRewrite(invocation.getArgument(0), sentinel);
+        });
 
         questions.refresh(caseId);
-        assertThat(firstCall.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(firstEntered.await(2, TimeUnit.SECONDS)).isTrue();
         UUID olderGeneration = caches.findByCaseId(caseId).orElseThrow().getGenerationId();
 
-        questions.refresh(caseId);
+        QuestionCacheBody newerTemplates = questions.refresh(caseId);
         UUID newerGeneration = caches.findByCaseId(caseId).orElseThrow().getGenerationId();
         assertThat(newerGeneration).isNotEqualTo(olderGeneration);
 
-        release.get().countDown();
+        firstRelease.countDown();
+        assertThat(secondEntered.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(caches.findByCaseId(caseId).orElseThrow()).satisfies(cache -> {
+            assertThat(cache.getGenerationId()).isEqualTo(newerGeneration);
+            assertThat(cache.getStatus()).isEqualTo(QuestionCacheStatus.LLM_PENDING);
+        });
+        assertThat(questions.current(caseId).orElseThrow()).isEqualTo(newerTemplates);
+        assertThat(newerTemplates.questions()).allSatisfy(question -> {
+            assertThat(question.source()).isEqualTo(QuestionCacheBody.SOURCE_TEMPLATE);
+            assertThat(question.sentence()).isEqualTo(question.templateSentence());
+            assertThat(question.sentence()).doesNotContain(OLDER_SENTINEL, NEWER_SENTINEL);
+        });
+
+        secondRelease.countDown();
         awaitStatus(caseId, QuestionCacheStatus.LLM_DONE);
         assertThat(caches.findByCaseId(caseId).orElseThrow().getGenerationId())
             .isEqualTo(newerGeneration);
+        assertThat(calls).hasValue(2);
+        assertThat(questions.current(caseId).orElseThrow().questions())
+            .allSatisfy(question -> {
+                assertThat(question.source()).isEqualTo(QuestionCacheBody.SOURCE_LLM);
+                assertThat(question.sentence()).startsWith(NEWER_SENTINEL);
+                assertThat(question.sentence()).doesNotContain(OLDER_SENTINEL);
+            });
     }
 
     @Test
@@ -245,17 +287,27 @@ class QuestionAsyncIntegrationTest {
             if (!release.get().await(5, TimeUnit.SECONDS)) {
                 throw new LlmClientException(LlmFailureCode.TIMEOUT);
             }
-            QuestionRewritePrompt.Prompt prompt = invocation.getArgument(0);
-            JsonNode input = mapper.readTree(prompt.userMessage()).get("questions");
-            ObjectNode output = mapper.createObjectNode();
-            ArrayNode rewritten = output.putArray("questions");
-            for (JsonNode question : input) {
-                rewritten.addObject()
-                    .put("rank", question.get("rank").asInt())
-                    .put("sentence", question.get("templateSentence").asText());
-            }
-            return mapper.writeValueAsString(output);
+            return successfulRewrite(invocation.getArgument(0), "");
         });
+    }
+
+    private String successfulRewrite(QuestionRewritePrompt.Prompt prompt,
+                                     String sentencePrefix) throws Exception {
+        JsonNode input = mapper.readTree(prompt.userMessage()).get("questions");
+        ObjectNode output = mapper.createObjectNode();
+        ArrayNode rewritten = output.putArray("questions");
+        for (JsonNode question : input) {
+            rewritten.addObject()
+                .put("rank", question.get("rank").asInt())
+                .put("sentence", sentencePrefix + question.get("templateSentence").asText());
+        }
+        return mapper.writeValueAsString(output);
+    }
+
+    private CountDownLatch cleanupRelease() {
+        CountDownLatch latch = new CountDownLatch(1);
+        cleanupReleases.add(latch);
+        return latch;
     }
 
     private void awaitStatus(UUID caseId, QuestionCacheStatus expected) throws Exception {
