@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router';
 import { App } from './App';
 import { useCatalog } from './lib/catalog';
+import { Home } from './screens/Home';
 import { Onboarding } from './screens/Onboarding';
 
 const Soon = ({ name }: { name: string }) => <p className="p-gutter">{name} — 준비 중</p>;
@@ -14,7 +15,7 @@ export const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
-      { index: true, element: <Soon name="홈" /> },
+      { index: true, element: <Home /> },
       { path: 'onboarding', element: <OnboardingRoute /> },
       { path: 'record', element: <Soon name="주간 기록" /> },
       { path: 'trajectory', element: <Soon name="전체 궤적" /> },
