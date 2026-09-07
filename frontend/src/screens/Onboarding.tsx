@@ -5,6 +5,7 @@ import { ApiError, api, getToken, setToken } from '../lib/api';
 import { axisName, axisValues } from '../lib/catalog';
 import {
   APP_NAME, DIAGNOSIS_CHOICES, PARETIC_SIDE_CHOICES, RELATIONS, VERBAL_DIFFICULTY_CHOICES,
+  WEEKLY_ICS_FILENAME,
 } from '../lib/constants';
 import { ONBOARDING_DRAFT, clearDraft, loadDraft, saveDraft } from '../lib/draft';
 import { downloadIcs, weeklyReminderIcs } from '../lib/ics';
@@ -334,7 +335,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
             <Button
               onClick={() => {
                 downloadIcs(
-                  '주간기록.ics',
+                  WEEKLY_ICS_FILENAME,
                   weeklyReminderIcs({ startDate: todayIso(), appName: APP_NAME }),
                 );
                 navigate('/', { replace: true });

@@ -11,6 +11,9 @@ import type { Diagnosis, PareticSide, VerbalDifficulty } from './types';
  */
 export const APP_NAME = '집에서 본 것';
 
+/** 온보딩 마지막 화면과 설정의 주간 알림이 같은 파일을 내려받는다. 따로 박아두면 둘이 갈라져도 잡아줄 테스트가 없다. */
+export const WEEKLY_ICS_FILENAME = '주간기록.ics';
+
 export const RELATIONS = ['딸', '아들', '배우자', '며느리', '사위', '기타'] as const;
 
 /**

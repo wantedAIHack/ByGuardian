@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { APP_NAME } from '../lib/constants';
+import { APP_NAME, WEEKLY_ICS_FILENAME } from '../lib/constants';
 import { downloadIcs, weeklyReminderIcs } from '../lib/ics';
 import { useMe, useReissueRecoveryCode, useUpdateVisitDate } from '../lib/queries';
 import { Button } from '../ui/Button';
@@ -99,7 +99,7 @@ export function Settings() {
           <Button
             variant="plain"
             onClick={() =>
-              downloadIcs('주간기록.ics', weeklyReminderIcs({ startDate: me.today, appName: APP_NAME }))
+              downloadIcs(WEEKLY_ICS_FILENAME, weeklyReminderIcs({ startDate: me.today, appName: APP_NAME }))
             }
           >
             캘린더 파일 다시 받기
