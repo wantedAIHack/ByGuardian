@@ -1,0 +1,13 @@
+services:
+  ollama:
+    ports: !reset []
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339
+    command: ["tunnel", "--no-autoupdate", "run"]
+    env_file:
+      - "${NEXTVISIT_LLM_ENV_FILE:?Set NEXTVISIT_LLM_ENV_FILE to /etc/nextvisit/llm.env}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
