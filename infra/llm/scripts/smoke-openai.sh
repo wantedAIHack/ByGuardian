@@ -38,6 +38,7 @@ if ! jq -e '
   ((.choices[0].message.content | fromjson) as $content |
     ($content | keys == ["questions"]) and
     ($content.questions | type == "array" and length == 1) and
+    ($content.questions[0] | type == "object" and keys == ["rank", "sentence"]) and
     ($content.questions[0].rank == 1) and
     ($content.questions[0].sentence | type == "string" and endswith("?")))
 ' "$response_file" >/dev/null 2>&1; then
