@@ -24,9 +24,12 @@ public class QuestionOutputGuard {
     private static final Set<String> QUESTION_FIELDS = Set.of("rank", "sentence");
     private static final Pattern NUMBER = Pattern.compile("\\d+");
     private static final Pattern MARKDOWN = Pattern.compile(
-        "(?m)[`*_~\\[\\]]|^\\s*(?:#{1,6}\\s|[-+]\\s|>\\s|\\d+\\.\\s)");
+        "[\\r\\n\\\\`*_~#<>\\[\\]|]|^\\s*(?:>|[-+=]|\\d{1,9}[.)](?:\\s|$))");
+    private static final Pattern INTERROGATIVE_ENDING = Pattern.compile(
+        "(?:나요|까요|가요|습니까|지요|죠)\\?$");
     private static final Pattern DIRECTIVE = Pattern.compile(
-        "(?:하세요|하십시오|해 ?주세요|가세요|받으세요|드세요|복용하세요|해야 합니다|해야 해요)");
+        "(?:세요|십시오|해\\s*주세요|해야|기\\s*바랍니다|"
+            + "해\\s*(?:봐요|볼까요)|면\\s*(?:됩니다|돼요)|[가-힣]+라)(?=\\s|[,.!?]|$)");
 
     private final ObjectMapper mapper;
 
@@ -65,7 +68,7 @@ public class QuestionOutputGuard {
                 throw new Rejected(Rule.RANK_SET);
             }
             String sentence = Normalizer.normalize(
-                candidate.get("sentence").textValue().trim(), Normalizer.Form.NFC);
+                candidate.get("sentence").textValue(), Normalizer.Form.NFC).strip();
             int length = sentence.codePointCount(0, sentence.length());
             if (length < 1 || length > 200) {
                 throw new Rejected(Rule.SENTENCE_LENGTH);
@@ -80,7 +83,8 @@ public class QuestionOutputGuard {
             if (Templates.containsForbiddenWord(sentence)) {
                 throw new Rejected(Rule.FORBIDDEN_WORD);
             }
-            if (DIRECTIVE.matcher(sentence).find()) {
+            if (!INTERROGATIVE_ENDING.matcher(sentence).find()
+                || DIRECTIVE.matcher(sentence).find()) {
                 throw new Rejected(Rule.DIRECTIVE);
             }
             if (!numberTokens(template.templateSentence()).equals(numberTokens(sentence))) {

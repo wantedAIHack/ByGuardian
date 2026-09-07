@@ -36,6 +36,22 @@ class QuestionOutputGuardTest {
             new QuestionOutputGuard.Rewrite(2, "식사는 4주째 그대로인데 어떻게 보시나요?"));
     }
 
+    @Test
+    void stripsEmSpaceAtSentenceBoundaries() {
+        List<QuestionCacheBody.Q> input = List.of(
+            question(1, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
+        String content = """
+            {"questions":[
+              {"rank":1,"sentence":" 걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요? "}
+            ]}
+            """;
+
+        QuestionOutputGuard.Accepted accepted = guard.validate(input, content);
+
+        assertThat(accepted.rewrites()).containsExactly(
+            new QuestionOutputGuard.Rewrite(1, "걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요?"));
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidResponses")
     void rejectsTheWholeBatch(String name, String content, QuestionOutputGuard.Rule rule) {
@@ -86,9 +102,31 @@ class QuestionOutputGuardTest {
                 QuestionOutputGuard.Rule.MARKDOWN),
             Arguments.of("blockquote", "{\"questions\":[{\"rank\":1,\"sentence\":\"> 3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.MARKDOWN),
+            Arguments.of("blockquote without whitespace", "{\"questions\":[{\"rank\":1,\"sentence\":\">3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.MARKDOWN),
+            Arguments.of("horizontal rule", "{\"questions\":[{\"rank\":1,\"sentence\":\"---\\n3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.MARKDOWN),
+            Arguments.of("parenthesized ordered list", "{\"questions\":[{\"rank\":1,\"sentence\":\"1) 3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.MARKDOWN),
+            Arguments.of("autolink", "{\"questions\":[{\"rank\":1,\"sentence\":\"<https://example.com> 3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.MARKDOWN),
+            Arguments.of("raw html", "{\"questions\":[{\"rank\":1,\"sentence\":\"<em>3주 중 2주인가요</em>?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.MARKDOWN),
             Arguments.of("nfd forbidden word", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 " + nfdForbidden + "인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.FORBIDDEN_WORD),
             Arguments.of("directive", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 확인하세요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("plain imperative hara", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 기록을 삭제하라?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("plain imperative eora", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 동안 먹어라?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("polite request baramnida", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 확인하기 바랍니다?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("suggestive action bwa-yo", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 확인해 봐요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("informal imperative", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 기록을 지워?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
+                QuestionOutputGuard.Rule.DIRECTIVE),
+            Arguments.of("obligation framed as question", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주 기록을 삭제해야 할까요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.DIRECTIVE),
             Arguments.of("changed numbers", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 1주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.NUMBER_TOKENS),
