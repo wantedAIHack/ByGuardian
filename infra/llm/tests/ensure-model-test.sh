@@ -82,12 +82,12 @@ if [ "$smoke_status" -eq 0 ]; then
   exit 1
 fi
 test "$smoke_status" -eq 1
-test "$smoke_output" = "OpenAI smoke returned an invalid envelope"
 case "$smoke_output" in
   *PRIVATE_RESPONSE_BODY_SENTINEL*)
     printf '%s\n' "smoke-openai leaked the response body" >&2
     exit 1
     ;;
 esac
+test "$smoke_output" = "OpenAI smoke returned an invalid envelope"
 
 printf '%s\n' "smoke-openai exact-field tests passed"
