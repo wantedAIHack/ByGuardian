@@ -1,0 +1,63 @@
+name: Deploy LLM Laptop
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/llm/**"
+      - ".github/workflows/llm-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-laptop-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && vars.LLM_DEPLOY_ENABLED == 'true' }}
+    runs-on: [self-hosted, linux, llm]
+    environment: llm-laptop
+    timeout-minutes: 90
+    steps:
+      - name: Check out triggering main commit without stored credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+          persist-credentials: false
+
+      - name: Verify Ubuntu GPU host
+        run: infra/llm/scripts/verify-host.sh gpu
+
+      - name: Verify local Tunnel environment file
+        run: |
+          test -r /etc/nextvisit/llm.env
+          test "$(stat -c '%a' /etc/nextvisit/llm.env)" = 600
+
+      - name: Build, initialize, and smoke Ollama on loopback
+        working-directory: infra/llm
+        run: |
+          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml build ollama
+          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml up --detach --wait ollama
+          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init
+          ./scripts/smoke-openai.sh http://127.0.0.1:11434/v1
+
+      - name: Apply final no-port Tunnel configuration
+        working-directory: infra/llm
+        env:
+          NEXTVISIT_LLM_ENV_FILE: /etc/nextvisit/llm.env
+        run: |
+          umask 077
+          rendered="$(mktemp "$RUNNER_TEMP/llm-compose.XXXXXX")"
+          trap 'rm -f "$rendered"' EXIT
+          chmod 600 "$rendered"
+          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach --wait ollama cloudflared
+          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --format json >"$rendered"
+          jq -e '.services.ollama.ports == null' "$rendered" >/dev/null
+          ollama_id="$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps -q ollama)"
+          test -n "$ollama_id"
+          test "$(docker inspect -f '{{len .HostConfig.PortBindings}}' "$ollama_id")" = 0
+          test "$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps --status running --services | grep -Ec '^(ollama|cloudflared)$')" = 2
