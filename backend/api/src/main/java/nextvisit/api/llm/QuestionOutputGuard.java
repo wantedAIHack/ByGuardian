@@ -77,11 +77,11 @@ public class QuestionOutputGuard {
                 || sentence.chars().filter(character -> character == '?').count() != 1) {
                 throw new Rejected(Rule.QUESTION_MARK);
             }
-            if (MARKDOWN.matcher(sentence).find()) {
-                throw new Rejected(Rule.MARKDOWN);
-            }
             if (Templates.containsForbiddenWord(sentence)) {
                 throw new Rejected(Rule.FORBIDDEN_WORD);
+            }
+            if (MARKDOWN.matcher(sentence).find()) {
+                throw new Rejected(Rule.MARKDOWN);
             }
             if (!INTERROGATIVE_ENDING.matcher(sentence).find()
                 || DIRECTIVE.matcher(sentence).find()) {
