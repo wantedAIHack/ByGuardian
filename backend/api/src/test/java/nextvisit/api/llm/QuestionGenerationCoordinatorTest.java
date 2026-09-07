@@ -66,9 +66,13 @@ class QuestionGenerationCoordinatorTest {
 
     @Test
     void twoRejectedBatchesThenSuccessWritesEveryQuestionAsLlm() {
+        String questionMarkRejected = "REJECTED_SENTINEL 3주 중 2주인가요??";
+        String numberTokensRejected = "3주 중 1주인가요?";
+        String questionMarkRejectedResponse = response(questionMarkRejected, "4주째인가요?");
+        String numberTokensRejectedResponse = response(numberTokensRejected, "4주째인가요?");
         when(client.complete(any()))
-            .thenReturn(response("3주 중 2주인가요??", "4주째인가요?"))
-            .thenReturn(response("3주 중 1주인가요?", "4주째인가요?"))
+            .thenReturn(questionMarkRejectedResponse)
+            .thenReturn(numberTokensRejectedResponse)
             .thenReturn(response("걷기를 3주 중 2주 보셨는데 어떻게 보시나요?",
                 "식사가 4주째 같은데 어떻게 보시나요?"));
 
@@ -80,6 +84,16 @@ class QuestionGenerationCoordinatorTest {
         assertThat(prompts.getAllValues().get(0).systemMessage()).doesNotContain("직전 응답");
         assertThat(prompts.getAllValues().get(1).systemMessage()).contains("QUESTION_MARK");
         assertThat(prompts.getAllValues().get(2).systemMessage()).contains("NUMBER_TOKENS");
+        assertThat(prompts.getAllValues().subList(1, 3)).allSatisfy(prompt -> {
+            assertThat(prompt.systemMessage())
+                .doesNotContain("REJECTED_SENTINEL", questionMarkRejected,
+                    questionMarkRejectedResponse, numberTokensRejected,
+                    numberTokensRejectedResponse);
+            assertThat(prompt.userMessage())
+                .doesNotContain("REJECTED_SENTINEL", questionMarkRejected,
+                    questionMarkRejectedResponse, numberTokensRejected,
+                    numberTokensRejectedResponse);
+        });
 
         ArgumentCaptor<QuestionCacheBody> body = ArgumentCaptor.forClass(QuestionCacheBody.class);
         verify(writer).markDone(org.mockito.ArgumentMatchers.eq(caseId),
@@ -121,6 +135,19 @@ class QuestionGenerationCoordinatorTest {
         coordinator.generate(new QuestionGenerationRequested(caseId, generationId));
 
         verifyNoInteractions(client);
+        verifyNoInteractions(writer);
+    }
+
+    @Test
+    void generationThatBecomesStaleBetweenAttemptsStopsWithoutFinalWrite() {
+        when(caches.existsByCaseIdAndGenerationIdAndStatus(
+            caseId, generationId, QuestionCacheStatus.LLM_PENDING)).thenReturn(true, false);
+        when(client.complete(any())).thenReturn(
+            response("3주 중 2주인가요??", "4주째인가요?"));
+
+        coordinator.generate(new QuestionGenerationRequested(caseId, generationId));
+
+        verify(client).complete(any());
         verifyNoInteractions(writer);
     }
 
