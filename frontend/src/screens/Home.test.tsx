@@ -70,6 +70,23 @@ describe('홈', () => {
     expect(await screen.findByText('이번 주는 8가지를 모두 여쭤봅니다')).toBeInTheDocument();
   });
 
+  it('재확인 안내의 개수를 카탈로그에서 끌어온다', async () => {
+    // 표본의 항목 수가 마침 8이라 상수로 박아도 이 스위트는 통과한다.
+    // 다섯 항목 표본으로 카탈로그에서 끌어오는지를 고정한다.
+    const short = { ...catalogFixture, items: catalogFixture.items.slice(0, 5) };
+    setToken('t');
+    serve({ me: me({ recordedThisWeek: false, week: 8, fullRecheck: true }) });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter><Home catalog={short} /></MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('이번 주는 5가지를 모두 여쭤봅니다')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '5가지 확인하기' })).toBeInTheDocument();
+  });
+
   it('침묵 상태의 여백을 채우지 않는다', async () => {
     setToken('t');
     serve({ me: me({ recordedThisWeek: true }), progress: silent });

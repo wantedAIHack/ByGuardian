@@ -3,6 +3,7 @@ import { App } from './App';
 import { useCatalog } from './lib/catalog';
 import { Home } from './screens/Home';
 import { Onboarding } from './screens/Onboarding';
+import { Record } from './screens/Record';
 
 const Soon = ({ name }: { name: string }) => <p className="p-gutter">{name} — 준비 중</p>;
 
@@ -17,6 +18,10 @@ function HomeRoute() {
   return <Home catalog={useCatalog()} />;
 }
 
+function RecordRoute() {
+  return <Record catalog={useCatalog()} />;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -24,7 +29,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomeRoute /> },
       { path: 'onboarding', element: <OnboardingRoute /> },
-      { path: 'record', element: <Soon name="주간 기록" /> },
+      { path: 'record', element: <RecordRoute /> },
       { path: 'trajectory', element: <Soon name="전체 궤적" /> },
       { path: 'prep-card', element: <Soon name="진료 준비 카드" /> },
       { path: 'settings', element: <Soon name="설정" /> },
