@@ -2,6 +2,7 @@ package nextvisit.api.llm;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -13,6 +14,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class LlmConfigurationTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withBean(ObjectMapper.class, ObjectMapper::new)
         .withUserConfiguration(LlmConfiguration.class);
 
     @Test
@@ -28,6 +30,7 @@ class LlmConfigurationTest {
             assertThat(properties.maxAttempts()).isEqualTo(3);
             assertThat(properties.maxOutputTokens()).isEqualTo(512);
             assertThat(context.containsBean("llmTaskExecutor")).isFalse();
+            assertThat(context).doesNotHaveBean(LlmClient.class);
         });
     }
 
@@ -46,6 +49,7 @@ class LlmConfigurationTest {
                 .isEqualTo(true);
             assertThat(ReflectionTestUtils.getField(executor, "awaitTerminationMillis"))
                 .isEqualTo(5_000L);
+            assertThat(context).hasSingleBean(LlmClient.class);
         });
     }
 
