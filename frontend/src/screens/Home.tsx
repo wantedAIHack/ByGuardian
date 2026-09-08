@@ -37,6 +37,10 @@ export function Home({ catalog }: { catalog: Catalog }) {
           <Link className="inline-flex min-h-[48px] items-center text-ink-soft underline" to="/recover">
             이미 쓰고 계신가요? 이어받기
           </Link>
+          {' · '}
+          <Link className="inline-flex min-h-[48px] items-center text-ink-soft underline" to="/demo">
+            둘러보기
+          </Link>
         </p>
       </main>
     );

@@ -7,6 +7,7 @@ import { server } from '../test/server';
 import { Home } from './Home';
 import { catalogFixture, me } from '../test/fixtures';
 import { setToken } from '../lib/api';
+import { APP_NAME } from '../lib/constants';
 import type { Me, PrepCard, Progress } from '../lib/types';
 
 const BASE = 'http://localhost:8080';
@@ -37,10 +38,33 @@ function renderHome() {
 const silent: Progress = { week: 6, silent: true, changes: [], transitions: [], questions: [] };
 
 describe('홈', () => {
-  it('토큰이 없으면 시작하기와 이어받기를 보여준다', () => {
+  it('토큰이 없으면 시작하기·이어받기·둘러보기를 보여준다', () => {
     renderHome();
     expect(screen.getByRole('link', { name: '시작하기' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /이어받기/ })).toBeInTheDocument();
+    // 심사위원이 온보딩 열여덟 화면을 거치지 않고 데이터 있는 화면을 볼 수 있는 유일한 통로.
+    expect(screen.getByRole('link', { name: '둘러보기' })).toHaveAttribute('href', '/demo');
+  });
+
+  it('판정 문구를 만들지 않는다 — 토큰 없음', () => {
+    const { container } = renderHome();
+    // 금지어 나열이 아니라 전체를 화이트리스트로 건다(Recover.test.tsx·Settings.test.tsx와
+    // 같은 방식). 둘러보기 링크를 더한 뒤로 이 문자열이 바뀌었다 — 그것이 이 assertion이
+    // 실제로 일하고 있다는 증거지, 완화할 이유가 아니다.
+    expect(container.textContent).toBe(
+      [
+        APP_NAME,
+        '집에서 보신 것을 남겨두시면, 다음에 병원 가실 때 여쭤볼 것을 만들어 드립니다.',
+        '시작하기',
+        '이미 쓰고 계신가요? 이어받기',
+        ' · ',
+        '둘러보기',
+      ].join(''),
+    );
+    // 눈에 띄는 행동은 하나뿐이어야 한다 — 둘러보기가 조용히 두 번째 .btn을 만들지 않았는지 확인한다.
+    const btns = container.querySelectorAll('.btn');
+    expect(btns).toHaveLength(1);
+    expect(btns[0]?.textContent).toBe('시작하기');
   });
 
   it('다시 온 보호자에게 시작 화면을 번쩍이지 않는다', async () => {

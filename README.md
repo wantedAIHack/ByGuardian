@@ -831,7 +831,7 @@ Ollama의 OpenAI 호환 엔드포인트에 맞춰 인터페이스를 하나 두�
 
 **frontend/** — React 19 + Vite + TypeScript, vite-plugin-pwa, Tailwind, react-router, TanStack Query.
 계정 없음. 온보딩 때 만든 보호자 토큰을 기기에 저장하고 복구 코드를 보여줍니다. 치료사용 요약은 별도 읽기 전용 링크.
-첫 화면의 "데모 보기" 버튼이 아래 시드를 바로 엽니다.
+첫 화면(토큰 없을 때)의 "둘러보기" 링크가 아래 시드를 바로 엽니다.
 
 **backend/** — Gradle 멀티모듈, Java 21. **구현된 코드의 안내는 `backend/README.md`에 있습니다.**
 
