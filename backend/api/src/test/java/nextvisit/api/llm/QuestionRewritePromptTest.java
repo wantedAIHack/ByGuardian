@@ -57,4 +57,22 @@ class QuestionRewritePromptTest {
         assertThat(retry.systemMessage()).contains("NUMBER_TOKENS");
         assertThat(retry.systemMessage()).doesNotContain("거부된 문장");
     }
+
+    @Test
+    void systemPromptPermitsOnlyTheFiniteSurfaceRewriteBoundary() {
+        QuestionCacheBody.Q input = new QuestionCacheBody.Q(
+            1, "TYPE", List.of(), null, "식사는 4주째 그대로입니다. 어떻게 보시나요?",
+            "식사는 4주째 그대로입니다. 어떻게 보시나요?", QuestionCacheBody.SOURCE_TEMPLATE);
+
+        QuestionRewritePrompt.Prompt prompt = promptBuilder.build(List.of(input), Optional.empty());
+
+        assertThat(prompt.systemMessage()).contains(
+            "그대로 반환하거나 다음 두 표면 변환만 사용할 수 있습니다.",
+            "습니다. 어떻게",
+            "는데 어떻게",
+            "입니다. 어떻게",
+            "인데 어떻게",
+            "그 밖의 글자 추가, 삭제, 동의어 치환");
+        assertThat(prompt.systemMessage()).doesNotContain("자연스러운 한국어 질문으로만 다듬습니다.");
+    }
 }

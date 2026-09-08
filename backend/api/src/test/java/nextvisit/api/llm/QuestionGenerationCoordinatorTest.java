@@ -73,8 +73,8 @@ class QuestionGenerationCoordinatorTest {
         when(client.complete(any()))
             .thenReturn(questionMarkRejectedResponse)
             .thenReturn(numberTokensRejectedResponse)
-            .thenReturn(response("걷기를 3주 중 2주 보셨는데 어떻게 보시나요?",
-                "식사가 4주째 같은데 어떻게 보시나요?"));
+            .thenReturn(response("걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요?",
+                "식사는 4주째 그대로인데 어떻게 보시나요?"));
 
         coordinator.generate(new QuestionGenerationRequested(caseId, generationId));
 

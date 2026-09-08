@@ -19,7 +19,7 @@ docker compose -f compose.yml down
 Omit that command when checking container health without downloading the model.
 Never use `docker compose down --volumes` for routine deployment.
 
-## Ubuntu laptop preparation — deferred until hardware is ready
+## Ubuntu laptop preparation — deferred and organization-gated
 
 1. Install Ubuntu Server, the NVIDIA driver recommended for the laptop,
    Docker Engine with the Compose plugin, and NVIDIA Container Toolkit.
@@ -34,10 +34,12 @@ Never use `docker compose down --volumes` for routine deployment.
    sudo reboot
    ```
 
-3. The repository-scoped Actions runner checks out each triggering commit with
-   its ephemeral `contents: read` token and needs no deploy-capable Git
-   credential. For manual checks only, use a read-only private-repository clone
-   owned by `nextvisit-runner`, then run:
+3. Do **not** register this laptop as a self-hosted runner for the current
+   personal-account repository `y-minion/wanted_Hackaton`. Its remote owner is
+   a GitHub User, so repository-level runner allocation would happen before an
+   in-repository workflow linter can protect it. Keep deployment disabled here.
+   For manual checks only, use a read-only private-repository clone owned by
+   `nextvisit-runner`, then run:
 
    ```bash
    cd infra/llm
@@ -61,16 +63,27 @@ Never use `docker compose down --volumes` for routine deployment.
    Cloudflare. Do not store Access credentials in this file.
 6. Protect `main` in the repository settings by requiring pull-request review
    and the `LLM CI` checks before merge.
-7. In `https://github.com/y-minion/wanted_Hackaton/settings/actions/runners`,
-   create a repository-only Linux x64 runner, execute GitHub's generated setup
-   commands as `nextvisit-runner`, add the `llm` custom label during
-   `config.sh`, and install/start it with `sudo ./svc.sh install nextvisit-runner`
-   followed by `sudo ./svc.sh start`.
-8. Create the GitHub environment `llm-laptop`. Keep required reviewers on it
-   if the account plan supports them.
-9. Leave the repository variable `LLM_DEPLOY_ENABLED` absent or `false` until
-   every preceding check passes. Set it to `true` only when automatic `main`
-   deployments should begin.
+7. Before any runner registration, transfer or mirror the private repository to
+   a GitHub organization that supports organization runner groups and restricted
+   workflows. In that organization, configure the canonical group
+   `llm-production` with repository access limited to exactly `<ORG>/<REPO>`,
+   `restricted_to_workflows=true`, and selected workflow exactly
+   `<ORG>/<REPO>/.github/workflows/llm-deploy.yml@refs/heads/main`. Only then
+   use GitHub's generated group-runner setup commands as `nextvisit-runner`,
+   retain the `self-hosted`, `linux`, and `llm` labels, and install/start the
+   service with `sudo ./svc.sh install nextvisit-runner` followed by
+   `sudo ./svc.sh start`.
+
+   The repository workflow linter is defense in depth only; runner allocation
+   precedes that job. If the organization cannot enforce the exact restriction,
+   leave deployment disabled. A separate pull-based CD design needs explicit
+   approval rather than falling back to a repository-level runner.
+8. After the organization restriction is in place, create the GitHub
+   environment `llm-laptop`. Keep required reviewers on it if the account plan
+   supports them.
+9. Leave `LLM_DEPLOY_ENABLED` absent or `false` until every preceding check,
+   including the organization runner-group restriction, passes. Set it to
+   `true` only when automatic `main` deployments should begin.
 
 ## Manual production-equivalent start
 

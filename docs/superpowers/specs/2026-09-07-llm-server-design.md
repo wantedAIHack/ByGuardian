@@ -12,8 +12,8 @@
 - 첫 완성 흐름은 규칙 엔진이 고른 최대 세 질문의 문장 다듬기다.
 - 자유 기록 정제·자유 기록의 LLM 패턴 추출·음성 텍스트 정리는 이번 범위가 아니다. 같은 `LlmClient` 포트를 재사용할 수 있는 구조만 만든다.
 - 로컬 macOS에서는 CPU Docker 구성과 가짜 OpenAI 서버로 검증한다. Ubuntu/NVIDIA 실기 검증은 노트북 준비 뒤 별도 체크리스트에 따라 수행한다.
-- GitHub Actions CI는 GitHub-hosted runner, 배포는 저장소 전용 `self-hosted, linux, llm` runner를 사용한다.
-- 현재 저장소는 비공개다. 그래도 PR 코드는 자체 호스팅 runner에서 실행하지 않고 배포 권한을 최소화한다.
+- GitHub Actions CI는 GitHub-hosted runner만 사용한다. 미래 배포는 `llm-production` 조직 runner group과 `self-hosted`, `linux`, `llm` label을 함께 선택한다.
+- 현재 원격 소유자는 GitHub 개인 계정이므로 이 저장소에는 노트북 runner를 등록하지 않고 배포를 비활성으로 둔다. PR 코드는 어떤 자체 호스팅 runner에서도 실행하지 않는다.
 
 ## 1. 목표와 성공 조건
 
@@ -27,7 +27,7 @@
 2. 준비 카드에는 항상 규칙 엔진의 템플릿 또는 검증을 통과한 LLM 문장이 있다.
 3. 설정만 바꾸면 로컬 Ollama, Cloudflare Tunnel 뒤 Ollama, OpenAI 호환 호스팅 API 사이를 전환할 수 있다.
 4. macOS에서 Java 테스트, Docker 이미지 빌드, CPU Compose 상태 확인과 OpenAI 호환 smoke를 실행할 수 있다.
-5. Ubuntu 노트북이 준비되면 문서의 절차만으로 NVIDIA 구성, runner 등록, Tunnel 연결과 자동 배포를 완료할 수 있다.
+5. Ubuntu 노트북과 조직 runner-group 제한이 준비되면 문서의 절차만으로 NVIDIA 구성, 제한된 runner 등록, Tunnel 연결과 자동 배포를 완료할 수 있다.
 6. 모델 입력·출력, 보호자 원문과 생성 문장이 애플리케이션 로그나 CI 로그에 남지 않는다.
 
 ## 2. 전체 아키텍처
@@ -62,7 +62,7 @@ question_cache(LLM_PENDING, template body, generation_id)
                      generation_id가 같은 캐시만 갱신
 ```
 
-판정, 감지와 질문 선택은 계속 `backend/engine`만 담당한다. LLM은 이미 만들어진 템플릿의 뜻을 바꾸지 않고 자연스러운 보호자 질문으로 다듬는 역할만 가진다.
+판정, 감지와 질문 선택은 계속 `backend/engine`만 담당한다. LLM은 NFC 정규화한 템플릿을 그대로 반환하거나 명시된 마지막 연결형 두 가지로만 바꿀 수 있으며, 동등성을 증명할 수 없으면 템플릿으로 폴백한다.
 
 ## 3. Spring BE 설계
 
@@ -75,12 +75,12 @@ question_cache(LLM_PENDING, template body, generation_id)
 | `LlmClient` | 특정 공급자와 무관한 질문 다듬기 포트 |
 | `OpenAiCompatibleLlmClient` | `/v1/chat/completions` 요청, 인증 헤더, 응답 역직렬화 |
 | `QuestionRewritePrompt` | 시스템 지침과 JSON 입력 작성. `/no_think`를 포함해 사고 과정 출력을 막음 |
-| `QuestionOutputGuard` | 전체 응답의 구조·문장·금지 표현·숫자 보존 검사 |
+| `QuestionOutputGuard` | 전체 응답의 구조·문장·금지 표현·숫자와 유한한 표면 재작성 경계 검사 |
 | `QuestionGenerationDispatcher` | AFTER_COMMIT 작업을 bounded executor에 제출하고 제출 실패를 기록 |
 | `QuestionGenerationCoordinator` | 최대 세 번 호출, 전체 성공 또는 전체 폴백, 최신 작업 확인 |
 | `LlmProperties` / `LlmConfiguration` | 환경변수, HTTP timeout, executor와 조건부 빈 구성 |
 
-`QuestionService`는 계속 엔진 결과를 캐시 형태로 바꾸는 진입점이다. LLM이 활성화됐고 질문이 하나 이상이면 템플릿 본문을 `LLM_PENDING`으로 저장하고 이벤트를 발행한다. 비활성화됐거나 질문이 없으면 기존처럼 `READY`로 끝낸다.
+`QuestionService`는 계속 엔진 결과를 캐시 형태로 바꾸는 진입점이다. 같은 케이스의 refresh는 권위 있는 case 행을 `PESSIMISTIC_WRITE`로 먼저 잠근 뒤 snapshots와 cache를 읽고 쓴다. 이 순서는 같은 케이스의 과거 스냅샷 계산이 새 결과를 마지막에 덮지 않게 하며, LLM이 활성화됐고 질문이 하나 이상이면 템플릿 본문을 `LLM_PENDING`으로 저장하고 이벤트를 발행한다. 비활성화됐거나 질문이 없으면 기존처럼 `READY`로 끝낸다.
 
 ### 3.2 설정
 
@@ -117,7 +117,7 @@ PostgreSQL과 H2의 V2 Flyway migration으로 `question_cache.generation_id uuid
 ### 3.4 트랜잭션과 비동기 순서
 
 1. `SnapshotService.saveWeekly`가 주간 기록을 독립 트랜잭션으로 먼저 커밋한다.
-2. 컨트롤러가 호출하는 `QuestionService.refresh`가 엔진을 실행하고 템플릿 캐시를 별도 트랜잭션으로 커밋한다.
+2. 컨트롤러가 호출하는 `QuestionService.refresh`는 case 행 쓰기 잠금 → snapshots 읽기 → cache 쓰기 순서의 별도 트랜잭션으로 엔진을 실행하고 템플릿 캐시를 커밋한다. 이 경로는 snapshot·cache를 먼저 잠그지 않아 역순 deadlock을 만들지 않는다.
 3. `QuestionGenerationRequested`는 `AFTER_COMMIT`에서만 executor에 제출된다. 롤백된 캐시에 대한 LLM 호출은 없다.
 4. 준비 카드와 치료사 요약은 `LLM_PENDING` 중에도 템플릿 본문을 그대로 읽는다.
 5. worker는 외부 호출을 DB 트랜잭션 밖에서 수행한다.
@@ -159,7 +159,7 @@ PostgreSQL과 H2의 V2 Flyway migration으로 `question_cache.generation_id uuid
 {"questions":[{"rank":1,"sentence":"... ?"}]}
 ```
 
-Ollama의 OpenAI 호환 API가 지원하는 JSON mode와 고정 seed를 사용한다. 프롬프트는 새 사실·판정·조언·진단·운동·치료 표현 추가를 금지하고, 템플릿의 항목·기간·방향을 그대로 보존하도록 지시한다. 코드 검증이 마지막 방어선이며 프롬프트 성공을 안전성의 근거로 삼지 않는다.
+Ollama의 OpenAI 호환 API가 지원하는 JSON mode와 고정 seed를 사용한다. 프롬프트는 NFC 템플릿 원문 또는 마지막 `습니다. `→`는데 ` / `입니다. `→`인데 ` 연결형만 허용하며, 그 밖의 새 사실·판정·조언·진단·운동·치료 표현 추가와 어떤 어휘 변경도 금지한다. 코드 검증이 마지막 방어선이며 프롬프트 성공을 안전성의 근거로 삼지 않는다.
 
 ### 4.2 전체 응답 검증
 
@@ -171,6 +171,7 @@ Ollama의 OpenAI 호환 API가 지원하는 JSON mode와 고정 seed를 사용�
 4. NFC 정규화 뒤 `Templates.isQuestion`과 확장된 금지 표현 검사를 통과한다.
 5. 입력 템플릿에서 추출한 모든 아라비아 숫자 토큰이 출력에도 같은 횟수로 있고 새 숫자가 생기지 않는다.
 6. 마크다운, 코드 블록, 앞뒤 설명, 진단·처방·행동 지시가 없다.
+7. NFC 정규화한 템플릿과 완전히 같거나, 명시된 마지막 연결형 두 가지에서 앞부분과 뒤 질문이 바이트 단위로 같은 경우만 허용한다. 나머지 추가·삭제·동의어·의미 앵커 변경은 안정 규칙으로 전체 거부한다.
 
 금지 목록은 기존 변화 판정 계열 19개에 `재활`, `치료`, `낙상`, `점수`, `처방`, `운동`, `진단`, `기능검사`, `병원에 가`, `받으셔야`, `하셔야`를 추가한다. 과차단은 허용한다. 거부된 출력은 사용자에게 노출되지 않고 안전한 템플릿으로 닫히기 때문이다. 기존 엔진 템플릿 전수 테스트가 새 목록과 충돌하지 않는지도 고정한다.
 
@@ -227,7 +228,7 @@ Cloudflare Tunnel은 인바운드 포트포워딩 없이 외부로 연결한다.
 
 `.env.example`에는 이름과 비밀이 아닌 기본값만 둔다. 실제 `.env`, 모델 볼륨과 runner 자격증명은 Git에 넣지 않는다.
 
-애플리케이션 로그는 모델명, generation ID, 소요 시간, 시도 횟수, 결과 코드와 폴백 분류만 남긴다. 프롬프트, 응답 content, 보호자 원문, 생성 문장과 인증 헤더는 남기지 않는다. 케이스 ID도 외부 호출 로그에는 쓰지 않는다.
+애플리케이션 로그는 모델명, generation ID, 소요 시간, 시도 횟수, 결과 코드와 폴백 분류만 남긴다. 프롬프트, 응답 content, 보호자 원문, 생성 문장과 인증 헤더는 남기지 않는다. 케이스 ID도 외부 호출 로그에는 쓰지 않는다. 주간 새로고침 실패와 공통 conflict/404/405/unexpected 경로도 throwable·요청 유래 메시지 대신 고정 코드만 기록한다. 그 결과 운영자는 상세 stack trace 대신 안전한 결과 코드만 보고 진단한다.
 
 ## 7. CI/CD
 
@@ -248,18 +249,18 @@ GitHub-hosted runner에서는 4.4GB 모델을 pull하거나 실제 추론하지 
 
 - `vars.LLM_DEPLOY_ENABLED == 'true'`
 - `push`라면 `main`, 수동 실행이면 선택한 `main` commit
-- runner labels가 `[self-hosted, linux, llm]`
+- runner group이 `llm-production`이고 labels가 `[self-hosted, linux, llm]`
 - GitHub environment가 `llm-laptop`
 
 job 권한은 `contents: read`만 허용한다. PR 이벤트는 이 workflow를 실행하지 않는다. `concurrency: llm-laptop-deploy`로 동시에 하나만 배포하고 오래된 대기 배포는 취소한다.
 
 배포 순서는 checkout → host 검증 → 환경 파일 존재·권한 확인 → 이미지 build → Compose 기동 → 모델 존재 확인 → OpenAI 호환 smoke다. model volume을 prune하지 않는다. smoke 실패는 workflow를 실패시키고 로그에는 응답 본문을 출력하지 않는다.
 
-노트북이 준비되기 전에는 `LLM_DEPLOY_ENABLED`를 만들지 않거나 `false`로 둔다. 따라서 자체 runner job이 무기한 queue에 남거나 나중에 예상치 않게 실행되지 않는다.
+현재 개인 계정 저장소에는 노트북 runner를 등록하지 않으며 `LLM_DEPLOY_ENABLED`를 만들지 않거나 `false`로 둔다. 따라서 자체 runner job이 무기한 queue에 남거나 나중에 예상치 않게 실행되지 않는다.
 
 ### 7.3 자체 호스팅 runner
 
-runner는 비공개인 이 저장소 전용으로 등록하고 Linux 서비스로 실행한다. 배포 전용 label을 요구하며 다른 저장소나 조직 전체에 공유하지 않는다. OS·Docker·NVIDIA 업데이트와 runner 상태 확인은 운영자 책임이다.
+저장소 수준 runner는 안전 경계가 아니다. runner 할당은 PR-제어 workflow 안의 linter job보다 먼저 일어나므로, 현재 개인 계정 저장소에서 노트북을 등록해서는 안 된다. 미래에는 비공개 저장소를 GitHub 조직으로 이전 또는 미러하고, `llm-production` 조직 runner group의 repository access를 정확한 `<ORG>/<REPO>`로 제한한다. `restricted_to_workflows=true`와 selected workflow `<ORG>/<REPO>/.github/workflows/llm-deploy.yml@refs/heads/main`을 함께 설정한 경우에만 Linux 서비스 runner를 그 group에 등록한다. 이 외부 제한을 제공할 수 없으면 배포는 비활성으로 남고 별도의 pull-based CD 설계는 승인 후에만 도입한다. 저장소 linter는 이 외부 경계를 보강할 뿐 대체하지 않는다.
 
 ## 8. 장애 처리표
 
@@ -340,7 +341,7 @@ Ubuntu 노트북 준비 뒤에는 `nvidia-smi`, 컨테이너 GPU 인식, `ollama
 5. CI와 비활성 기본 배포 workflow를 만든다.
 6. 문서와 전체 테스트를 갱신한다.
 7. macOS에서 Java 전체 테스트, Docker build·Compose·CPU smoke를 검증한다.
-8. Ubuntu 준비 뒤 문서의 후속 체크포인트를 실행하고 `LLM_DEPLOY_ENABLED=true`로 전환한다.
+8. Ubuntu 준비와 조직 runner-group 외부 제한 뒤 문서의 후속 체크포인트를 실행하고 그때만 `LLM_DEPLOY_ENABLED=true` 전환을 검토한다.
 
 이번 작업은 7번까지 통과하면 코드 기준 완료다. 8번은 하드웨어 환경이 준비돼야 시작하는 명시적 후속 검증이다.
 

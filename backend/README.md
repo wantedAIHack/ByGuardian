@@ -27,7 +27,9 @@
 
 **LLM 가용성과 관계없이 제품은 동작합니다.** 템플릿을 먼저 저장하므로 LLM이 비활성이거나 응답 검증이 실패해도 준비 카드는 안전한 문장을 유지합니다.
 
-2026-09-08 Java 21 `./gradlew clean test` 검증 기준으로 engine 123개와 API 120개, 총 243개 테스트가 통과했습니다(실패 0).
+현재 `y-minion/wanted_Hackaton`은 개인 계정 저장소이므로 노트북을 자체 호스팅 runner로 등록하지 않고 `LLM_DEPLOY_ENABLED`를 absent/false로 둡니다. 향후 GitHub 조직으로 이전 또는 미러한 뒤에도 `llm-production` 조직 runner group이 정확한 `main` 배포 workflow로 외부 제한될 때만 배포를 검토합니다. 저장소 안의 workflow linter는 그 경계의 보조 검사일 뿐 runner 할당 전 보안 경계가 아닙니다.
+
+2026-09-08 Java 21 `./gradlew clean test` 검증 기준으로 engine 123개와 API 127개, 총 250개 테스트가 통과했습니다(실패 0).
 
 테스트를 촘촘히 둔 것은 의도한 것입니다. 이 제품은 출력이 전부 한국어 문장이라, 문장을 글자 단위로 고정하지 않으면 회귀를 눈으로 잡을 수 없습니다.
 
@@ -258,7 +260,7 @@ else if (status == FLUCTUATING) → 전환인지만 본다
 
 감소는 "악화"가 아니라 "도움이 더 필요해지셨습니다"로 씁니다. 가치 판정을 피하는 것이 규제 방어이자 보호자에게 잘못된 확신을 주지 않는 방법입니다.
 
-LLM 출력은 같은 구조 경계 안으로 들어옵니다. 엔진 템플릿을 먼저 `LLM_PENDING`으로 저장한 뒤, 최소 입력만 비동기로 보내고 `QuestionOutputGuard`가 JSON 구조, rank, 길이, 질문형, 금지 표현, 행동 지시와 숫자 보존을 전부 확인합니다. 하나라도 실패하면 전체 batch를 버리고 템플릿을 유지합니다. 늦은 응답은 `generation_id` 조건부 갱신이 차단합니다.
+LLM 출력은 같은 구조 경계 안으로 들어옵니다. `QuestionService.refresh`는 같은 케이스의 권위 행을 먼저 쓰기 잠금한 뒤 스냅샷과 캐시를 읽어 새 입력을 직렬화하고, `AFTER_COMMIT` worker는 그대로 유지합니다. 엔진 템플릿을 먼저 `LLM_PENDING`으로 저장한 뒤 최소 입력만 비동기로 보내며, `QuestionOutputGuard`는 JSON 구조, rank, 길이, 질문형, 금지 표현, 행동 지시와 숫자 보존뿐 아니라 NFC 템플릿 원문 또는 명시된 마지막 연결형 두 가지만 확인합니다. 하나라도 실패하면 전체 batch를 버리고 템플릿을 유지합니다. 늦은 응답은 `generation_id` 조건부 갱신이 차단합니다. 새로고침과 공통 오류 로그는 케이스·요청·throwable 대신 고정 코드만 남깁니다.
 
 ---
 
@@ -325,7 +327,7 @@ curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
 - **Ubuntu/NVIDIA 실기 결과.** 장비 준비 뒤 GPU 적재, 2K 컨텍스트 응답 시간, 재부팅 복구, runner와 Tunnel을 검증합니다.
 - **재시작 뒤 `LLM_PENDING` 자동 복구.** 현재는 다음 기록 갱신 때 다시 시도하며 durable queue는 MVP 범위 밖입니다.
 - **주간 알림.** 기본 화면이 침묵이라 보호자가 앱을 열 이유는 알림뿐인데 설계가 없습니다. 스펙 §11의 열린 질문입니다.
-- **로깅.** 예외 처리기 외에는 없습니다. 배포 모듈에서 넣습니다.
+- **상세 오류 진단 로그.** 새로고침과 공통 오류 처리는 의도적으로 고정 코드만 남기며, request/throwable 상세는 개인정보·자격증명 유출 위험 때문에 기록하지 않습니다.
 - **과거 주차 소급 기록.** 이번 범위 밖입니다.
 
 미뤄둔 사소한 지적들과 각각의 판단 근거는 `../docs/superpowers/plans/2026-09-06-api-followups.md`에 있습니다.

@@ -18,7 +18,9 @@ concurrency:
 jobs:
   deploy:
     if: ${{ github.ref == 'refs/heads/main' && vars.LLM_DEPLOY_ENABLED == 'true' }}
-    runs-on: [self-hosted, linux, llm]
+    runs-on:
+      group: llm-production
+      labels: [self-hosted, linux, llm]
     environment: llm-laptop
     timeout-minutes: 90
     steps:

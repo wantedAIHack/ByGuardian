@@ -57,9 +57,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RecordApplicationEvents
 class QuestionAsyncIntegrationTest {
 
-    private static final String OLDER_SENTINEL = "OLDERSENTINEL ";
-    private static final String NEWER_SENTINEL = "NEWERSENTINEL ";
-
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired MutableClock clock;
@@ -199,16 +196,20 @@ class QuestionAsyncIntegrationTest {
         CountDownLatch secondEntered = new CountDownLatch(1);
         CountDownLatch secondRelease = cleanupRelease();
         AtomicInteger calls = new AtomicInteger();
+        AtomicReference<String> olderResponse = new AtomicReference<>();
+        AtomicReference<String> newerResponse = new AtomicReference<>();
         when(client.complete(any())).thenAnswer(invocation -> {
             int call = calls.incrementAndGet();
             CountDownLatch entered = call == 1 ? firstEntered : secondEntered;
             CountDownLatch callRelease = call == 1 ? firstRelease : secondRelease;
-            String sentinel = call == 1 ? OLDER_SENTINEL : NEWER_SENTINEL;
             entered.countDown();
             if (!callRelease.await(5, TimeUnit.SECONDS)) {
                 throw new LlmClientException(LlmFailureCode.TIMEOUT);
             }
-            return successfulRewrite(invocation.getArgument(0), sentinel);
+            String response = successfulRewrite(invocation.getArgument(0),
+                call == 1 ? SurfaceForm.CONNECTED : SurfaceForm.UNCHANGED);
+            (call == 1 ? olderResponse : newerResponse).set(response);
+            return response;
         });
 
         questions.refresh(caseId);
@@ -229,7 +230,6 @@ class QuestionAsyncIntegrationTest {
         assertThat(newerTemplates.questions()).allSatisfy(question -> {
             assertThat(question.source()).isEqualTo(QuestionCacheBody.SOURCE_TEMPLATE);
             assertThat(question.sentence()).isEqualTo(question.templateSentence());
-            assertThat(question.sentence()).doesNotContain(OLDER_SENTINEL, NEWER_SENTINEL);
         });
 
         secondRelease.countDown();
@@ -237,11 +237,11 @@ class QuestionAsyncIntegrationTest {
         assertThat(caches.findByCaseId(caseId).orElseThrow().getGenerationId())
             .isEqualTo(newerGeneration);
         assertThat(calls).hasValue(2);
+        assertThat(olderResponse.get()).isNotEqualTo(newerResponse.get());
         assertThat(questions.current(caseId).orElseThrow().questions())
             .allSatisfy(question -> {
                 assertThat(question.source()).isEqualTo(QuestionCacheBody.SOURCE_LLM);
-                assertThat(question.sentence()).startsWith(NEWER_SENTINEL);
-                assertThat(question.sentence()).doesNotContain(OLDER_SENTINEL);
+                assertThat(question.sentence()).isEqualTo(question.templateSentence());
             });
     }
 
@@ -287,21 +287,49 @@ class QuestionAsyncIntegrationTest {
             if (!release.get().await(5, TimeUnit.SECONDS)) {
                 throw new LlmClientException(LlmFailureCode.TIMEOUT);
             }
-            return successfulRewrite(invocation.getArgument(0), "");
+            return successfulRewrite(invocation.getArgument(0), SurfaceForm.UNCHANGED);
         });
     }
 
     private String successfulRewrite(QuestionRewritePrompt.Prompt prompt,
-                                     String sentencePrefix) throws Exception {
+                                     SurfaceForm surfaceForm) throws Exception {
         JsonNode input = mapper.readTree(prompt.userMessage()).get("questions");
         ObjectNode output = mapper.createObjectNode();
         ArrayNode rewritten = output.putArray("questions");
         for (JsonNode question : input) {
+            String template = question.get("templateSentence").asText();
             rewritten.addObject()
                 .put("rank", question.get("rank").asInt())
-                .put("sentence", sentencePrefix + question.get("templateSentence").asText());
+                .put("sentence", surfaceForm.rewrite(template));
         }
         return mapper.writeValueAsString(output);
+    }
+
+    private enum SurfaceForm {
+        UNCHANGED {
+            @Override
+            String rewrite(String template) {
+                return template;
+            }
+        },
+        CONNECTED {
+            @Override
+            String rewrite(String template) {
+                int seumnida = template.lastIndexOf("습니다. ");
+                if (seumnida >= 0) {
+                    return template.substring(0, seumnida) + "는데 "
+                        + template.substring(seumnida + "습니다. ".length());
+                }
+                int ibnida = template.lastIndexOf("입니다. ");
+                if (ibnida >= 0) {
+                    return template.substring(0, ibnida) + "인데 "
+                        + template.substring(ibnida + "입니다. ".length());
+                }
+                throw new AssertionError("fixture template has no permitted connected ending: " + template);
+            }
+        };
+
+        abstract String rewrite(String template);
     }
 
     private CountDownLatch cleanupRelease() {

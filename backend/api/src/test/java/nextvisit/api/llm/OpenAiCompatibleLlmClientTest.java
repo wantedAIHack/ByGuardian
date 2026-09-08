@@ -49,8 +49,11 @@ class OpenAiCompatibleLlmClientTest {
                 assertThat(body.get("seed").asInt()).isZero();
                 assertThat(body.get("max_tokens").asInt()).isEqualTo(512);
                 assertThat(body.at("/response_format/type").asText()).isEqualTo("json_object");
+                assertThat(body.at("/messages").size()).isEqualTo(2);
                 assertThat(body.at("/messages/0/role").asText()).isEqualTo("system");
+                assertThat(body.at("/messages/0/content").asText()).isEqualTo("system /no_think");
                 assertThat(body.at("/messages/1/role").asText()).isEqualTo("user");
+                assertThat(body.at("/messages/1/content").asText()).isEqualTo("{\"questions\":[]}");
             })
             .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"{\\\"questions\\\":[]}\"}}]}",
                 MediaType.APPLICATION_JSON));

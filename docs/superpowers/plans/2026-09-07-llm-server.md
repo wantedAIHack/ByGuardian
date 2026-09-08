@@ -3416,3 +3416,27 @@ If the review finds a violation, return to the task that owns that invariant, ad
 | Full clean suite, real macOS CPU smoke, documentation truth | Task 12 fresh acceptance commands |
 
 The implementation is code-complete only after Task 12 passes on macOS. Ubuntu/NVIDIA hardware acceptance remains a named follow-up and `LLM_DEPLOY_ENABLED` remains absent or `false` until that follow-up is executed.
+
+## Final-review safety amendment — 2026-09-08
+
+This amendment supersedes the earlier repository-scoped runner wording without
+rewriting the historical execution record.
+
+- `QuestionOutputGuard` must fail closed: accept only the NFC-normalized
+  template unchanged or the two enumerated final-clause joins
+  (`습니다. `→`는데 ` and `입니다. `→`인데 `) with every other character
+  preserved. The prompt and success fixtures follow the same finite boundary.
+- `QuestionService.refresh` acquires the authoritative case-row write lock
+  before reading snapshots, then writes the cache; `AFTER_COMMIT` publication
+  and outer transaction semantics remain unchanged.
+- Refresh and common error handlers log fixed opaque codes only. They do not
+  attach case/request values, exception messages, or throwable objects; this
+  intentionally trades detailed in-process diagnostics for privacy.
+- The current personal-account repository must not register the laptop runner
+  and keeps deployment disabled. Future CD requires a GitHub organization,
+  `llm-production` runner group limited to exactly `<ORG>/<REPO>`,
+  `restricted_to_workflows=true`, and exactly
+  `<ORG>/<REPO>/.github/workflows/llm-deploy.yml@refs/heads/main`. If that
+  external boundary is unavailable, remain disabled and seek approval for a
+  separate pull-based design. The in-repository linter is defense in depth,
+  not the pre-allocation boundary.

@@ -50,7 +50,9 @@ public class QuestionService {
     }
 
     public QuestionCacheBody refresh(UUID caseId) {
-        CaseEntity kase = cases.findById(caseId).orElseThrow(() -> new NotFoundException("케이스가 없습니다"));
+        // Lock order is case -> snapshots -> cache for every refresh of one case.
+        CaseEntity kase = cases.findByIdForQuestionRefresh(caseId)
+            .orElseThrow(() -> new NotFoundException("케이스가 없습니다"));
         List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(caseId);
         PipelineResult r = bridge.run(kase, snaps);
 

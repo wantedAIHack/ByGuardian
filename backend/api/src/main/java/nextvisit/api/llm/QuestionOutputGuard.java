@@ -30,6 +30,9 @@ public class QuestionOutputGuard {
     private static final Pattern DIRECTIVE = Pattern.compile(
         "(?:세요|십시오|해\\s*주세요|해야|기\\s*바랍니다|"
             + "해\\s*(?:봐요|볼까요)|면\\s*(?:됩니다|돼요)|[가-힣]+라)(?=\\s|[,.!?]|$)");
+    private static final List<SurfaceTransformation> SURFACE_TRANSFORMATIONS = List.of(
+        new SurfaceTransformation("습니다. ", "는데 "),
+        new SurfaceTransformation("입니다. ", "인데 "));
 
     private final ObjectMapper mapper;
 
@@ -87,8 +90,13 @@ public class QuestionOutputGuard {
                 || DIRECTIVE.matcher(sentence).find()) {
                 throw new Rejected(Rule.DIRECTIVE);
             }
-            if (!numberTokens(template.templateSentence()).equals(numberTokens(sentence))) {
+            String normalizedTemplate = Normalizer.normalize(
+                template.templateSentence(), Normalizer.Form.NFC).strip();
+            if (!numberTokens(normalizedTemplate).equals(numberTokens(sentence))) {
                 throw new Rejected(Rule.NUMBER_TOKENS);
+            }
+            if (!isPermittedSurfaceRewrite(normalizedTemplate, sentence)) {
+                throw new Rejected(Rule.SURFACE_REWRITE);
             }
             acceptedByRank.put(rank, sentence);
         }
@@ -134,6 +142,34 @@ public class QuestionOutputGuard {
         return tokens;
     }
 
+    /**
+     * The LLM may keep the normalized template unchanged or use one of the two
+     * explicitly enumerated final-clause joins. Everything outside that join is
+     * compared byte-for-byte after NFC normalization, so novel facts and advice
+     * fail closed instead of relying on an open-ended Korean semantic analysis.
+     */
+    private static boolean isPermittedSurfaceRewrite(String template, String candidate) {
+        if (candidate.equals(template)) {
+            return true;
+        }
+        for (SurfaceTransformation transformation : SURFACE_TRANSFORMATIONS) {
+            int split = template.lastIndexOf(transformation.from());
+            if (split < 1) {
+                continue;
+            }
+            String questionTail = template.substring(split + transformation.from().length());
+            if (questionTail.isBlank() || !questionTail.endsWith("?")
+                || questionTail.chars().filter(character -> character == '?').count() != 1) {
+                continue;
+            }
+            String rewritten = template.substring(0, split) + transformation.to() + questionTail;
+            if (candidate.equals(rewritten)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public enum Rule {
         JSON_OBJECT,
         ROOT_FIELDS,
@@ -146,8 +182,11 @@ public class QuestionOutputGuard {
         MARKDOWN,
         FORBIDDEN_WORD,
         DIRECTIVE,
-        NUMBER_TOKENS
+        NUMBER_TOKENS,
+        SURFACE_REWRITE
     }
+
+    private record SurfaceTransformation(String from, String to) {}
 
     public record Rewrite(int rank, String sentence) {}
 

@@ -52,6 +52,60 @@ class QuestionOutputGuardTest {
             new QuestionOutputGuard.Rewrite(1, "걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요?"));
     }
 
+    @Test
+    void acceptsOnlyTheEnumeratedContentPreservingSurfaceForms() {
+        List<QuestionCacheBody.Q> input = List.of(
+            question(1, "일어설 때 얼굴을 찡그리시는 걸 4주 중 3주 봤습니다. 통증일 수 있을까요?"),
+            question(2, "식사는 4주째 그대로입니다. 어떻게 보시나요?"),
+            question(3, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
+        String content = """
+            {"questions":[
+              {"rank":1,"sentence":"일어설 때 얼굴을 찡그리시는 걸 4주 중 3주 봤는데 통증일 수 있을까요?"},
+              {"rank":2,"sentence":"식사는 4주째 그대로인데 어떻게 보시나요?"},
+              {"rank":3,"sentence":"걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"}
+            ]}
+            """;
+
+        QuestionOutputGuard.Accepted accepted = guard.validate(input, content);
+
+        assertThat(accepted.rewrites()).containsExactly(
+            new QuestionOutputGuard.Rewrite(1, "일어설 때 얼굴을 찡그리시는 걸 4주 중 3주 봤는데 통증일 수 있을까요?"),
+            new QuestionOutputGuard.Rewrite(2, "식사는 4주째 그대로인데 어떻게 보시나요?"),
+            new QuestionOutputGuard.Rewrite(3, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
+    }
+
+    @Test
+    void rejectsMedicationProposalThatOnlyPreservesTheTemplateNumbers() {
+        List<QuestionCacheBody.Q> input = List.of(
+            question(1, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
+        String content = """
+            {"questions":[
+              {"rank":1,"sentence":"3주 중 2주 동안 약을 더 먹으면 되나요?"}
+            ]}
+            """;
+
+        QuestionOutputGuard.Rejected rejected = assertThrows(
+            QuestionOutputGuard.Rejected.class, () -> guard.validate(input, content));
+
+        assertThat(rejected.rule()).isEqualTo(QuestionOutputGuard.Rule.SURFACE_REWRITE);
+    }
+
+    @Test
+    void rejectsAppendedTreatmentContentEvenWhenTemplateAnchorsRemain() {
+        List<QuestionCacheBody.Q> input = List.of(
+            question(1, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
+        String content = """
+            {"questions":[
+              {"rank":1,"sentence":"걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요 약을 더 먹으면 되나요?"}
+            ]}
+            """;
+
+        QuestionOutputGuard.Rejected rejected = assertThrows(
+            QuestionOutputGuard.Rejected.class, () -> guard.validate(input, content));
+
+        assertThat(rejected.rule()).isEqualTo(QuestionOutputGuard.Rule.SURFACE_REWRITE);
+    }
+
     @ParameterizedTest(name = "{0}")
     @MethodSource("invalidResponses")
     void rejectsTheWholeBatch(String name, String content, QuestionOutputGuard.Rule rule) {
@@ -84,7 +138,7 @@ class QuestionOutputGuardTest {
                 QuestionOutputGuard.Rule.QUESTION_FIELDS),
             Arguments.of("rank overflows int", "{\"questions\":[{\"rank\":4294967297,\"sentence\":\"3주 중 2주인가요?\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.QUESTION_FIELDS),
-            Arguments.of("duplicate rank", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주인가요?\"},{\"rank\":1,\"sentence\":\"4주째인가요?\"}]}",
+            Arguments.of("duplicate rank", "{\"questions\":[{\"rank\":1,\"sentence\":\"걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요?\"},{\"rank\":1,\"sentence\":\"걷기를 3주 중 2주 지켜봤는데 어떻게 보시나요?\"}]}",
                 QuestionOutputGuard.Rule.RANK_SET),
             Arguments.of("multiple question marks", "{\"questions\":[{\"rank\":1,\"sentence\":\"3주 중 2주인가요??\"},{\"rank\":2,\"sentence\":\"4주째인가요?\"}]}",
                 QuestionOutputGuard.Rule.QUESTION_MARK),

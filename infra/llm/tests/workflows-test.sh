@@ -234,6 +234,12 @@ assert_ci_jobs() {
       } else if (key == "runs-on") {
         invalid = 1
       }
+      next
+    }
+    in_jobs && /^      [^[:space:]#]/ {
+      if ($0 ~ /^      (group|labels):/) {
+        invalid = 1
+      }
     }
     END {
       if (job_sections != 1 || backend_jobs != 1 || container_jobs != 1 ||
@@ -531,6 +537,64 @@ require_deploy_property() {
   fi
 }
 
+assert_deploy_runner_group() {
+  if ! awk '
+    /^jobs:[[:space:]]*$/ {
+      job_sections++
+      in_jobs = 1
+      in_deploy = 0
+      in_runner = 0
+      next
+    }
+    /^[^[:space:]#]/ {
+      in_jobs = 0
+      in_deploy = 0
+      in_runner = 0
+    }
+    in_jobs && /^  [A-Za-z0-9_-]+:[[:space:]]*$/ {
+      in_deploy = ($0 == "  deploy:")
+      in_runner = 0
+      if (in_deploy) {
+        deploy_jobs++
+      }
+      next
+    }
+    in_deploy && /^    runs-on:/ {
+      runner_properties++
+      if ($0 == "    runs-on:") {
+        in_runner = 1
+      } else {
+        invalid = 1
+        in_runner = 0
+      }
+      next
+    }
+    in_deploy && /^    [^[:space:]#]/ {
+      in_runner = 0
+      next
+    }
+    in_runner && /^      [^[:space:]#]/ {
+      if ($0 == "      group: llm-production") {
+        groups++
+      } else if ($0 == "      labels: [self-hosted, linux, llm]") {
+        labels++
+      } else {
+        invalid = 1
+      }
+      next
+    }
+    END {
+      if (job_sections != 1 || deploy_jobs != 1 || runner_properties != 1 ||
+          groups != 1 || labels != 1 || invalid != 0) {
+        exit 1
+      }
+    }
+  ' "$deploy"; then
+    printf '%s\n' "deploy runner must use only group llm-production with labels [self-hosted, linux, llm]" >&2
+    exit 1
+  fi
+}
+
 require_file "$ci" "CI"
 require_file "$deploy" "deploy"
 
@@ -555,7 +619,7 @@ forbid_ere '^[[:space:]]+[^#].*model-init' "$ci" "CI must not pull or initialize
 forbid_ere '^[[:space:]]+[^#].*ollama pull' "$ci" "CI must not pull the model"
 
 require_deploy_property "    if: \${{ github.ref == 'refs/heads/main' && vars.LLM_DEPLOY_ENABLED == 'true' }}" "deploy gate must be an active property of jobs.deploy"
-require_deploy_property '    runs-on: [self-hosted, linux, llm]' "deploy runner labels must be an active property of jobs.deploy"
+assert_deploy_runner_group
 require_deploy_property '    environment: llm-laptop' "deploy environment must be an active property of jobs.deploy"
 require_deploy_property '    timeout-minutes: 90' "deploy timeout must be an active property of jobs.deploy"
 require_line '  group: llm-laptop-deploy' "$deploy" "deploy concurrency group is missing"
