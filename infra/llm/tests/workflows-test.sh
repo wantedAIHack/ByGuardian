@@ -109,16 +109,26 @@ assert_ci_triggers() {
       }
       next
     }
-    in_on && $0 == "    branches: [main, feat/llm-server]" {
-      if (event == "push") {
-        push_branches++
-      } else {
+    in_on && /^    [^[:space:]#]/ {
+      key = substr($0, 5)
+      sub(/:.*/, "", key)
+      sub(/[[:space:]]+$/, "", key)
+      if (key !~ /^[A-Za-z0-9_-]+$/) {
         invalid = 1
+      }
+      if (key == "branches") {
+        branch_properties++
+        if (event == "push" &&
+            $0 == "    branches: [main, feat/llm-server]") {
+          push_branches++
+        } else {
+          invalid = 1
+        }
       }
     }
     END {
       if (on_blocks != 1 || pushes != 1 || pull_requests != 1 ||
-          push_branches != 1 || invalid != 0) {
+          branch_properties != 1 || push_branches != 1 || invalid != 0) {
         exit 1
       }
     }
@@ -153,16 +163,25 @@ assert_deploy_triggers() {
       }
       next
     }
-    in_on && $0 == "    branches: [main]" {
-      if (event == "push") {
-        push_branches++
-      } else {
+    in_on && /^    [^[:space:]#]/ {
+      key = substr($0, 5)
+      sub(/:.*/, "", key)
+      sub(/[[:space:]]+$/, "", key)
+      if (key !~ /^[A-Za-z0-9_-]+$/) {
         invalid = 1
+      }
+      if (key == "branches") {
+        branch_properties++
+        if (event == "push" && $0 == "    branches: [main]") {
+          push_branches++
+        } else {
+          invalid = 1
+        }
       }
     }
     END {
       if (on_blocks != 1 || pushes != 1 || dispatches != 1 ||
-          push_branches != 1 || invalid != 0) {
+          branch_properties != 1 || push_branches != 1 || invalid != 0) {
         exit 1
       }
     }
