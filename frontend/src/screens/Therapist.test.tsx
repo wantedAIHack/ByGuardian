@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/server';
 import { Therapist } from './Therapist';
-import type { TherapistSummary } from '../lib/types';
+import type { Trajectory, TherapistSummary } from '../lib/types';
 
 const BASE = 'http://localhost:8080';
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -52,6 +52,46 @@ const summary: TherapistSummary = {
   density: { totalWeeks: 6, recordedWeeks: 5, confirmedWeeks: 3, authors: ['딸', '아들'] },
   authorChanges: [{ week: 5, from: '딸', to: '아들' }],
   disclaimer: '이 기록은 보호자가 가정에서 관찰한 내용입니다. 진단이나 평가가 아닙니다.',
+};
+
+// 두 축을 가진 항목 — 표의 ai>0 분기(축마다 한 줄로 나뉘되 항목 라벨과 ' · '
+// 연결어는 첫 줄에만 붙는다)를 잡는다. summary의 항목은 전부 축이 하나뿐이라
+// 이 분기를 타지 않는다.
+const twoAxisItem: Trajectory = {
+  code: 'dressing', label: '옷 입기', changed: true,
+  axes: [
+    {
+      axis: 'LEVEL', axisLabel: '도움 수준',
+      values: [
+        { week: 4, value: 1, label: '손 잡아드림', source: 'CONFIRMED' },
+        { week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' },
+        { week: 6, value: 2, label: '지켜보면 됨', source: 'CONFIRMED' },
+      ],
+    },
+    {
+      axis: 'HAND', axisLabel: '마비 쪽 손',
+      values: [
+        { week: 4, value: 0, label: '안 씀', source: 'CONFIRMED' },
+        { week: 5, value: 0, label: '안 씀', source: 'CONFIRMED' },
+        { week: 6, value: 1, label: '거들기만', source: 'CONFIRMED' },
+      ],
+    },
+  ],
+};
+
+// 한 주는 값이 아예 없는 항목 — `p?.label ?? '·'` 자리표시 분기를 잡는다.
+// summary의 변화 있는 항목(화장실 이용)은 세 주 모두 값을 갖고 있어 이 분기를
+// 타지 않는다.
+const missingWeekItem: Trajectory = {
+  code: 'grooming', label: '세수·양치', changed: true,
+  axes: [{
+    axis: 'LEVEL', axisLabel: '도움 수준',
+    values: [
+      { week: 4, value: 2, label: '지켜보면 됨', source: 'CONFIRMED' },
+      // 5주차 기록 없음
+      { week: 6, value: 3, label: '혼자 하심', source: 'CONFIRMED' },
+    ],
+  }],
 };
 
 function renderIt(data: TherapistSummary | null = summary, status = 200) {
@@ -103,6 +143,37 @@ describe('치료사용 요약', () => {
     const confirmed = screen.getByText('손 잡아드림');
     expect(carried.className).toContain('text-ink-faint');
     expect(confirmed.className).not.toContain('text-ink-faint');
+  });
+
+  it('두 축을 가진 항목은 축마다 한 줄로 나뉜다', async () => {
+    renderIt({ ...summary, items: [...summary.items, twoAxisItem] });
+    await screen.findByText('화장실 이용');
+
+    // 항목 라벨과 축 라벨은 서로 다른 <span> 형제라 getByText로 합쳐서 찾을 수
+    // 없다(둘 다 텍스트 노드를 직접 자식으로 갖는 별개 엘리먼트다) — 라벨로 행을
+    // 찾은 뒤 그 칸의 textContent(자손까지 이어붙인 값)로 확인한다.
+    // 첫 축(ai===0) 행: 항목 라벨 + ' · ' 연결어 + 첫 축 라벨이 한 칸에 담긴다.
+    const firstRow = screen.getByText('옷 입기').closest('tr');
+    expect(firstRow?.querySelector('td')?.textContent).toBe('옷 입기 · 도움 수준');
+    // 두 번째 축(ai>0) 행: 축 라벨만 홀로 한 칸을 이룬다 — 라벨을 되풀이하지 않는다.
+    const secondRow = screen.getByText('마비 쪽 손').closest('tr');
+    expect(secondRow?.querySelector('td')?.textContent).toBe('마비 쪽 손');
+    expect(secondRow).not.toBe(firstRow);
+    // 두 줄 다 같은 항목의 주차별 값을 낸다.
+    expect(screen.getByText('거들기만')).toBeInTheDocument();
+  });
+
+  it('그 주에 기록이 없으면 자리표시 점을 낸다', async () => {
+    renderIt({ ...summary, items: [...summary.items, missingWeekItem] });
+    await screen.findByText('화장실 이용');
+
+    // 위와 같은 이유로 항목 라벨('세수·양치')만으로 행을 찾는다.
+    const row = screen.getByText('세수·양치').closest('tr');
+    const cells = row?.querySelectorAll('td');
+    // cells[0]은 라벨 칸, [1]~[3]은 4주·5주·6주 값 칸이다.
+    expect(cells?.[1]?.textContent).toBe('지켜보면 됨');
+    expect(cells?.[2]?.textContent).toBe('·');
+    expect(cells?.[3]?.textContent).toBe('혼자 하심');
   });
 
   it('기록 밀도와 작성자 변경을 보여준다', async () => {
@@ -231,6 +302,51 @@ describe('치료사용 요약', () => {
       ...toiletAxis.values.map((p) => p.label),
       `같은 기간 변화 없음 — ${bathing.label}`,
       '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '야간 수면',
+      ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
+      '보호자 기록 (원문)',
+      `${note.week}주 · ${note.timeTagLabel}`,
+      note.text,
+      '보호자가 여쭤보고 싶은 것',
+      ...summary.questions,
+      ...summary.extraQuestions,
+      '기록 밀도',
+      `${summary.density.totalWeeks}주 중 ${summary.density.recordedWeeks}주 기록 · 그중 ${summary.density.confirmedWeeks}주는 직접 확인한 값`,
+      `작성자 — ${summary.density.authors.join(', ')}`,
+      `${change.week}주차부터 ${change.to}이(가) 작성 (이전 ${change.from})`,
+      summary.disclaimer,
+    ].join('');
+    expect(main.textContent).toBe(expected);
+  });
+
+  it('판정 문구를 만들지 않는다 — 신호는 켜져 있지만 관찰된 것이 없는 상태', async () => {
+    renderIt({ ...summary, signals: [] });
+    const main = await screen.findByRole('main');
+    await screen.findByText('화장실 이용');
+
+    const toilet = summary.items[0]!;
+    const bathing = summary.items[1]!;
+    const toiletAxis = toilet.axes[0]!;
+    const note = summary.freeNotes[0]!;
+    const change = summary.authorChanges[0]!;
+
+    // signalsEnabled는 true인 채로 signals만 빈 배열이다 — 위 '신호가 꺼진 상태'와는
+    // 다른 세 번째 상태다. 그쪽은 구역 자체가 없고, 여기는 구역은 남되 안에 고정
+    // 문구 '관찰된 신호 없음'만 뜬다. 이 상태를 만드는 표본이 이 파일에 하나도
+    // 없었다 — 하드코딩된 리터럴이라 안전해 보이지만, 이 프로젝트에서 판정
+    // 문구가 숨었던 세 번의 재발급 모두 정확히 이런 조건부 분기의 리터럴
+    // 자리였다. 아래에서 이 자리에 조작 문구 두 개를 심어 증명한다.
+    const expected = [
+      '가정 관찰 기록',
+      `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
+      '주차별 관찰',
+      '항목', ...summary.weeks.map((w) => `${w}주`),
+      `${toilet.label} · ${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p) => p.label),
+      `같은 기간 변화 없음 — ${bathing.label}`,
+      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '비언어 신호',
+      '관찰된 신호 없음',
       '야간 수면',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자 기록 (원문)',
