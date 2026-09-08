@@ -4,12 +4,18 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/server';
+import { setToken, setTokenChangeHandler } from '../lib/api';
+import { clearTherapistLinkOnTokenChange } from '../lib/queries';
 import { TherapistLinkPanel } from './TherapistLinkPanel';
 
 const BASE = 'http://localhost:8080';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
+// setTokenChangeHandler는 api.ts 모듈 전역이라(setUnauthorizedHandler와 같은 자리) 등록한
+// 테스트가 끝나면 지운다 — 안 지우면 다음 테스트가 이 파일의 이전 QueryClient를 가리키는
+// 낡은 핸들러를 물려받는다.
+afterEach(() => setTokenChangeHandler(null));
 afterAll(() => server.close());
 
 function renderPanel() {
@@ -151,5 +157,45 @@ describe('TherapistLinkPanel', () => {
     // 다시 나타나지 않는다.
     expect(screen.queryByRole('button', { name: '치료사에게 보여드리기' })).not.toBeInTheDocument();
     expect(calls).toBe(1);
+  });
+
+  it('토큰이 바뀌면 이전 케이스의 링크를 지우고 새로 발급하게 한다', async () => {
+    // 재발급 라운드 리뷰에서 나온 회귀: QueryClient는 앱 수명 내내 하나뿐이고(main.tsx)
+    // 링크 쿼리는 enabled:false + gcTime:Infinity라 스스로 만료되지 않는다. 토큰이 바뀔
+    // 때(온보딩·이어받기·데모·401) 아무도 이 캐시를 지우지 않으면, 새로 이어받은 다른
+    // 케이스의 화면에 이전 케이스의 /t/<token>이 그대로 뜨고 — url이 truthy라 발급
+    // 버튼 자체가 숨어 새 보호자는 자기 링크를 낼 방법이 없다.
+    const user = userEvent.setup();
+    server.use(http.post(`${BASE}/me/therapist-link`, () =>
+      HttpResponse.json({ url: '/t/old', token: 'old-token' })));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    // main.tsx가 시작할 때 하는 배선을 그대로 재현한다 — setToken/clearToken을 부르는
+    // 진입점이라면 어디서 불러도 이 등록 하나로 잡힌다.
+    clearTherapistLinkOnTokenChange(qc);
+
+    const first = render(
+      <QueryClientProvider client={qc}>
+        <TherapistLinkPanel />
+      </QueryClientProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
+    await screen.findByText(`${window.location.origin}/t/old-token`);
+
+    // 실제 화면 전환을 그대로 재현한다: 홈이 내려가고(이어받기·온보딩·데모로 이동),
+    // 앱이 토큰 진입점에서 실제로 부르는 그 함수로 토큰이 바뀐 뒤(테스트에서
+    // qc.removeQueries를 직접 부르는 게 아니라 실제 신호 경로를 그대로 태운다),
+    // 새 케이스로 홈이 다시 뜬다 — 그때 패널도 새로 마운트된다.
+    first.unmount();
+    setToken('new-guardian-token');
+
+    render(
+      <QueryClientProvider client={qc}>
+        <TherapistLinkPanel />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
+    expect(screen.queryByText(`${window.location.origin}/t/old-token`)).not.toBeInTheDocument();
   });
 });

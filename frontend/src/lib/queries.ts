@@ -1,5 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from './api';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { api, setTokenChangeHandler } from './api';
 import type {
   Me, PrepCard, Progress, RecoveryCodeResponse, TherapistLink, Trajectory,
   WeeklyRecordRequest, WeeklyRecordResponse,
@@ -64,6 +64,12 @@ export function useSaveExtra() {
  * (POST뿐이다) — 그래서 이 쿼리는 스스로 fetch하지 않고, 아래 뮤테이션의 onSuccess가
  * 캐시를 채우는 유일한 통로다. setQueryData로 쓰면 이미 마운트된 다른 패널의 구독에도
  * 그대로 퍼진다 — 그래서 세 화면이 늘 같은 링크를 보여준다.
+ *
+ * data는 cached.data만 본다 — mutation.data로 대체 응답하지 않는다. 뮤테이션 자신의
+ * data는 clearTherapistLinkOnTokenChange가 쿼리 캐시를 지워도 따라 지워지지 않는(뮤테이션과
+ * 쿼리는 서로 다른 캐시다) 두 번째 출처라, 남겨두면 토큰이 바뀐 뒤에도 같은 컴포넌트
+ * 인스턴스가 살아있는 한 옛 링크를 계속 돌려줄 길이 남는다. cached.data는 onSuccess가
+ * 같은 렌더 배치 안에서 채워주므로 이 대체는 애초에 필요하지도 않았다.
  */
 export function useIssueLink() {
   const qc = useQueryClient();
@@ -79,7 +85,20 @@ export function useIssueLink() {
       qc.setQueryData(QK.therapistLink, data);
     },
   });
-  return { ...mutation, data: cached.data ?? mutation.data ?? null };
+  return { ...mutation, data: cached.data ?? null };
+}
+
+/**
+ * 토큰이 바뀌면(온보딩·이어받기·데모·401 처리 — setToken/clearToken을 부르는 모든 곳)
+ * 발급된 치료사 링크 캐시를 지운다. 안 지우면 이전 케이스의 링크가 새 보호자에게 그대로
+ * 보이고, 캐시에 값이 남아 있다는 이유만으로 TherapistLinkPanel이 발급 버튼 자체를
+ * 숨겨버려 새 보호자가 자기 링크를 낼 방법이 없어진다. main.tsx가 QueryClient를 만든
+ * 직후 한 번 불러 등록한다 — setToken/clearToken 호출부 중 어디에도 따로 기억해 둘 게 없다.
+ */
+export function clearTherapistLinkOnTokenChange(qc: QueryClient): void {
+  setTokenChangeHandler(() => {
+    qc.removeQueries({ queryKey: QK.therapistLink });
+  });
 }
 
 export function useUpdateVisitDate() {
