@@ -10,6 +10,7 @@ export const QK = {
   progress: ['me', 'progress'] as const,
   trajectory: ['me', 'trajectory'] as const,
   prepCard: ['me', 'prep-card'] as const,
+  therapistLink: ['me', 'therapist-link'] as const,
 };
 
 /**
@@ -53,8 +54,33 @@ export function useSaveExtra() {
   });
 }
 
-export const useIssueLink = () =>
-  useMutation({ mutationFn: () => api.post<TherapistLink>('/me/therapist-link') });
+/**
+ * 발급된 링크를 컴포넌트 로컬 뮤테이션 상태가 아니라 공유 쿼리 캐시(QK.therapistLink)에
+ * 둔다. TherapistLinkPanel은 홈·준비 카드·설정 세 화면에 각각 따로 마운트되는데, 링크를
+ * 뮤테이션 로컬 상태로 두면 인스턴스마다 "발급 전" 화면부터 다시 시작한다 — 재발급은
+ * 이전 토큰을 그 자리에서 죽이므로(TherapistControllerTest.reissueRevokesPreviousLink),
+ * 다른 화면에서 이미 보호자가 치료사에게 전달한 주소가 있는 줄 모르고 또 하나를 만들면
+ * 방금 전달한 주소가 죽는다. GET으로 "지금 발급된 링크"를 조회하는 엔드포인트는 없다
+ * (POST뿐이다) — 그래서 이 쿼리는 스스로 fetch하지 않고, 아래 뮤테이션의 onSuccess가
+ * 캐시를 채우는 유일한 통로다. setQueryData로 쓰면 이미 마운트된 다른 패널의 구독에도
+ * 그대로 퍼진다 — 그래서 세 화면이 늘 같은 링크를 보여준다.
+ */
+export function useIssueLink() {
+  const qc = useQueryClient();
+  const cached = useQuery<TherapistLink | null>({
+    queryKey: QK.therapistLink,
+    queryFn: () => null,
+    enabled: false,
+    gcTime: Infinity,
+  });
+  const mutation = useMutation({
+    mutationFn: () => api.post<TherapistLink>('/me/therapist-link'),
+    onSuccess: (data) => {
+      qc.setQueryData(QK.therapistLink, data);
+    },
+  });
+  return { ...mutation, data: cached.data ?? mutation.data ?? null };
+}
 
 export function useUpdateVisitDate() {
   const qc = useQueryClient();

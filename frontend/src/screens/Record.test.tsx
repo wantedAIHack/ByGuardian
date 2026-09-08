@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { act } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -135,6 +136,34 @@ describe('주간 기록', () => {
     expect(sent.freeNote).toBeNull();
   });
 
+  it('자유 기록과 시간대를 원문 그대로 서버에 보낸다', async () => {
+    // README §5: "원문을 반드시 그대로 보존하세요." freeNote/timeTag에 대한 지금까지의
+    // assertion은 전부 toBeNull()뿐이었다 — 여기서 입력한 글자가 실제로 요청 본문에
+    // 실려 가는지는 아무 테스트도 보지 않았다. 20자보다 길게 적어, trim().slice(0, 20)
+    // 같은 자르기 변이가 섞여도 이 assertion이 걸리게 한다.
+    const user = userEvent.setup();
+    let sent: any = null;
+    server.use(http.put(`${BASE}/me/weeks/6`, async ({ request }) => {
+      sent = await request.json();
+      return HttpResponse.json({ week: 6, kind: 'WEEKLY', questionsRefreshed: true });
+    }));
+
+    renderRecord(me({ week: 6 }));
+    await user.click(await screen.findByRole('button', { name: '없어요' }));
+    await user.click(screen.getByRole('button', { name: '잘 주무심' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    const note = '오늘 오후에는 유난히 오른쪽 어깨를 자주 만지시고 표정이 좋지 않으셨습니다';
+    expect(note.length).toBeGreaterThan(20);
+    await user.type(screen.getByLabelText('말씀하시듯 편하게 적어주세요'), note);
+    await user.click(screen.getByRole('button', { name: '오후' }));
+    await user.click(screen.getByRole('button', { name: '저장하기' }));
+
+    await screen.findByText('기록을 남겼습니다.');
+    expect(sent.freeNote.text).toBe(note);
+    expect(sent.freeNote.timeTag).toBe('AFTERNOON');
+  });
+
   it('주차가 넘어가면 말없이 재시도하지 않고 물어본다', async () => {
     const user = userEvent.setup();
     server.use(http.put(`${BASE}/me/weeks/6`, () =>
@@ -165,6 +194,133 @@ describe('주간 기록', () => {
 
     expect(await screen.findByText('sleep은 0..2입니다')).toBeInTheDocument();
   });
+
+  // ------------------------------------------------------------------
+  // 판정 문구 화이트리스트 — 도달 가능한 단계 종류마다 하나(Home.test.tsx·Settings.test.tsx와
+  // 같은 정책). 이 화면은 764줄(Record+Onboarding) 중 하나로 화이트리스트가 전혀 없었다.
+  // 금지어 나열이 아니라 렌더된 전체를 화이트리스트로 건다 — 목록에 없는 말이 한 글자라도
+  // 끼어들면 아래 assertion들이 걸린다. Screen에는 landmark 롤이 없어(<main>이 아니다)
+  // container.textContent로 전체를 본다.
+  // ------------------------------------------------------------------
+
+  it('판정 문구를 만들지 않는다 — ask 단계', async () => {
+    const { container } = renderRecord(me());
+    await screen.findByText('지난주와 달라진 게 있나요?');
+    expect(container.textContent).toBe(
+      ['지난주와 달라진 게 있나요?', '네, 달라진 게 있어요', '없어요'].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — recheck-intro 단계', async () => {
+    const { container } = renderRecord(me({ fullRecheck: true, week: 8 }));
+    await screen.findByText('이번 주는 8가지를 모두 여쭤봅니다');
+    expect(container.textContent).toBe(
+      [
+        '이번 주는 8가지를 모두 여쭤봅니다',
+        '네 주에 한 번, 놓친 것이 없는지 처음부터 확인합니다. 지난번 답도 함께 보여드립니다.',
+        '시작',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — pick 단계', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRecord(me());
+    await user.click(await screen.findByRole('button', { name: '네, 달라진 게 있어요' }));
+    await screen.findByText('어떤 것이 달라졌나요?');
+    expect(container.textContent).toBe(
+      [
+        '← 뒤로',
+        '어떤 것이 달라졌나요?',
+        '여러 개를 고르셔도 됩니다.',
+        ...catalogFixture.items.map((i) => i.label),
+        '다음',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — item 단계', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRecord(me());
+    await user.click(await screen.findByRole('button', { name: '네, 달라진 게 있어요' }));
+    await user.click(await screen.findByRole('button', { name: '화장실 이용' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('요즘 어떠신가요?');
+
+    // toilet(화장실 이용)은 LEVEL·CONSISTENCY 두 축이다(catalogFixture). LEVEL은 축
+    // 이름 h3을 안 낸다(단일 축일 때 반복해 말하지 않는다는 Record.tsx의 규칙).
+    expect(container.textContent).toBe(
+      [
+        '← 뒤로',
+        '화장실 이용',
+        '요즘 어떠신가요?',
+        ...catalogFixture.axes.LEVEL!.map((v) => v.label),
+        '한 주 일관성',
+        ...catalogFixture.axes.CONSISTENCY!.map((v) => v.label),
+        '한 줄 적어두실 것이 있나요? (안 적으셔도 됩니다)',
+        '다음',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — signal 단계', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRecord(me({ signalsEnabled: true }));
+    await user.click(await screen.findByRole('button', { name: '없어요' }));
+    await screen.findByText('이번 주에 불편해 보이신 적이 있나요?');
+
+    expect(container.textContent).toBe(
+      [
+        '← 뒤로',
+        '이번 주에 불편해 보이신 적이 있나요?',
+        '말씀으로 표현이 어려우실 때, 표정이나 몸짓에서 보이는 것들입니다.',
+        '없었어요',
+        ...catalogFixture.signalActions.flatMap((a) => [
+          a.label,
+          ...catalogFixture.signalKinds.map((k) => k.label),
+        ]),
+        '다음',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — sleep 단계', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRecord(me());
+    await user.click(await screen.findByRole('button', { name: '없어요' }));
+    await screen.findByText('밤에 어떻게 주무셨나요?');
+
+    expect(container.textContent).toBe(
+      [
+        '← 뒤로',
+        '밤에 어떻게 주무셨나요?',
+        '이번 주 대체로 어떠셨는지로 골라주세요.',
+        ...catalogFixture.sleepLevels.map((l) => l.label),
+        '다음',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — note 단계', async () => {
+    const user = userEvent.setup();
+    const { container } = renderRecord(me());
+    await user.click(await screen.findByRole('button', { name: '없어요' }));
+    await user.click(await screen.findByRole('button', { name: '잘 주무심' }));
+    await user.click(screen.getByRole('button', { name: '다음' }));
+    await screen.findByText('그 밖에 남기고 싶으신 것');
+
+    expect(container.textContent).toBe(
+      [
+        '← 뒤로',
+        '그 밖에 남기고 싶으신 것',
+        '말씀하시듯 편하게 적어주세요',
+        '키보드의 마이크를 누르면 말로 적을 수 있어요.',
+        '주로 언제였나요? (안 고르셔도 됩니다)',
+        ...catalogFixture.timeTags.map((t) => t.label),
+        '저장하기',
+      ].join(''),
+    );
+  });
 });
 
 describe('중복 제출 방지', () => {
@@ -185,8 +341,20 @@ describe('중복 제출 방지', () => {
     // userEvent.click은 클릭마다 act()로 감싸 마이크로태스크를 흘려보낸다 — 두 번을 await로
     // 이어 부르면 "빠른 두 번"이 아니라 사실상의 순차 클릭이 된다. 같은 틱 안의 두 번을
     // 재현하려면 fireEvent로 사이에 아무것도 기다리지 않고 연달아 누른다.
-    fireEvent.click(saveBtn);
-    fireEvent.click(saveBtn);
+    //
+    // 두 fireEvent를 하나의 바깥 act()로 묶는다. fireEvent 자신도 내부에서 act()를 걸지만,
+    // React는 중첩된 act 스코프의 커밋을 가장 바깥 act가 끝날 때까지 미룬다 — 그래서 첫
+    // 클릭의 setError(null)이 부르는 렌더(disabled를 true로 반영)가 두 번째 fireEvent보다
+    // 먼저 끼어들지 못한다. 이게 바로 sending ref 주석이 말하는 "그 사이에 렌더가 없는"
+    // 경우의 재현이다 — 이 바깥 act() 없이 두 fireEvent를 그냥 연달아 부르면, 각각이 제
+    // act 스코프를 갖고 끝나면서 첫 클릭이 disabled를 이미 올려버려 두 번째 fireEvent는
+    // DOM 차원(비활성 버튼)에서 걸러진다. 그러면 sending.current 검사는 한 번도 실행되지
+    // 않고, 이 잠금을 지워도 이 테스트는 여전히 통과한다 — 이 테스트가 실제로 막고 싶은
+    // 상황(같은 렌더 사이클 안의 두 번째 이벤트)을 하나도 확인하지 못한 채로.
+    act(() => {
+      fireEvent.click(saveBtn);
+      fireEvent.click(saveBtn);
+    });
 
     await screen.findByText('기록을 남겼습니다.');
     expect(calls).toBe(1);

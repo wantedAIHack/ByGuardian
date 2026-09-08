@@ -143,6 +143,33 @@ describe('홈', () => {
     expect(screen.getByText('이 변화가 4주째 유지되고 있습니다.')).toBeInTheDocument();
   });
 
+  it('변화 없이 전환만 있어도 침묵이 아니다 — 서버 문장을 그대로 보여준다', async () => {
+    // ProgressService는 changes와 transitions를 항목·축마다 배타적으로 채운다. SUSTAINED가
+    // FLUCTUATING으로 바뀌는 주는 changes가 비고 transitions만 채워진다(ProgressControllerTest.
+    // transitionAppearsTheWeekSustainedTurnsFluctuatingThenDisappears, week 5) — 이 payload가
+    // 그 주다. changes만 보고 SILENT로 묶으면 이 문장이 화면에서 통째로 사라진다.
+    setToken('t');
+    serve({
+      me: me({ recordedThisWeek: true }),
+      progress: {
+        week: 5, silent: false, changes: [], questions: [],
+        transitions: [{
+          item: 'toilet', label: '화장실 이용', axis: 'LEVEL',
+          message: '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
+        }],
+      },
+    });
+    renderHome();
+
+    expect(await screen.findByText(
+      '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
+    )).toBeInTheDocument();
+    // changes가 비었으니 '지켜보고 있는 변화' 틀(제목+목록)은 만들지 않는다 — 없는 목록을
+    // 소개하지 않는다. 침묵 화면의 문구도 나오면 안 된다 — 이 주는 침묵이 아니다.
+    expect(screen.queryByText('지켜보고 있는 변화')).not.toBeInTheDocument();
+    expect(screen.queryByText('이번 기간에는 바뀐 항목이 없습니다.')).not.toBeInTheDocument();
+  });
+
   it('외래가 가까우면 준비 카드가 맨 위로 온다', async () => {
     setToken('t');
     serve({
@@ -212,5 +239,123 @@ describe('홈', () => {
     expect(screen.getByRole('link', { name: '전체 기록 보기' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '설정' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
+  });
+
+  // ------------------------------------------------------------------
+  // 판정 문구 화이트리스트 — 도달 가능한 상태마다 하나(Settings.test.tsx·Therapist.test.tsx와
+  // 같은 정책). 금지어 나열이 아니라 렌더된 전체를 화이트리스트로 건다 — 목록에 없는 말이
+  // 한 글자라도 끼어들면 아래 assertion들이 걸린다.
+  // ------------------------------------------------------------------
+
+  it('판정 문구를 만들지 않는다 — 기록 전 상태', async () => {
+    setToken('t');
+    serve({ me: me({ recordedThisWeek: false, week: 6 }) });
+    renderHome();
+
+    const main = await screen.findByTestId('home-main');
+    expect(main.textContent).toBe(
+      ['이번 주 관찰을 남겨주세요', '6주차 · 3분이면 됩니다', '3분 기록하기'].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — 변화가 있는 상태', async () => {
+    setToken('t');
+    serve({
+      me: me({ recordedThisWeek: true }),
+      progress: {
+        week: 6, silent: false, questions: [],
+        // changes와 transitions를 함께 채운다 — finding 1 이후로 한 주에 둘 다 있을 수
+        // 있다(ProgressService가 항목·축마다 배타적으로 채우지, 주 단위로 배타적이지 않다).
+        transitions: [{
+          item: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL',
+          message: '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
+        }],
+        changes: [{
+          item: 'toilet', label: '화장실 이용', axis: 'LEVEL', axisLabel: '도움 수준',
+          status: 'SUSTAINED', duration: 4, from: '지켜보면 됨', to: '혼자 하심',
+          message: '이 변화가 4주째 유지되고 있습니다.',
+        }],
+      },
+    });
+    renderHome();
+
+    const main = await screen.findByTestId('home-main');
+    await screen.findByText('지켜보고 있는 변화');
+    expect(main.textContent).toBe(
+      [
+        '이번 주 기록을 남기셨어요 ✓',
+        '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
+        '지켜보고 있는 변화',
+        '화장실 이용',
+        '지켜보면 됨 → 혼자 하심',
+        '이 변화가 4주째 유지되고 있습니다.',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — 외래가 가까운 상태(준비 카드 배너)', async () => {
+    setToken('t');
+    serve({
+      me: me({ recordedThisWeek: true, nextVisitDate: '2026-09-08', today: '2026-09-06' }),
+      progress: silent,
+      prepCard: {
+        week: 6, nextVisitDate: '2026-09-08', extraQuestions: [], emptyMessage: null,
+        therapistGlance: [],
+        questions: [
+          { rank: 1, type: 'PLATEAU', sentence: '왜 안 늘고 있을까요?', source: 'engine',
+            evidence: { items: [], signal: null } },
+          { rank: 2, type: 'PLATEAU', sentence: '더 여쭤볼 것', source: 'engine',
+            evidence: { items: [], signal: null } },
+        ],
+      },
+    });
+    renderHome();
+
+    const main = await screen.findByRole('main');
+    await screen.findByText('9월 8일 진료가 있습니다 (모레)');
+    await screen.findByText('여쭤볼 것 2가지를 준비했습니다.');
+    // 배너가 맨 위로 오는 동안에도(상태 E) 하단은 그대로 붙어 있다 — visitSoon이 참이라
+    // '다음 진료' 줄만 하단에서 빠진다(배너가 이미 그 날짜를 말했다).
+    expect(main.textContent).toBe(
+      [
+        '9월 8일 진료가 있습니다 (모레)',
+        '여쭤볼 것 2가지를 준비했습니다.',
+        '진료 준비 카드 보기',
+        '이번 주 기록을 남기셨어요 ✓',
+        '이번 기간에는 바뀐 항목이 없습니다.',
+        '지금까지 6주 중 5주 기록',
+        '전체 기록 보기',
+        '치료사에게 보여드리기',
+        '설정',
+      ].join(''),
+    );
+  });
+
+  it('판정 문구를 만들지 않는다 — 조용한 하단', async () => {
+    setToken('t');
+    // 외래가 사흘 밖이라 배너는 없다 — 그래서 하단에 '다음 진료' 줄이 대신 나온다.
+    // 이 조합(배너 없이 다음 진료 날짜 + 밀도)은 위 세 화이트리스트 어디에도 없다.
+    serve({
+      me: me({
+        recordedThisWeek: true, nextVisitDate: '2026-10-01', today: '2026-09-06',
+        recordedWeeks: 5, totalWeeks: 6,
+      }),
+      progress: silent,
+    });
+    renderHome();
+
+    const main = await screen.findByRole('main');
+    await screen.findByText('다음 진료 · 10월 1일');
+    expect(main.textContent).toBe(
+      [
+        '이번 주 기록을 남기셨어요 ✓',
+        '이번 기간에는 바뀐 항목이 없습니다.',
+        '다음 진료 · 10월 1일',
+        '지금까지 6주 중 5주 기록',
+        '전체 기록 보기',
+        '치료사에게 보여드리기',
+        '설정',
+      ].join(''),
+    );
   });
 });

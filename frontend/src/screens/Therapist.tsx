@@ -1,11 +1,11 @@
 import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { ApiError, api } from '../lib/api';
 import type { TherapistSummary } from '../lib/types';
 
 export function Therapist() {
   const { token } = useParams();
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, error } = useQuery({
     queryKey: ['therapist', token],
     queryFn: () => api.get<TherapistSummary>(`/t/${token}`),
     retry: false,
@@ -13,9 +13,20 @@ export function Therapist() {
 
   if (isPending) return <main className="p-8"><p>불러오는 중입니다…</p></main>;
   if (isError || !data) {
+    // 404(링크가 실제로 폐기됨)와 그 밖의 실패(네트워크 끊김 등 일시적 통신 장애)는 다른
+    // 이야기다. 전자만 "새 주소를 받아주세요"가 맞다 — 후자에 같은 말을 하면, 한 번의
+    // 통신 장애를 치료사에게 "링크가 죽었다"고 알리는 셈이고, 치료사의 합리적인 다음
+    // 행동(새 링크 요청)이 finding 3을 거쳐 실제로 살아있던 링크를 죽인다. 후자는 접속
+    // 자체가 안 됐다는 사실만 말한다(lib/catalog.tsx의 CatalogProvider 오류 문구와 같은
+    // 어조) — 링크의 생사에 대해서는 아무 말도 하지 않는다.
+    const isDead = error instanceof ApiError && error.status === 404;
     return (
       <main className="p-8">
-        <p>이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.</p>
+        {isDead ? (
+          <p>이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.</p>
+        ) : (
+          <p>연결이 되지 않습니다. 잠시 후 다시 열어주세요.</p>
+        )}
       </main>
     );
   }

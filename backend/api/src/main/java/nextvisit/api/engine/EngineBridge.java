@@ -78,8 +78,12 @@ public class EngineBridge {
         return Pipeline.run(toCaseInput(kase, snapshots));
     }
 
-    /** 역변환. 데모 시드처럼 엔진 쪽에서 만든 주차 기록을 저장 본문으로 바꾼다. */
-    public SnapshotBody toBody(WeekRecord w, String freeNoteText) {
+    /**
+     * 역변환. 데모 시드처럼 엔진 쪽에서 만든 주차 기록을 저장 본문으로 바꾼다.
+     * sleep은 WeekRecord에 없다(엔진 판정에 관여하지 않는 순수 표시용 관찰이라 CaseInput/
+     * WeekRecord가 나르지 않는다) — 호출부가 SnapshotBody 3번째 필드로 직접 채워 넣는다.
+     */
+    public SnapshotBody toBody(WeekRecord w, Integer sleep, String freeNoteText) {
         Map<String, SnapshotBody.ItemValues> items = new LinkedHashMap<>();
         for (Item item : ObservationSet.STROKE.items()) {
             Map<Axis, Observation> byAxis = w.values().get(item.code());
@@ -101,7 +105,7 @@ public class EngineBridge {
         }
         SnapshotBody.FreeNote note = freeNoteText == null ? null
             : new SnapshotBody.FreeNote(freeNoteText, w.noteTag() == null ? null : w.noteTag().name());
-        return new SnapshotBody(items, pain, null, note);
+        return new SnapshotBody(items, pain, sleep, note);
     }
 
     private static SnapshotBody.Val val(Observation o) {

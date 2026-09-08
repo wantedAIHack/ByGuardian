@@ -116,4 +116,40 @@ describe('TherapistLinkPanel', () => {
     expect(screen.getByRole('button', { name: '주소 복사하기' })).toBeInTheDocument();
     expect(calls).toBe(2);
   });
+
+  // 홈·준비 카드·설정 세 화면이 각자 TherapistLinkPanel을 마운트한다(같은 QueryClient
+  // 아래에서). 링크가 컴포넌트 로컬 뮤테이션 상태였을 때는 화면마다 "발급 전"부터 다시
+  // 시작해, 한 화면에서 이미 치료사에게 전달한 주소를 모른 채 다른 화면에서 또 발급하면
+  // 방금 전달한 주소가 그 자리에서 죽었다(재발급은 이전 토큰을 죽인다 —
+  // TherapistControllerTest.reissueRevokesPreviousLink). 아래는 그 시나리오를 두 패널을
+  // 동시에 마운트해 재현한다: 한쪽에서 발급하면 다른 쪽도 같은 주소를 반영해야 하고,
+  // 이미 링크를 아는 쪽이 그걸 모른 채 다시 발급 요청을 보내서는 안 된다.
+  it('같은 QueryClient 아래 두 패널이 같은 링크를 보여주고, 발급 요청은 한 번만 나간다', async () => {
+    const user = userEvent.setup();
+    let calls = 0;
+    server.use(http.post(`${BASE}/me/therapist-link`, () => {
+      calls += 1;
+      return HttpResponse.json({ url: '/t/shared', token: 'shared-token' });
+    }));
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <div data-testid="panel-a"><TherapistLinkPanel /></div>
+        <div data-testid="panel-b"><TherapistLinkPanel /></div>
+      </QueryClientProvider>,
+    );
+
+    const buttons = screen.getAllByRole('button', { name: '치료사에게 보여드리기' });
+    expect(buttons).toHaveLength(2);
+    await user.click(buttons[0]!);
+
+    // 발급을 요청한 패널과, 요청하지 않은 다른 패널 둘 다 같은 주소를 보여줘야 한다.
+    const addresses = await screen.findAllByText(`${window.location.origin}/t/shared-token`);
+    expect(addresses).toHaveLength(2);
+    // 이미 링크를 아는 두 번째 패널에는 발급 전 화면('치료사에게 보여드리기' 버튼)이
+    // 다시 나타나지 않는다.
+    expect(screen.queryByRole('button', { name: '치료사에게 보여드리기' })).not.toBeInTheDocument();
+    expect(calls).toBe(1);
+  });
 });

@@ -205,6 +205,26 @@ describe('치료사용 요약', () => {
     expect(await screen.findByText(/이 주소는 더 이상 열리지 않습니다/)).toBeInTheDocument();
   });
 
+  it('통신 장애는 링크가 죽었다고 말하지 않는다', async () => {
+    // 네트워크 자체가 끊긴 경우(HttpResponse.error()는 fetch를 거부시켜 ApiError가 아닌
+    // 순수 통신 오류를 던진다) 404와 같은 문구를 보여주면, 한 번의 접속 실패를 치료사에게
+    // "이 링크는 폐기됐다"고 알리는 셈이다. 치료사의 다음 행동(보호자에게 새 링크 요청)이
+    // finding 3을 거쳐 실제로는 살아있던 링크를 죽인다 — 그래서 이 문구가 404 전용이어야
+    // 한다.
+    server.use(http.get(`${BASE}/t/abc`, () => HttpResponse.error()));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/t/abc']}>
+          <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('연결이 되지 않습니다. 잠시 후 다시 열어주세요.')).toBeInTheDocument();
+    expect(screen.queryByText(/이 주소는 더 이상 열리지 않습니다/)).not.toBeInTheDocument();
+  });
+
   // ------------------------------------------------------------------
   // 판정 문구 화이트리스트 — 도달 가능한 상태마다 하나(docs/superpowers/plans/
   // 2026-09-06-frontend.md의 "화면당이 아니라 상태당" 정책). 서버는 판정 필드를
@@ -235,6 +255,23 @@ describe('치료사용 요약', () => {
     expect(main.textContent).toBe(
       '이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.',
     );
+  });
+
+  it('판정 문구를 만들지 않는다 — 통신 장애 상태', async () => {
+    server.use(http.get(`${BASE}/t/abc`, () => HttpResponse.error()));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/t/abc']}>
+          <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const main = await screen.findByRole('main');
+    await screen.findByText('연결이 되지 않습니다. 잠시 후 다시 열어주세요.');
+    // 404 상태와 다른 문구여야 한다 — 이 화이트리스트가 걸리면 둘이 같은 문구를 쓰기
+    // 시작했다는 뜻이다.
+    expect(main.textContent).toBe('연결이 되지 않습니다. 잠시 후 다시 열어주세요.');
   });
 
   it('판정 문구를 만들지 않는다 — 채워진 상태', async () => {

@@ -114,20 +114,26 @@ export function Home({ catalog }: { catalog: Catalog }) {
                 ))}
               </div>
             ) : null}
-            <h2 className="pt-8 text-title font-semibold">지켜보고 있는 변화</h2>
-            <ul className="flex flex-col gap-8 pt-6">
-              {progress.changes.map((c) => (
-                <li key={`${c.item}-${c.axis}`}>
-                  <p className="font-semibold">
-                    {c.label}
-                    {c.axis === 'LEVEL' ? null : <span className="font-normal"> · {c.axisLabel}</span>}
-                  </p>
-                  <p className="pt-1">{c.from} → {c.to}</p>
-                  {/* 서버가 만든 문장이다. 자르지도 덧붙이지도 않는다. */}
-                  <p className="pt-1 text-ink-soft">{c.message}</p>
-                </li>
-              ))}
-            </ul>
+            {/* changes가 비어 있을 수 있다 — 전환만 있고 지켜보는 변화는 없는 주다.
+                그런 주에 이 틀만 비워 보여주면 없는 목록을 소개하는 셈이라, 틀째로 뺀다. */}
+            {progress.changes.length > 0 ? (
+              <>
+                <h2 className="pt-8 text-title font-semibold">지켜보고 있는 변화</h2>
+                <ul className="flex flex-col gap-8 pt-6">
+                  {progress.changes.map((c) => (
+                    <li key={`${c.item}-${c.axis}`}>
+                      <p className="font-semibold">
+                        {c.label}
+                        {c.axis === 'LEVEL' ? null : <span className="font-normal"> · {c.axisLabel}</span>}
+                      </p>
+                      <p className="pt-1">{c.from} → {c.to}</p>
+                      {/* 서버가 만든 문장이다. 자르지도 덧붙이지도 않는다. */}
+                      <p className="pt-1 text-ink-soft">{c.message}</p>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </>
         ) : null}
       </section>

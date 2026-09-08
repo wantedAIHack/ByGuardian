@@ -9,7 +9,12 @@ export function homeState(hasToken: boolean, me: Me | null, progress: Progress |
   if (!me) return 'LOADING';
   if (!me.recordedThisWeek) return 'NOT_RECORDED';
   // 경과를 못 받았으면 침묵으로 둔다. 없는 변화를 지어내는 것보다 안전하다.
-  if (!progress || progress.changes.length === 0) return 'SILENT';
+  // changes와 transitions는 ProgressService가 항목·축마다 배타적으로 채운다 —
+  // SUSTAINED가 FLUCTUATING으로 넘어가는 주는 changes가 아니라 transitions로만 간다.
+  // 그래서 changes만 보고 침묵을 판단하면, 서버가 준 전환 문장이 있는 평범한 한 주를
+  // "바뀐 것 없음"으로 잘못 말하게 된다 — v1이 reverted를 통째로 침묵 처리했던 것과
+  // 같은 정보 손실이다(README §4). 침묵은 둘 다 비었을 때뿐이다.
+  if (!progress || (progress.changes.length === 0 && progress.transitions.length === 0)) return 'SILENT';
   return 'CHANGES';
 }
 

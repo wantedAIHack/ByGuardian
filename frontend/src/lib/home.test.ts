@@ -40,9 +40,25 @@ describe('homeState', () => {
     expect(homeState(true, me({ recordedThisWeek: true }), null)).toBe('SILENT');
   });
 
-  it('변화 목록이 비었으면 silent 플래그와 무관하게 침묵이다', () => {
+  it('changes와 transitions가 둘 다 비었으면 silent 플래그와 무관하게 침묵이다', () => {
     expect(homeState(true, me({ recordedThisWeek: true }),
-      { ...changed, silent: false, changes: [] })).toBe('SILENT');
+      { ...changed, silent: false, changes: [], transitions: [] })).toBe('SILENT');
+  });
+
+  it('changes가 비어도 transitions가 있으면 침묵이 아니다', () => {
+    // ProgressService는 changes와 transitions를 항목·축마다 배타적으로 채운다 — SUSTAINED가
+    // FLUCTUATING으로 넘어가는 주는 changes가 아니라 transitions로만 간다(ProgressControllerTest.
+    // transitionAppearsTheWeekSustainedTurnsFluctuatingThenDisappears, week 5). changes만
+    // 보고 SILENT로 묶으면 서버가 준 문장을 프론트가 지우는 것이다 — README §4가 지적한,
+    // v1이 reverted를 침묵 처리했던 것과 같은 정보 손실이다.
+    const transitionsOnly: Progress = {
+      week: 5, silent: false, questions: [], changes: [],
+      transitions: [{
+        item: 'toilet', label: '화장실 이용', axis: 'LEVEL',
+        message: '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
+      }],
+    };
+    expect(homeState(true, me({ recordedThisWeek: true }), transitionsOnly)).toBe('CHANGES');
   });
 });
 
