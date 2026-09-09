@@ -55,6 +55,12 @@ else
   esac
 fi
 available_kib="$(df -Pk "$data_path" | awk 'NR == 2 {print $4}')"
+case "$available_kib" in
+  ''|*[!0-9]*)
+    printf '%s\n' "unable to determine available disk space" >&2
+    exit 1
+    ;;
+esac
 minimum_kib=20971520
 if [ "$available_kib" -lt "$minimum_kib" ]; then
   printf '%s\n' "at least 20 GiB of free disk is required" >&2

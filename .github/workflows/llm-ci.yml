@@ -54,6 +54,7 @@ jobs:
       - name: Run shell unit tests
         run: |
           bash infra/llm/tests/ensure-model-test.sh
+          bash infra/llm/tests/verify-host-test.sh
           sh infra/llm/tests/workflows-test.sh
           sh infra/llm/tests/workflows-runner-group-test.sh
       - name: Build pinned Ollama image
