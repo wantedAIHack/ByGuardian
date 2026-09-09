@@ -5,9 +5,14 @@ required. The default model is `qwen3:4b-q8_0`
 with a 2,048-token context. The named volume `nextvisit-llm-ollama-data`
 survives container replacement.
 
+The repository owner's post-merge setup, hardware acceptance, activation, and
+rollback checklist is [`OWNER_CHECKLIST.md`](./OWNER_CHECKLIST.md). Complete it
+in order; this runbook remains the command reference.
+
 ## macOS CPU development
 
 ```bash
+cd infra/llm
 cp .env.example .env
 docker compose -f compose.yml up --detach --wait --build ollama
 docker compose -f compose.yml run --rm model-init
@@ -61,8 +66,11 @@ Never use `docker compose down --volumes` for routine deployment.
 
    The file has one line named `TUNNEL_TOKEN` whose value is issued by
    Cloudflare. Do not store Access credentials in this file.
-6. Protect `main` in the repository settings by requiring pull-request review
-   and the `LLM CI` checks before merge.
+6. Protect `main` in the repository settings by requiring pull-request review.
+   Confirm `LLM CI` succeeds before merging changes covered by its path filters.
+   Do not make this path-filtered workflow an unconditional required check:
+   GitHub leaves skipped required workflows pending. Refactor it to always run
+   before making its checks globally required.
 7. Before any runner registration, transfer or mirror the private repository to
    a GitHub organization that supports organization runner groups and restricted
    workflows. In that organization, configure the canonical group
@@ -81,9 +89,10 @@ Never use `docker compose down --volumes` for routine deployment.
 8. After the organization restriction is in place, create the GitHub
    environment `llm-laptop`. Keep required reviewers on it if the account plan
    supports them.
-9. Leave `LLM_DEPLOY_ENABLED` absent or `false` until every preceding check,
-   including the organization runner-group restriction, passes. Set it to
-   `true` only when automatic `main` deployments should begin.
+9. Leave `LLM_DEPLOY_ENABLED` absent or `false` until sections 1–6 of
+   `OWNER_CHECKLIST.md` pass, including the organization runner-group boundary,
+   Ubuntu hardware acceptance, and reboot recovery. Set it to `true` only when
+   automatic `main` deployments should begin.
 
 ## Manual production-equivalent start
 
@@ -93,7 +102,7 @@ export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml up --detach --wait --build ollama
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init
 ./scripts/smoke-openai.sh http://127.0.0.1:11434/v1
-docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach ollama cloudflared
+docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach --wait ollama cloudflared
 ollama_id="$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps -q ollama)"
 test -n "$ollama_id"
 test "$(docker inspect -f '{{len .HostConfig.PortBindings}}' "$ollama_id")" = 0
