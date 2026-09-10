@@ -1,6 +1,6 @@
 # 전체 서비스 통합·운영 배포 설계
 
-작성일 2026-09-10. 상태는 **서면 승인 대기**다. 사용자가 승인한 큰 방향인
+작성일 2026-09-10. 상태는 **2026-09-10 서면 승인 완료, 구현 계획 확정**이다. 사용자가 승인한 큰 방향인
 “Cloudflare Pages의 React PWA → AWS EC2의 Spring API/PostgreSQL → Cloudflare
 Access/Tunnel 뒤 Ubuntu 노트북 Ollama”를 구현 가능한 운영 경계로 고정한다.
 
@@ -92,6 +92,10 @@ gate로 적되, 실제 코드 변경과 동시에 해당 모듈 설계에도 sec
 - 11434는 닫혀 있고 Docker service와 저장소도 아직 없다.
 - 현재 SSH 사용자는 관리자 그룹에 있지만 passwordless sudo는 아니다.
 - timezone은 UTC이고 시간 동기화는 정상이다.
+
+같은 날 이후 사용자가 출근하며 노트북 전원을 껐다고 알렸다. 위 항목은 마지막 읽기 전용
+실측 inventory이고, 현재 reachability를 뜻하지 않는다. 사용자가 다시 켰다고 명시하기
+전에는 SSH, wake-on-LAN, reachability, GPU/Tunnel live 검증을 시도하지 않는다.
 
 기존 GPU driver는 다시 설치하지 않는다. 먼저 container toolkit과 Docker runtime을
 구성하고 실제 GPU container가 실패할 때만 driver 변경을 별도 진단한다.
@@ -251,9 +255,12 @@ Ollama는 사용자 데이터 저장소에 접근하지 않는다. `/health`는 
   scrubbed `/t` 새로고침은 복구되는지, back/forward와 shared fragment의 새 tab은 올바르게
   격리되는지, service worker가 API 응답을 cache하지 않는지를 확인한다.
 - Caddy는 외부가 보낸 forwarding header를 신뢰하지 않고 확인한 client address로 다시
-  만들며, API Docker network에는 Caddy만 진입할 수 있다. production rate limiter는
+  만들며, API Docker network에는 Caddy만 진입할 수 있다. stock Caddy에 별도 plugin을
+  추가하지 않고 Spring의 production 전용 rate-limit filter가 Caddy에서 재생성한 client
+  address만 신뢰해
   `/demo`를 IP당 시간당 5회, `/cases`와 `/guardians/recover` 합계를 IP당 시간당 20회로
-  제한하고 고정 429 응답만 낸다. 공개 `POST /demo`는 이 gate와
+  제한하고 고정 429 응답만 낸다. Caddy는 request body를 1 MiB로 제한한다. 공개
+  `POST /demo`는 이 gate와
   `NEXTVISIT_DEMO_ENABLED`의 명시적 production 값이 모두 있을 때만 켠다.
 
 ## 6. AWS EC2와 데이터 경계
@@ -298,7 +305,8 @@ metadata token 요청이 timeout이 아니라 명시적으로 차단되는 것�
 
 ### 6.2 production Compose
 
-저장소에 BE multi-stage Dockerfile과 production Compose를 추가한다.
+저장소에 BE multi-stage Dockerfile과 production Compose를 추가하고 모든 정상·LLM·canary
+명령은 고정 project name `nextvisit-backend`를 사용한다.
 
 - `caddy`: 80/443 publish, `api`로만 reverse proxy. Caddy data/config는 data disk에 보존.
 - `api`: ECR의 full commit SHA/digest image, 내부 8080만 expose, DB health 뒤 시작.
@@ -338,8 +346,10 @@ config tree key는 `spring.datasource.password`, `nextvisit.llm.cf-access-client
 container environment나 command에 넣지 않으며,
 binding과 각 container의 `docker inspect .Config.Env/.Config.Cmd/.Config.Labels`
 비노출을 integration test로 고정한다. 비밀은 GitHub에서 EC2로 전달하지 않는다.
-production profile은 secret file이 없거나 비어 있거나 예상 mode/owner가 아니면 기본
-개발용 password로 내려가지 않고 시작 전에 실패한다.
+production profile은 DB secret file이 없거나 비어 있거나 예상 mode/owner가 아니면 기본
+개발용 password로 내려가지 않고 시작 전에 실패한다. Access Client ID/Secret은
+`NEXTVISIT_LLM_ENABLED=false`인 초기 stack에는 mount하지 않으며, LLM overlay를 적용해
+`true`로 바꾸는 시점부터 둘 다 필수다. 한쪽만 있거나 비어 있으면 API 시작 전에 실패한다.
 
 ### 6.3 migration, backup, rollback
 
@@ -491,8 +501,11 @@ runner-group API/UI의 `restricted_to_workflows`, `selected_workflows`,
   rename과 기존 의미 변경은 대회 종료 후 30일인 **2026-10-20까지 금지**하고 응답 field는
   additive하게만 늘린다. 그 뒤에도 breaking change는 기존 경로를 바꾸지 않고 versioned
   새 endpoint로 낸다. 설치되거나 오래 열린 PWA가 사라졌다고 가정하지 않는다.
-- security: dependency review, secret scan, Docker build, production Compose가 DB/API
-  port를 publish하지 않는 정적 assertion.
+- security: private repository에서 별도 GitHub Code Security license를 전제하지 않는
+  repository-owned dependency inventory/lockfile consistency scan, secret diff scan, Docker
+  build, production Compose가 DB/API port를 publish하지 않는 정적 assertion. GitHub의
+  native Dependency Review는 Organization 요금제와 Code Security 사용을 소유자가 별도로
+  승인했을 때만 이 baseline 위에 추가한다.
 
 PR 코드는 어떤 self-hosted runner에서도 실행하지 않는다.
 첫 통합 공개에는 직전 production FE가 없으므로 새 BE를 먼저 배포하고 새 FE와의 전체
@@ -574,6 +587,24 @@ Organization/repository ID를 포함한 immutable 형식인지 확인한 다음 
     `LLM_PENDING → LLM_DONE`과 장애 시 template fallback을 검증한다.
 
 단계 12 전까지 제품은 규칙 엔진과 template로 완전하게 동작해야 한다.
+
+새 케이스는 달력상 여러 주가 지나기 전에는 질문 후보를 만들 수 있으므로, 당일 운영
+검증은 공개 `/demo`를 켜거나 주차 검증을 약화하지 않는다. 대신 API image 안의 기본
+비활성 one-shot `canary-fixture` profile이 공개 port 없는 별도 container에서만 실행되어
+`NEXTVISIT_CANARY_V1` 표식과 정해진 6주 synthetic snapshot을 만든다. 이 container는
+LLM·demo가 모두 false이고 production PostgreSQL에만 내부 접속하며, mode-0600 임시
+manifest로 case ID와 일회용 guardian token을 같은 EC2의 canary에 넘긴 뒤 종료한다.
+정상 API가 그 케이스의 현재 주 기록을 갱신해야만 실제 async LLM path가 시작된다.
+manifest와 bearer 값은 실행 종료 때 삭제하고, 비밀이 아닌 case ID만 보존 기록한다.
+초기 활성화에서는 임의 SQL이나 숨은 delete endpoint를 추가하지 않고 이 명시적 synthetic
+행을 보존한다. 삭제는 실제 사용자 데이터와 함께 별도 승인할 privacy/retention 구현이
+소유한다.
+
+현재 질문 cache 상태는 DB에만 있어 외부 canary가 전이를 증명할 수 없으므로
+`GET /me/prep-card`에는 기존 field를 그대로 둔 채 additive
+`generationStatus=READY|LLM_PENDING|LLM_DONE|LLM_FAILED`를 추가한다. 이 값은 prompt나
+본문을 노출하지 않는 유한 상태이며, 이전 FE는 무시해도 된다. canary는 이 field와 기존
+각 질문의 `source`를 함께 검사해 DONE/LLM 또는 FAILED/전부 TEMPLATE 조합만 받는다.
 
 ## 11. 실패와 롤백
 
@@ -720,3 +751,4 @@ smoke 전에는 배포와 LLM을 다시 켜지 않는다.
 - [Cloudflare Access: Service Token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/)
 - [GitHub: self-hosted runner group 접근 제한](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/manage-access)
 - [GitHub: deployment environment와 private repository 제한](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
+- [GitHub: private repository Dependency Review 가용성](https://docs.github.com/en/code-security/concepts/supply-chain-security/dependency-review)
