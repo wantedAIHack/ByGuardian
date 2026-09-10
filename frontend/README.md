@@ -8,6 +8,7 @@
 
 ```text
 Runtime: Node 22.22.2
+Test baseline (2026-09-10): FE 205 tests pass
 Install: npm ci
 Unit: npm test
 Types: npm run typecheck
