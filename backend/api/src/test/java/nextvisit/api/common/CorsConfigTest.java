@@ -68,7 +68,9 @@ class CorsConfigTest {
                 "https://app.nextvisit.test/path",
                 "https://app.nextvisit.test?query=true",
                 "https://app.nextvisit.test#fragment",
-                "https://user@app.nextvisit.test"
+                "https://user@app.nextvisit.test",
+                "https://app.nextvisit.test:",
+                "https://app.nextvisit.test:99999"
             })
     void rejectsInvalidConfiguredOrigin(String origin) {
         assertThatThrownBy(() -> new CorsConfig().corsFilter(List.of(origin)))

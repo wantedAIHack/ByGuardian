@@ -52,11 +52,18 @@ public class CorsConfig {
             return ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
                 && uri.getHost() != null
                 && uri.getUserInfo() == null
+                && hasValidAuthorityAndPort(uri)
                 && (uri.getRawPath() == null || uri.getRawPath().isEmpty())
                 && uri.getRawQuery() == null
                 && uri.getRawFragment() == null;
         } catch (IllegalArgumentException exception) {
             return false;
         }
+    }
+
+    private static boolean hasValidAuthorityAndPort(URI uri) {
+        String authority = uri.getRawAuthority();
+        int port = uri.getPort();
+        return authority != null && !authority.endsWith(":") && (port == -1 || port <= 65535);
     }
 }
