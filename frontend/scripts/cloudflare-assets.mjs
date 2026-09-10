@@ -40,10 +40,15 @@ function validateBuildSha(buildSha) {
 }
 
 function resolveBuildSha(viteSha, pagesSha) {
-  if (viteSha && pagesSha && viteSha !== pagesSha) {
+  const viteShaSupplied = viteSha !== undefined
+  const pagesShaSupplied = pagesSha !== undefined
+
+  if (viteShaSupplied) validateBuildSha(viteSha)
+  if (pagesShaSupplied) validateBuildSha(pagesSha)
+  if (viteShaSupplied && pagesShaSupplied && viteSha !== pagesSha) {
     throw new Error('VITE_BUILD_SHA and CF_PAGES_COMMIT_SHA must match')
   }
-  return viteSha || pagesSha
+  return viteShaSupplied ? viteSha : pagesSha
 }
 
 export async function renderCloudflareAssets({ apiBase, buildSha, outputDir }) {
@@ -54,7 +59,7 @@ export async function renderCloudflareAssets({ apiBase, buildSha, outputDir }) {
     readFile(path.join(cloudflareDir, '_headers.template'), 'utf8'),
     readFile(path.join(cloudflareDir, '_redirects'), 'utf8'),
   ])
-  const headers = headersTemplate.replace('__API_ORIGIN__', apiOrigin)
+  const headers = headersTemplate.replace('__API_ORIGIN__', () => apiOrigin)
   const build = `${JSON.stringify({ commit, apiOrigin }, null, 2)}\n`
 
   await mkdir(outputDir, { recursive: true })

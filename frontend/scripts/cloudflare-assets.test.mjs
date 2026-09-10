@@ -19,6 +19,27 @@ async function temporaryOutputDir() {
   return path.join(root, 'dist')
 }
 
+async function runCli({ viteSha, pagesSha }) {
+  const outputDir = await temporaryOutputDir()
+  const env = {
+    ...process.env,
+    VITE_API_BASE: 'https://api.nextvisit.test',
+  }
+  delete env.VITE_BUILD_SHA
+  delete env.CF_PAGES_COMMIT_SHA
+  if (viteSha !== undefined) env.VITE_BUILD_SHA = viteSha
+  if (pagesSha !== undefined) env.CF_PAGES_COMMIT_SHA = pagesSha
+
+  return {
+    outputDir,
+    result: spawnSync(process.execPath, [scriptPath], {
+      cwd: path.dirname(outputDir),
+      env,
+      encoding: 'utf8',
+    }),
+  }
+}
+
 test('renders exact security headers, SPA redirect, and minimal build metadata', async () => {
   const outputDir = await temporaryOutputDir()
 
@@ -45,6 +66,23 @@ test('renders exact security headers, SPA redirect, and minimal build metadata',
   assert.equal(/connect-src[^\n]*\*/.test(headers), false)
   assert.equal((headers.match(/https:\/\/api\.nextvisit\.test/g) ?? []).length, 1)
 })
+
+for (const [replacementSequence, apiBase, expectedSource] of [
+  ['$\'', "https://$'.nextvisit.test", "connect-src 'self' https://$'.nextvisit.test; manifest-src"],
+  ['$`', 'https://$`.nextvisit.test', "connect-src 'self' https://$`.nextvisit.test; manifest-src"],
+  ['$&', 'https://$&.nextvisit.test', "connect-src 'self' https://$&.nextvisit.test; manifest-src"],
+]) {
+  test(`renders ${replacementSequence} in a valid API authority as one literal CSP source`, async () => {
+    const outputDir = await temporaryOutputDir()
+
+    await renderCloudflareAssets({ apiBase, buildSha: validSha, outputDir })
+
+    const headers = await readFile(path.join(outputDir, '_headers'), 'utf8')
+    assert.equal(headers.includes(expectedSource), true)
+    assert.equal(headers.includes('__API_ORIGIN__'), false)
+    assert.equal(headers.split('\n').length, 7)
+  })
+}
 
 for (const [name, apiBase] of [
   ['non-HTTPS protocol', 'http://api.nextvisit.test'],
@@ -91,17 +129,42 @@ for (const [name, buildSha] of [
   })
 }
 
+test('CLI rejects a missing Vite and Pages commit SHA pair', async () => {
+  const { outputDir, result } = await runCli({})
+
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /build SHA/)
+  await assert.rejects(stat(outputDir), { code: 'ENOENT' })
+})
+
+for (const [name, shas] of [
+  ['empty Vite SHA', { viteSha: '', pagesSha: validSha }],
+  ['empty Pages SHA', { viteSha: validSha, pagesSha: '' }],
+]) {
+  test(`CLI rejects a supplied ${name}`, async () => {
+    const { outputDir, result } = await runCli(shas)
+
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /build SHA/)
+    await assert.rejects(stat(outputDir), { code: 'ENOENT' })
+  })
+}
+
+test('CLI accepts matching Vite and Pages commit SHAs', async () => {
+  const { outputDir, result } = await runCli({
+    viteSha: validSha,
+    pagesSha: validSha,
+  })
+
+  assert.equal(result.status, 0)
+  const build = JSON.parse(await readFile(path.join(outputDir, 'build.json'), 'utf8'))
+  assert.equal(build.commit, validSha)
+})
+
 test('CLI rejects disagreeing Vite and Pages commit SHAs without writing assets', async () => {
-  const outputDir = await temporaryOutputDir()
-  const result = spawnSync(process.execPath, [scriptPath], {
-    cwd: path.dirname(outputDir),
-    env: {
-      ...process.env,
-      VITE_API_BASE: 'https://api.nextvisit.test',
-      VITE_BUILD_SHA: validSha,
-      CF_PAGES_COMMIT_SHA: 'abcdef0123456789abcdef0123456789abcdef01',
-    },
-    encoding: 'utf8',
+  const { outputDir, result } = await runCli({
+    viteSha: validSha,
+    pagesSha: 'abcdef0123456789abcdef0123456789abcdef01',
   })
 
   assert.notEqual(result.status, 0)
