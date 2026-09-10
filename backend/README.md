@@ -1,13 +1,15 @@
 # 백엔드 — 구현된 것
 
-2026-09-07 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐습니다. Ubuntu/NVIDIA 실기 검증과 배포 활성화만 장비 준비 뒤 남습니다.
+2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. Ubuntu/NVIDIA 실기 검증과 외부 배포 활성화는 장비·소유자 설정 준비 뒤 남습니다.
 
 이 문서는 코드를 검토하려는 사람을 위한 것입니다. 제품이 무엇이고 왜 이렇게 설계했는지는 최상위 `README.md`(제품 스펙)에 있고, 이 문서는 **그 스펙이 코드의 어디에 어떻게 들어갔는지**만 다룹니다.
 
 | 문서 | 역할 |
 | --- | --- |
 | `../README.md` | 제품 스펙. 무엇을 만들고 무엇을 안 만드는가. 충돌하면 이 문서가 이깁니다 |
+| `../frontend/README.md` | React PWA 실행, 환경변수, 화면·테스트 지도 |
 | `../docs/superpowers/specs/2026-09-05-api-design.md` | API 계약. 데이터·주차 규칙·엔드포인트 |
+| `../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정 |
 | `../docs/superpowers/specs/2026-09-07-llm-server-design.md` | LLM, Docker, Tunnel, CI/CD의 승인된 계약 |
 | `../infra/llm/README.md` | macOS CPU 실행과 향후 Ubuntu/NVIDIA 운영 절차 |
 | `../docs/superpowers/plans/2026-09-06-api-followups.md` | 다음 계획이 알아야 할 것 |
@@ -22,14 +24,16 @@
 | `engine` — 판정 규칙 엔진 | ✅ 완료 |
 | `api` (api-core) — 저장·조회·화면 데이터 | ✅ 완료 |
 | **api-llm — 비동기 문장 다듬기·검증·전체 폴백** | ✅ 코드·로컬 검증 완료 |
-| frontend — React PWA | 별도 브랜치에서 병렬 작업 중 |
+| frontend — React PWA | ✅ 같은 저장소에 통합 완료 |
 | infra — Ollama CPU/GPU·Tunnel·CI/CD | ✅ 구성 완료, Ubuntu/NVIDIA 실기 대기 |
 
 **LLM 가용성과 관계없이 제품은 동작합니다.** 템플릿을 먼저 저장하므로 LLM이 비활성이거나 응답 검증이 실패해도 준비 카드는 안전한 문장을 유지합니다.
 
 현재 `y-minion/wanted_Hackaton`은 개인 계정 저장소이므로 노트북을 자체 호스팅 runner로 등록하지 않고 `LLM_DEPLOY_ENABLED`를 absent/false로 둡니다. 향후 GitHub 조직으로 이전 또는 미러한 뒤에도 `llm-production` 조직 runner group이 정확한 `main` 배포 workflow로 외부 제한될 때만 배포를 검토합니다. 저장소 안의 workflow linter는 그 경계의 보조 검사일 뿐 runner 할당 전 보안 경계가 아닙니다.
 
-2026-09-08 Java 21 `./gradlew clean test` 검증 기준으로 engine 123개와 API 127개, 총 250개 테스트가 통과했습니다(실패 0).
+LLM의 기본값은 `NEXTVISIT_LLM_ENABLED=false`입니다. 따라서 Ollama가 없어도 템플릿과 규칙 엔진으로 안전하게 동작합니다.
+
+2026-09-10 병합 뒤 Java 21 `./gradlew clean test` 기준으로 **253개 테스트가 통과했습니다(실패 0, 오류 0)**. 기존 250개에 통합된 FE 이력의 API 계약 테스트 3개가 더해진 기준입니다. 로컬 테스트는 Docker 없이 H2로 실행됩니다.
 
 테스트를 촘촘히 둔 것은 의도한 것입니다. 이 제품은 출력이 전부 한국어 문장이라, 문장을 글자 단위로 고정하지 않으면 회귀를 눈으로 잡을 수 없습니다.
 
