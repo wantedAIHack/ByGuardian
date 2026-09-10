@@ -40,4 +40,9 @@ public class CaseController {
     public RecoverResponse recover(@RequestBody @Valid RecoverRequest req) {
         return service.recover(req);
     }
+
+    @PostMapping("/me/recovery-code")
+    public RecoveryCodeResponse reissueRecoveryCode(@CurrentGuardian AuthContext ctx) {
+        return service.reissueRecoveryCode(ctx);
+    }
 }

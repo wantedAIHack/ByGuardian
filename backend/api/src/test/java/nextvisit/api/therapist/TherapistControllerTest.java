@@ -81,7 +81,12 @@ class TherapistControllerTest {
         assertEquals(2, s.get("signals").size());
         assertEquals("GRIMACE", s.get("signals").get(0).get("kind").asText());
         assertEquals(List.of(2, 3, 5, 6), mapper.convertValue(s.get("signals").get(0).get("weeks"), List.class));
-        assertEquals(0, s.get("sleep").size());
+        // 데모 시드는 매주 야간 수면 관찰을 채운다(README §5·§9 — 실제 주간 기록은 늘
+        // 이 값을 함께 받는다). 비어 있으면 /t/:token의 '야간 수면' 구역 자체가 렌더되지 않는다.
+        assertEquals(6, s.get("sleep").size());
+        assertEquals(1, s.get("sleep").get(0).get("week").asInt());
+        assertEquals("가끔 깨심", s.get("sleep").get(0).get("label").asText());
+        assertEquals("잘 주무심", s.get("sleep").get(2).get("label").asText());
         assertEquals(3, s.get("freeNotes").size());
         assertEquals("오후만 되면 오른쪽 어깨를 자꾸 만지신다", s.get("freeNotes").get(0).get("text").asText());
         assertEquals("오후", s.get("freeNotes").get(0).get("timeTagLabel").asText());

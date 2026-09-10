@@ -14,5 +14,7 @@ public record MeResponse(
     boolean canRecordThisWeek,
     boolean recordedThisWeek,
     Integer lastRecordedWeek,
-    LocalDate nextVisitDate
+    LocalDate nextVisitDate,
+    int recordedWeeks,
+    int totalWeeks
 ) {}

@@ -1,5 +1,6 @@
 package nextvisit.api.cases;
 
+import static nextvisit.api.ApiTestSupport.authed;
 import static nextvisit.api.ApiTestSupport.baselineItems;
 import static nextvisit.api.ApiTestSupport.getMe;
 import static nextvisit.api.ApiTestSupport.json;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -155,5 +157,47 @@ class CaseControllerTest {
 
         mvc.perform(postJson("/guardians/recover", mapper, Map.of("recoveryCode", "ZZZZZZZZ", "relation", "아들")))
             .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void meCarriesRecordDensity() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+
+        JsonNode week1 = json(mapper, mvc.perform(getMe(o.token(), "/me")).andReturn());
+        assertEquals(1, week1.get("recordedWeeks").asInt());
+        assertEquals(1, week1.get("totalWeeks").asInt());
+
+        // 3주차로 넘긴다. 2·3주차는 기록하지 않는다.
+        clock.set(TestClockConfig.DEFAULT_TODAY.plusDays(14));
+        JsonNode week3 = json(mapper, mvc.perform(getMe(o.token(), "/me")).andReturn());
+        assertEquals(3, week3.get("week").asInt());
+        assertEquals(1, week3.get("recordedWeeks").asInt());
+        assertEquals(2, week3.get("totalWeeks").asInt());
+    }
+
+    @Test
+    void reissuingRecoveryCodeKillsTheOldOne() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        String oldCode = o.recoveryCode();
+
+        JsonNode issued = json(mapper, mvc.perform(
+            authed(post("/me/recovery-code"), o.token())).andExpect(status().isOk()).andReturn());
+        String newCode = issued.get("recoveryCode").asText();
+
+        assertEquals(8, newCode.length());
+        for (char c : newCode.toCharArray()) {
+            assertTrue(nextvisit.api.auth.TokenService.RECOVERY_ALPHABET.indexOf(c) >= 0,
+                "복구 코드 글자가 알파벳 밖입니다: " + c);
+        }
+
+        mvc.perform(postJson("/guardians/recover", mapper, Map.of("recoveryCode", oldCode, "relation", "아들")))
+            .andExpect(status().isNotFound());
+        mvc.perform(postJson("/guardians/recover", mapper, Map.of("recoveryCode", newCode, "relation", "아들")))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    void reissuingRecoveryCodeNeedsAToken() throws Exception {
+        mvc.perform(post("/me/recovery-code")).andExpect(status().isUnauthorized());
     }
 }
