@@ -1,6 +1,9 @@
 {
   "name": "nextvisit-frontend",
   "private": true,
+  "engines": {
+    "node": "22.22.2"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
