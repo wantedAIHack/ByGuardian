@@ -44,6 +44,10 @@ class DemoFlowTest {
         String token = demo.get("guardianToken").asText();
         assertEquals(8, demo.get("recoveryCode").asText().length());
         assertTrue(demo.get("therapistUrl").asText().startsWith("/t/"));
+        assertTrue(demo.hasNonNull("therapistToken"));
+        String therapistToken = demo.get("therapistToken").asText();
+        assertTrue(therapistToken.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"));
+        assertEquals("/t/" + therapistToken, demo.get("therapistUrl").asText());
 
         JsonNode me = json(mapper, mvc.perform(getMe(token, "/me")).andExpect(status().isOk()).andReturn());
         assertEquals(6, me.get("week").asInt());

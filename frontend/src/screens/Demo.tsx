@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 import { ApiError, api, setToken } from '../lib/api';
+import { therapistShareUrl } from '../lib/therapistToken';
 import type { DemoResponse } from '../lib/types';
 import { Button } from '../ui/Button';
 import { Notice } from '../ui/Notice';
@@ -23,7 +24,7 @@ export function Demo() {
         <p className="pt-4">여섯 주치 관찰이 들어 있습니다.</p>
         <div className="flex flex-col gap-3 pt-8">
           <Link className="btn" to="/">보호자 화면 보기</Link>
-          <a className="btn btn-plain" href={create.data.therapistUrl}>치료사 화면 보기</a>
+          <a className="btn btn-plain" href={therapistShareUrl(create.data.therapistToken)}>치료사 화면 보기</a>
         </div>
         <Notice>이어받기 코드 — {create.data.recoveryCode}</Notice>
       </Screen>

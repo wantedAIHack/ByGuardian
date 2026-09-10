@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +8,8 @@ import { Therapist } from './Therapist';
 import type { Trajectory, TherapistSummary } from '../lib/types';
 
 const BASE = 'http://localhost:8080';
+const TOKEN = '123e4567-e89b-12d3-a456-426614174000';
+const STORAGE_KEY = 'nextvisit.therapist-token';
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
@@ -95,20 +97,69 @@ const missingWeekItem: Trajectory = {
 };
 
 function renderIt(data: TherapistSummary | null = summary, status = 200) {
-  server.use(http.get(`${BASE}/t/abc`, () =>
+  window.history.replaceState(null, '', `/t#${TOKEN}`);
+  server.use(http.get(`${BASE}/t/${TOKEN}`, () =>
     data ? HttpResponse.json(data)
          : HttpResponse.json({ code: 'NOT_FOUND', message: '링크를 찾을 수 없습니다' }, { status })));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/t/abc']}>
-        <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+      <MemoryRouter initialEntries={['/t']}>
+        <Routes><Route path="/t" element={<Therapist />} /></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
 describe('치료사용 요약', () => {
+  it('API 응답 전에 fragment를 지우고 캡처한 UUID로 요청한다', async () => {
+    let requestedPath: string | null = null;
+    let locationAtRequest: string | null = null;
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
+    window.history.replaceState(null, '', `/t#${TOKEN}`);
+    server.use(http.get(`${BASE}/t/${TOKEN}`, async ({ request }) => {
+      requestedPath = new URL(request.url).pathname;
+      locationAtRequest = window.location.href;
+      await responseGate;
+      return HttpResponse.json(summary);
+    }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/t']}>
+          <Routes><Route path="/t" element={<Therapist />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(requestedPath).toBe(`/t/${TOKEN}`));
+    expect(locationAtRequest).toBe(`${window.location.origin}/t`);
+    expect(window.location.href).not.toContain('#');
+    expect(window.location.href).not.toContain(TOKEN);
+
+    releaseResponse();
+    expect(await screen.findByText('화장실 이용')).toBeInTheDocument();
+  });
+
+  it.each(['', '#not-a-uuid'])('토큰이 없거나 잘못된 fragment(%s)면 로딩에 머물지 않는다', async (hash) => {
+    window.history.replaceState(null, '', `/t${hash}`);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/t']}>
+          <Routes><Route path="/t" element={<Therapist />} /></Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/이 주소는 더 이상 열리지 않습니다/)).toBeInTheDocument();
+    expect(screen.queryByText('불러오는 중입니다…')).not.toBeInTheDocument();
+    expect(window.location.hash).toBe('');
+  });
+
   it('궤적·신호·수면이 자유 기록보다 먼저 온다', async () => {
     renderIt();
     await screen.findByText('화장실 이용');
@@ -203,6 +254,7 @@ describe('치료사용 요약', () => {
   it('링크가 죽었으면 그렇다고 말한다', async () => {
     renderIt(null, 404);
     expect(await screen.findByText(/이 주소는 더 이상 열리지 않습니다/)).toBeInTheDocument();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 
   it('통신 장애는 링크가 죽었다고 말하지 않는다', async () => {
@@ -211,18 +263,20 @@ describe('치료사용 요약', () => {
     // "이 링크는 폐기됐다"고 알리는 셈이다. 치료사의 다음 행동(보호자에게 새 링크 요청)이
     // finding 3을 거쳐 실제로는 살아있던 링크를 죽인다 — 그래서 이 문구가 404 전용이어야
     // 한다.
-    server.use(http.get(`${BASE}/t/abc`, () => HttpResponse.error()));
+    window.history.replaceState(null, '', `/t#${TOKEN}`);
+    server.use(http.get(`${BASE}/t/${TOKEN}`, () => HttpResponse.error()));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/t/abc']}>
-          <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+        <MemoryRouter initialEntries={['/t']}>
+          <Routes><Route path="/t" element={<Therapist />} /></Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );
 
     expect(await screen.findByText('연결이 되지 않습니다. 잠시 후 다시 열어주세요.')).toBeInTheDocument();
     expect(screen.queryByText(/이 주소는 더 이상 열리지 않습니다/)).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(STORAGE_KEY)).toBe(TOKEN);
   });
 
   // ------------------------------------------------------------------
@@ -235,12 +289,13 @@ describe('치료사용 요약', () => {
   // ------------------------------------------------------------------
 
   it('판정 문구를 만들지 않는다 — 불러오는 중', async () => {
-    server.use(http.get(`${BASE}/t/abc`, () => new Promise(() => {})));
+    window.history.replaceState(null, '', `/t#${TOKEN}`);
+    server.use(http.get(`${BASE}/t/${TOKEN}`, () => new Promise(() => {})));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/t/abc']}>
-          <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+        <MemoryRouter initialEntries={['/t']}>
+          <Routes><Route path="/t" element={<Therapist />} /></Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -258,12 +313,13 @@ describe('치료사용 요약', () => {
   });
 
   it('판정 문구를 만들지 않는다 — 통신 장애 상태', async () => {
-    server.use(http.get(`${BASE}/t/abc`, () => HttpResponse.error()));
+    window.history.replaceState(null, '', `/t#${TOKEN}`);
+    server.use(http.get(`${BASE}/t/${TOKEN}`, () => HttpResponse.error()));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={qc}>
-        <MemoryRouter initialEntries={['/t/abc']}>
-          <Routes><Route path="/t/:token" element={<Therapist />} /></Routes>
+        <MemoryRouter initialEntries={['/t']}>
+          <Routes><Route path="/t" element={<Therapist />} /></Routes>
         </MemoryRouter>
       </QueryClientProvider>,
     );

@@ -9,6 +9,8 @@ import { clearTherapistLinkOnTokenChange } from '../lib/queries';
 import { TherapistLinkPanel } from './TherapistLinkPanel';
 
 const BASE = 'http://localhost:8080';
+const TOKEN_A = '123e4567-e89b-12d3-a456-426614174000';
+const TOKEN_B = '223e4567-e89b-12d3-a456-426614174001';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -41,28 +43,28 @@ describe('TherapistLinkPanel', () => {
   it('버튼을 누르면 링크를 발급한다', async () => {
     const user = userEvent.setup();
     server.use(http.post(`${BASE}/me/therapist-link`, () =>
-      HttpResponse.json({ url: '/t/abc123', token: 'abc123' })));
+      HttpResponse.json({ url: `/t/${TOKEN_A}`, token: TOKEN_A })));
     renderPanel();
 
     await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
 
-    expect(await screen.findByText(`${window.location.origin}/t/abc123`)).toBeInTheDocument();
+    expect(await screen.findByText(`${window.location.origin}/t#${TOKEN_A}`)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '치료사에게 보여드리기' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '어떻게 보이는지 확인하기' }))
-      .toHaveAttribute('href', `${window.location.origin}/t/abc123`);
+      .toHaveAttribute('href', `${window.location.origin}/t#${TOKEN_A}`);
   });
 
   it('주소는 서버가 준 상대 url이 아니라 프론트 오리진으로 조립한 절대 주소다', async () => {
     const user = userEvent.setup();
     // url과 token을 일부러 어긋나게 준다. 컴포넌트가 url을 그대로 쓰면 화면에
-    // '/t/서버가-잘못-준-경로'가 뜨고, token으로 조립하면 origin이 붙은 abc123이 뜬다.
+    // '/t/서버가-잘못-준-경로'가 뜨고, token으로 조립하면 fragment에 UUID가 붙는다.
     server.use(http.post(`${BASE}/me/therapist-link`, () =>
-      HttpResponse.json({ url: '/t/서버가-잘못-준-경로', token: 'abc123' })));
+      HttpResponse.json({ url: '/t/서버가-잘못-준-경로', token: TOKEN_A })));
     renderPanel();
 
     await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
 
-    const address = await screen.findByText(`${window.location.origin}/t/abc123`, { exact: true });
+    const address = await screen.findByText(`${window.location.origin}/t#${TOKEN_A}`, { exact: true });
     expect(address).toBeInTheDocument();
     expect(screen.queryByText(/서버가-잘못-준-경로/)).not.toBeInTheDocument();
   });
@@ -71,14 +73,14 @@ describe('TherapistLinkPanel', () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();
     server.use(http.post(`${BASE}/me/therapist-link`, () =>
-      HttpResponse.json({ url: '/t/xyz789', token: 'xyz789' })));
+      HttpResponse.json({ url: `/t/${TOKEN_A}`, token: TOKEN_A })));
     renderPanel();
 
     await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
-    await screen.findByText(`${window.location.origin}/t/xyz789`);
+    await screen.findByText(`${window.location.origin}/t#${TOKEN_A}`);
     await user.click(screen.getByRole('button', { name: '주소 복사하기' }));
 
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t/xyz789`);
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t#${TOKEN_A}`);
     expect(await screen.findByRole('button', { name: '복사했습니다' })).toBeInTheDocument();
   });
 
@@ -102,22 +104,22 @@ describe('TherapistLinkPanel', () => {
     server.use(http.post(`${BASE}/me/therapist-link`, () => {
       calls += 1;
       return HttpResponse.json(
-        calls === 1 ? { url: '/t/first', token: 'first-token' } : { url: '/t/second', token: 'second-token' },
+        calls === 1 ? { url: `/t/${TOKEN_A}`, token: TOKEN_A } : { url: `/t/${TOKEN_B}`, token: TOKEN_B },
       );
     }));
     renderPanel();
 
     await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
-    expect(await screen.findByText(`${window.location.origin}/t/first-token`)).toBeInTheDocument();
+    expect(await screen.findByText(`${window.location.origin}/t#${TOKEN_A}`)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '주소 복사하기' }));
-    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t/first-token`);
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t#${TOKEN_A}`);
     expect(await screen.findByRole('button', { name: '복사했습니다' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '새 주소 만들기' }));
 
-    expect(await screen.findByText(`${window.location.origin}/t/second-token`)).toBeInTheDocument();
-    expect(screen.queryByText(`${window.location.origin}/t/first-token`)).not.toBeInTheDocument();
+    expect(await screen.findByText(`${window.location.origin}/t#${TOKEN_B}`)).toBeInTheDocument();
+    expect(screen.queryByText(`${window.location.origin}/t#${TOKEN_A}`)).not.toBeInTheDocument();
     // 새 주소가 왔으니 '복사했습니다'는 지난 주소 얘기다. 되돌아가 있어야 한다.
     expect(screen.getByRole('button', { name: '주소 복사하기' })).toBeInTheDocument();
     expect(calls).toBe(2);
@@ -135,7 +137,7 @@ describe('TherapistLinkPanel', () => {
     let calls = 0;
     server.use(http.post(`${BASE}/me/therapist-link`, () => {
       calls += 1;
-      return HttpResponse.json({ url: '/t/shared', token: 'shared-token' });
+      return HttpResponse.json({ url: `/t/${TOKEN_A}`, token: TOKEN_A });
     }));
 
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -151,7 +153,7 @@ describe('TherapistLinkPanel', () => {
     await user.click(buttons[0]!);
 
     // 발급을 요청한 패널과, 요청하지 않은 다른 패널 둘 다 같은 주소를 보여줘야 한다.
-    const addresses = await screen.findAllByText(`${window.location.origin}/t/shared-token`);
+    const addresses = await screen.findAllByText(`${window.location.origin}/t#${TOKEN_A}`);
     expect(addresses).toHaveLength(2);
     // 이미 링크를 아는 두 번째 패널에는 발급 전 화면('치료사에게 보여드리기' 버튼)이
     // 다시 나타나지 않는다.
@@ -167,7 +169,7 @@ describe('TherapistLinkPanel', () => {
     // 버튼 자체가 숨어 새 보호자는 자기 링크를 낼 방법이 없다.
     const user = userEvent.setup();
     server.use(http.post(`${BASE}/me/therapist-link`, () =>
-      HttpResponse.json({ url: '/t/old', token: 'old-token' })));
+      HttpResponse.json({ url: `/t/${TOKEN_A}`, token: TOKEN_A })));
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
     // main.tsx가 시작할 때 하는 배선을 그대로 재현한다 — setToken/clearToken을 부르는
     // 진입점이라면 어디서 불러도 이 등록 하나로 잡힌다.
@@ -180,7 +182,7 @@ describe('TherapistLinkPanel', () => {
     );
 
     await user.click(screen.getByRole('button', { name: '치료사에게 보여드리기' }));
-    await screen.findByText(`${window.location.origin}/t/old-token`);
+    await screen.findByText(`${window.location.origin}/t#${TOKEN_A}`);
 
     // 실제 화면 전환을 그대로 재현한다: 홈이 내려가고(이어받기·온보딩·데모로 이동),
     // 앱이 토큰 진입점에서 실제로 부르는 그 함수로 토큰이 바뀐 뒤(테스트에서
@@ -196,6 +198,6 @@ describe('TherapistLinkPanel', () => {
     );
 
     expect(await screen.findByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
-    expect(screen.queryByText(`${window.location.origin}/t/old-token`)).not.toBeInTheDocument();
+    expect(screen.queryByText(`${window.location.origin}/t#${TOKEN_A}`)).not.toBeInTheDocument();
   });
 });

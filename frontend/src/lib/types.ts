@@ -141,6 +141,6 @@ export interface TherapistSummary {
 }
 
 export interface DemoResponse {
-  caseId: string; guardianToken: string; recoveryCode: string; therapistUrl: string;
+  caseId: string; guardianToken: string; recoveryCode: string; therapistUrl: string; therapistToken: string;
 }
 export interface ApiErrorBody { code: string; message: string }

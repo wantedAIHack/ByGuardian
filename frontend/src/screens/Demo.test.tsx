@@ -9,6 +9,7 @@ import { Demo } from './Demo';
 import { getToken } from '../lib/api';
 
 const BASE = 'http://localhost:8080';
+const THERAPIST_TOKEN = '123e4567-e89b-12d3-a456-426614174000';
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
@@ -35,6 +36,7 @@ describe('데모', () => {
     const user = userEvent.setup();
     server.use(http.post(`${BASE}/demo`, () => HttpResponse.json({
       caseId: 'c9', guardianToken: 'demo-tok', recoveryCode: 'DEMO1234', therapistUrl: '/t/demo-token',
+      therapistToken: THERAPIST_TOKEN,
     })));
 
     renderIt();
@@ -43,7 +45,7 @@ describe('데모', () => {
     await screen.findByText('데모 기록을 만들었습니다.');
     expect(getToken()).toBe('demo-tok');
     expect(screen.getByRole('link', { name: '치료사 화면 보기' }))
-      .toHaveAttribute('href', '/t/demo-token');
+      .toHaveAttribute('href', `${window.location.origin}/t#${THERAPIST_TOKEN}`);
   });
 
   it('실패하면 서버 문구를 그대로 보여준다', async () => {
@@ -71,6 +73,7 @@ describe('데모', () => {
     const user = userEvent.setup();
     server.use(http.post(`${BASE}/demo`, () => HttpResponse.json({
       caseId: 'c9', guardianToken: 'demo-tok', recoveryCode: 'DEMO1234', therapistUrl: '/t/demo-token',
+      therapistToken: THERAPIST_TOKEN,
     })));
 
     const { container } = renderIt();

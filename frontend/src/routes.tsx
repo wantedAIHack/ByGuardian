@@ -42,5 +42,5 @@ export const router = createBrowserRouter([
     ],
   },
   // 치료사 화면은 App 밖이다. 보호자용 껍데기도 카탈로그도 쓰지 않는다.
-  { path: '/t/:token', element: <Therapist /> },
+  { path: '/t', element: <Therapist /> },
 ]);

@@ -1,17 +1,18 @@
 import { useState } from 'react';
 import { useIssueLink } from '../lib/queries';
+import { therapistShareUrl } from '../lib/therapistToken';
 import { Button } from './Button';
 import { Notice } from './Notice';
 
 /**
  * 치료사용 요약 링크를 발급해 보여준다.
- * API는 `/t/{token}` 상대 경로를 주므로 절대 주소는 프론트가 자기 오리진으로 조립한다.
+ * API 토큰으로 같은 오리진의 fragment 공유 주소를 만든다.
  */
 export function TherapistLinkPanel() {
   const issue = useIssueLink();
   const [copied, setCopied] = useState(false);
 
-  const url = issue.data ? `${window.location.origin}/t/${issue.data.token}` : null;
+  const url = issue.data ? therapistShareUrl(issue.data.token) : null;
 
   if (!url) {
     return (

@@ -20,6 +20,7 @@ server.events.on('request:unhandled', ({ request }) => {
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
   if (unhandled.length > 0) {
     const offenders = unhandled.slice();
     unhandled.length = 0;
