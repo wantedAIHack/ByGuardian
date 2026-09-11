@@ -8,10 +8,6 @@ fe_pid=
 active_pid=
 component=setup
 
-compose() {
-  docker compose --project-name nextvisit-integration -f "$root/infra/local/compose.integration.yml" "$@"
-}
-
 # Signal only PIDs recorded immediately after this script launches a child.
 stop_children() {
   roots="$api_pid $fe_pid $active_pid"
@@ -32,6 +28,8 @@ stop_children() {
 }
 
 # Bound image pulls, builds, browser runs and cleanup as well as readiness checks.
+# Pass external commands directly: a backgrounded shell function would make $!
+# identify its wrapper rather than the worker that cleanup must terminate.
 run_bounded() {
   limit=$1
   output=$2
@@ -54,7 +52,7 @@ cleanup() {
   result=$?
   trap - EXIT HUP INT TERM
   stop_children
-  if ! run_bounded 45 cleanup compose down --volumes --timeout 10; then
+  if ! run_bounded 45 cleanup docker compose --project-name nextvisit-integration -f "$root/infra/local/compose.integration.yml" down --volumes --timeout 10; then
     stop_children
     result=1
     printf '%s\n' 'integration: cleanup failed'
@@ -110,7 +108,7 @@ node --input-type=module -e '
 ' >"$logs/ports.log" 2>&1
 
 component=postgres
-run_bounded 240 postgres compose up --detach --wait --wait-timeout 60
+run_bounded 240 postgres docker compose --project-name nextvisit-integration -f "$root/infra/local/compose.integration.yml" up --detach --wait --wait-timeout 60
 
 component=api
 (cd "$root/backend" && exec ./gradlew --no-daemon --console=plain :api:bootRun) >"$logs/api.log" 2>&1 &
