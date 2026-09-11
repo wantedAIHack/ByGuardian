@@ -14,3 +14,5 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 infra/llm/.env
+frontend/test-results/
+frontend/playwright-report/

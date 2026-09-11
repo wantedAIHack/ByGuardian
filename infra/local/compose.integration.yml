@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    environment:
+      POSTGRES_DB: nextvisit_integration
+      POSTGRES_USER: nextvisit_integration
+      POSTGRES_PASSWORD: nextvisit_integration
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - integration-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextvisit_integration -d nextvisit_integration"]
+      interval: 2s
+      timeout: 2s
+      retries: 25
+
+volumes:
+  integration-pg:

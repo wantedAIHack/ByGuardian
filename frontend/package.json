@@ -10,9 +10,11 @@
     "build": "tsc -b && vite build",
     "build:pages": "npm run build && node scripts/cloudflare-assets.mjs",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc -b"
+    "test": "vitest run --exclude 'e2e/**'",
+    "test:watch": "vitest --exclude 'e2e/**'",
+    "typecheck": "tsc -b",
+    "test:e2e:install": "playwright install chromium",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
@@ -21,6 +23,7 @@
     "react-router": "^7.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.0.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
