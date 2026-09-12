@@ -3,7 +3,7 @@ set -eu
 
 script_dir="$(CDPATH="" cd -- "$(dirname -- "$0")" && pwd)"
 repo_root="$(CDPATH="" cd -- "$script_dir/../../.." && pwd)"
-ci="$repo_root/.github/workflows/llm-ci.yml"
+ci="$repo_root/.github/workflows/ci.yml"
 deploy="$repo_root/.github/workflows/llm-deploy.yml"
 
 require_line() {
@@ -116,10 +116,11 @@ assert_ci_triggers() {
       if (key !~ /^[A-Za-z0-9_-]+$/) {
         invalid = 1
       }
+      if (key != "branches") { invalid = 1 }
       if (key == "branches") {
         branch_properties++
         if (event == "push" &&
-            $0 == "    branches: [main, feat/llm-server]") {
+            $0 == "    branches: [main]") {
           push_branches++
         } else {
           invalid = 1
@@ -133,7 +134,7 @@ assert_ci_triggers() {
       }
     }
   ' "$ci"; then
-    printf '%s\n' "CI triggers must be canonical push/pull_request events with push branches limited to main and feat/llm-server" >&2
+    printf '%s\n' "CI triggers must be canonical push/pull_request events with push branches limited to main without path filters" >&2
     exit 1
   fi
 }
@@ -191,66 +192,60 @@ assert_deploy_triggers() {
   fi
 }
 
-assert_ci_jobs() {
-  if ! awk '
-    /^jobs:[[:space:]]*$/ {
-      job_sections++
-      in_jobs = 1
-      job = ""
-      next
-    }
-    /^[^[:space:]#]/ {
-      in_jobs = 0
-      job = ""
-    }
-    in_jobs && /^  [^[:space:]#]/ {
-      if ($0 == "  backend:") {
-        backend_jobs++
-        job = "backend"
-      } else if ($0 == "  container:") {
-        container_jobs++
-        job = "container"
-      } else {
-        invalid = 1
-        job = ""
-      }
-      next
-    }
-    in_jobs && /^    [^[:space:]#]/ {
-      key = substr($0, 5)
-      sub(/:.*/, "", key)
-      sub(/[[:space:]]+$/, "", key)
-      if (key != "runs-on" && key != "steps") {
-        invalid = 1
-      }
-      if ($0 == "    runs-on: ubuntu-latest") {
-        if (job == "backend") {
-          backend_runners++
-        } else if (job == "container") {
-          container_runners++
-        } else {
-          invalid = 1
-        }
-      } else if (key == "runs-on") {
-        invalid = 1
-      }
-      next
-    }
-    in_jobs && /^      [^[:space:]#]/ {
-      if ($0 ~ /^      (group|labels):/) {
-        invalid = 1
-      }
-    }
-    END {
-      if (job_sections != 1 || backend_jobs != 1 || container_jobs != 1 ||
-          backend_runners != 1 || container_runners != 1 || invalid != 0) {
-        exit 1
-      }
-    }
+require_ci_property() {
+  job_name=$1 expected=$2
+  if ! awk -v job_name="$job_name" -v expected="$expected" '
+    /^  [^[:space:]#]/ { in_job = ($0 == "  " job_name ":") }
+    in_job && $0 == expected { matches++ }
+    END { exit matches != 1 }
   ' "$ci"; then
-    printf '%s\n' "CI jobs must be exactly canonical backend/container jobs, each on ubuntu-latest with canonical job keys" >&2
+    printf 'CI job %s must contain its own property: %s\n' "$job_name" "$expected" >&2
     exit 1
   fi
+}
+
+require_secret_gate_property() {
+  if ! awk -v expected="$1" '
+    /^      - name:/ { in_gate = ($0 == "      - name: Scan every secret status with exact historical occurrence checks") }
+    in_gate && $0 == expected { matches++ }
+    END { exit matches != 1 }
+  ' "$ci"; then
+    printf '%s\n' "secret candidate gate must bind its own fail-closed range and command" >&2
+    exit 1
+  fi
+}
+
+assert_ci_jobs() {
+  if ! awk '
+    /^jobs:$/ { in_jobs = 1; next }
+    /^[^[:space:]#]/ { in_jobs = 0 }
+    in_jobs && /^  [^[:space:]#]/ {
+      job = substr($0, 3); sub(/:$/, "", job)
+      if (job !~ /^(changes|frontend|backend|infra|integration|security|ci-gate)$/ || seen[job]++) invalid = 1
+      jobs++; next
+    }
+    in_jobs && /^    [^[:space:]#]/ {
+      key = substr($0, 5); sub(/:.*/, "", key)
+      if (key !~ /^(runs-on|steps|needs|if|outputs|timeout-minutes)$/) invalid = 1
+      if (key == "runs-on") {
+        if ($0 != "    runs-on: ubuntu-latest" || runners[job]++) invalid = 1
+        total_runners++
+      }
+    }
+    in_jobs && /^      (group|labels):/ { invalid = 1 }
+    END { exit jobs != 7 || total_runners != 7 || invalid }
+  ' "$ci"; then
+    printf '%s\n' "CI must have exactly seven canonical jobs on hosted Ubuntu runners" >&2
+    exit 1
+  fi
+  for area in frontend backend infra integration; do
+    require_ci_property "$area" "    if: \${{ needs.changes.outputs.$area == 'true' }}"
+    require_ci_property "$area" '    needs: changes'
+  done
+  require_ci_property security '    needs: changes'
+  require_ci_property security "    if: \${{ always() }}"
+  require_ci_property ci-gate "    if: \${{ always() }}"
+  require_ci_property ci-gate '    needs: [changes, frontend, backend, infra, integration, security]'
 }
 
 assert_only_deploy_job() {
@@ -312,6 +307,7 @@ assert_actions() {
     }
     in_jobs && /^  [^[:space:]#]/ {
       in_steps = 0
+      job = $0
       next
     }
     in_jobs && /^    [^[:space:]#]/ {
@@ -319,6 +315,7 @@ assert_actions() {
       next
     }
     in_steps && /^      - [^[:space:]]/ {
+      step = $0
       if ($0 !~ /^      - name:[[:space:]]+[^[:space:]]/) {
         invalid = 1
       }
@@ -329,15 +326,22 @@ assert_actions() {
       sub(/:.*/, "", key)
       sub(/[[:space:]]+$/, "", key)
       if (key != "uses" && key != "with" && key != "working-directory" &&
-          key != "run" && key != "env") {
+          key != "run" && key != "env" && key != "id" && key != "shell" && key != "if") {
         invalid = 1
       }
+      if (key == "if" && (mode != "ci" || job != "  security:" ||
+          step != "      - name: Scan every secret status with exact historical occurrence checks" ||
+          $0 != "        if: ${{ always() }}")) invalid = 1
       if (key == "uses") {
         actions++
         if ($0 ~ /^        uses: actions\/checkout@11d5960a326750d5838078e36cf38b85af677262([[:space:]]+#.*)?$/) {
           checkouts++
         } else if ($0 ~ /^        uses: actions\/setup-java@cf277c60eb25467037889841efdb72551f06f6c3([[:space:]]+#.*)?$/) {
           java_setups++
+        } else if ($0 ~ /^        uses: actions\/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020([[:space:]]+#.*)?$/) {
+          node_setups++
+        } else if ($0 ~ /^        uses: trufflesecurity\/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c([[:space:]]+#.*)?$/) {
+          scanners++
         } else {
           invalid = 1
         }
@@ -345,7 +349,7 @@ assert_actions() {
     }
     END {
       if (mode == "ci") {
-        if (actions != 3 || checkouts != 2 || java_setups != 1) {
+        if (actions != 12 || checkouts != 6 || java_setups != 2 || node_setups != 3 || scanners != 1) {
           invalid = 1
         }
       } else if (actions != 1 || checkouts != 1 || java_setups != 0) {
@@ -372,7 +376,7 @@ assert_checkout_controls() {
         if (with_blocks != 1 || persist_credentials != 1) {
           invalid = 1
         }
-        if (mode == "deploy" && checkout_refs != 1) {
+        if (checkout_refs != 1 || (mode == "ci" && full_history != 1)) {
           invalid = 1
         }
       }
@@ -382,6 +386,7 @@ assert_checkout_controls() {
       with_blocks = 0
       persist_credentials = 0
       checkout_refs = 0
+      full_history = 0
     }
     /^jobs:[[:space:]]*$/ {
       finish_step()
@@ -431,11 +436,13 @@ assert_checkout_controls() {
         persist_credentials++
       } else if ($0 == "          ref: ${{ github.sha }}") {
         checkout_refs++
+      } else if ($0 == "          fetch-depth: 0") {
+        full_history++
       }
     }
     END {
       finish_step()
-      expected_checkouts = (mode == "ci" ? 2 : 1)
+      expected_checkouts = (mode == "ci" ? 6 : 1)
       if (checkout_steps != expected_checkouts || invalid != 0) {
         exit 1
       }
@@ -596,6 +603,14 @@ assert_deploy_runner_group() {
 }
 
 require_file "$ci" "CI"
+workflow_count=0
+for workflow in "$repo_root"/.github/workflows/*.yml "$repo_root"/.github/workflows/*.yaml; do
+  [ -e "$workflow" ] || continue
+  case "$workflow" in "$ci"|"$deploy") ;; *) printf '%s\n' "unapproved workflow" >&2; exit 1 ;; esac
+  workflow_count=$((workflow_count + 1))
+done
+require_file "$ci" "CI"
+test "$workflow_count" -eq 2
 require_file "$deploy" "deploy"
 
 assert_top_level_profile "$ci" "CI"
@@ -608,6 +623,9 @@ forbid_ere '[$][{][{][^}]*secrets([^[:alnum:]_]|$)' "$ci" "CI must not consume a
 forbid_ere '[$][{][{][^}]*secrets([^[:alnum:]_]|$)' "$deploy" "deploy must not consume any secrets context"
 forbid_ere '(^|[;&|[:space:]])set[[:space:]]+(-[A-Za-z]*x[A-Za-z]*|-o[[:space:]]+xtrace)([;&|[:space:]]|$)' "$ci" "CI must not enable shell xtrace"
 forbid_ere '(^|[;&|[:space:]])set[[:space:]]+(-[A-Za-z]*x[A-Za-z]*|-o[[:space:]]+xtrace)([;&|[:space:]]|$)' "$deploy" "deploy must not enable shell xtrace"
+forbid_ere 'pull_request_target' "$ci" "pull_request_target is forbidden"
+forbid_ere 'pull_request_target' "$deploy" "pull_request_target is forbidden"
+forbid_ere 'self-hosted' "$ci" "CI must never use self-hosted runners"
 assert_ci_jobs
 assert_only_deploy_job
 assert_actions "$ci" "CI" "ci"
@@ -634,7 +652,7 @@ forbid_ere '(docker( compose)?[[:space:]].*logs|(^|[[:space:]])(cat|head|tail|pr
 require_line '          docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init' "$deploy" "model initialization must stay inside the gated deploy job"
 forbid_ere '(docker[[:space:]].*prune|docker[[:space:]]+volume[[:space:]]+rm|docker[[:space:]]+compose.*down.*(--volumes|-v)|rm[[:space:]].*ollama-data)' "$deploy" "deploy must preserve the model volume"
 
-require_line '          umask 077' "$ci" "CI temporary configuration files must default to private permissions"
+require_line "          umask 077" "$ci" "CI temporary configuration files must default to private permissions"
 require_line "          tunnel_env=\"\$(mktemp \"\$RUNNER_TEMP/llm-tunnel.XXXXXX\")\"" "$ci" "CI Tunnel environment file must use a unique path"
 require_line "          rendered=\"\$(mktemp \"\$RUNNER_TEMP/llm-compose.XXXXXX\")\"" "$ci" "CI rendered configuration must use a unique path"
 require_line '          umask 077' "$deploy" "deploy temporary configuration files must default to private permissions"
@@ -646,4 +664,48 @@ require_line "          chmod 600 \"\$rendered\"" "$deploy" "deploy rendered con
 require_line "          jq -e '.services.ollama.ports == null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify the rendered no-port configuration"
 require_line "          test \"\$(docker inspect -f '{{len .HostConfig.PortBindings}}' \"\$ollama_id\")\" = 0" "$deploy" "deploy must inspect the final runtime port bindings"
 
+# Scanner references, input binding, and privacy are part of the deployment boundary.
+require_line "            ghcr.io/google/osv-scanner:v2.5.1@sha256:1547b7c2783d4f266b24fe86ab4dfc18d058588244c58384ac9f56dddb304511 \\" "$ci" "OSV scanner image must match the audited digest"
+require_line "            scan source --recursive /src" "$ci" "OSV must scan the full dependency inventory"
+require_line "          docker run --rm --platform linux/amd64 --cap-drop ALL \\" "$ci" "OSV must drop capabilities on the audited platform"
+require_line "            --security-opt no-new-privileges --read-only \\" "$ci" "OSV must prevent privilege escalation and writes"
+require_line "            --tmpfs /tmp:rw,noexec,nosuid,size=256m --env XDG_CACHE_HOME=/tmp/osv-cache \\" "$ci" "OSV cache must be bounded and ephemeral"
+require_line "            --volume \"\$GITHUB_WORKSPACE:/src:ro\" \\" "$ci" "OSV checkout must be read-only"
+require_line "          version: 3.97.4@sha256:d366c22dadaeaf5ce5686035028deb97d365233cd7c9955f424dac4612c3ef25" "$ci" "TruffleHog version must match the audited digest"
+require_line "          extra_args: --results=verified --fail --no-update --fail-on-scan-errors --log-level=-1" "$ci" "the pinned action must block verified secrets; the combined all-status gate must also run"
+require_ci_property security '        run: node --test scripts/ci/secret-findings-test.mjs scripts/ci/secret-findings-mutations-test.mjs'
+require_secret_gate_property '        run: node scripts/ci/secret-findings-gate.mjs'
+require_secret_gate_property "        if: \${{ always() }}"
+require_secret_gate_property "          BASE_SHA: \${{ needs.changes.outputs.scan_base }}"
+require_secret_gate_property "          HEAD_SHA: \${{ needs.changes.outputs.scan_head }}"
+require_line "          base: \${{ needs.changes.outputs.scan_base }}" "$ci" "TruffleHog must use the validated event base"
+require_line "          head: \${{ needs.changes.outputs.scan_head }}" "$ci" "TruffleHog must use an explicit validated head"
+require_line "          PR_BASE: \${{ github.event.pull_request.base.sha }}" "$ci" "PR base SHA required"
+require_line "          PR_HEAD: \${{ github.event.pull_request.head.sha }}" "$ci" "PR head SHA required"
+require_line "          PUSH_BEFORE: \${{ github.event.before }}" "$ci" "push before SHA required"
+require_line "          PUSH_AFTER: \${{ github.event.after }}" "$ci" "push after SHA required"
+require_line "            0000000000000000000000000000000000000000)" "$ci" "initial pushes require explicit full-head handling"
+require_line "              base=; diff_base=\$(git hash-object -t tree /dev/null) ;;" "$ci" "initial push must scan reachable head and classify its tree"
+require_line "          test -n \"\$head\"" "$ci" "empty scan head must fail"
+require_line "          test \"\$base\" != \"\$head\"" "$ci" "empty/equal scan range must fail"
+require_line "          git cat-file -e \"\$head^{commit}\"" "$ci" "scan head must resolve"
+forbid_ere '(--only-verified|--exclude|--skip|--no-verification|--json|--no-github-actions|continue-on-error|dependency-verification[ =]+(off|lenient)|--severity|--ignore)' "$ci" "scans and verification must not be weakened"
+test "$(grep -c -- '--results=' "$ci")" -eq 1
+require_line "          sh scripts/ci/dependency-contract-test.sh" "$ci" "dependency reproducibility contract must run"
+require_ci_property changes '          sh scripts/ci/changed-areas-test.sh'
+require_line "          sh scripts/ci/dependency-contract-test.sh --diff-stdin <\"\$changed\"" "$ci" "changed dependencies must be paired with their locks"
+require_line "    needs: [changes, frontend, backend, infra, integration, security]" "$ci" "ci-gate must depend on every verification job"
+require_line "    if: \${{ always() }}" "$ci" "ci-gate must always run"
+require_line "          CHANGES_RESULT: \${{ needs.changes.result }}" "$ci" "gate must check changes result"
+require_line "          SECURITY_RESULT: \${{ needs.security.result }}" "$ci" "gate must check security result"
+require_line "          test \"\$CHANGES_RESULT\" = success" "$ci" "changes failures must block the gate"
+require_line "          test \"\$SECURITY_RESULT\" = success" "$ci" "security failures must block the gate"
+require_line "              true:success|false:skipped) ;;" "$ci" "gate must enforce selected success and unselected skip"
+for area in FRONTEND BACKEND INFRA INTEGRATION; do
+  expected=$(printf '          check_job "$%s_SELECTED" "$%s_RESULT"' "$area" "$area")
+  require_ci_property ci-gate "$expected"
+  lower=$(printf '%s' "$area" | tr '[:upper:]' '[:lower:]')
+  require_ci_property ci-gate "          ${area}_SELECTED: \${{ needs.changes.outputs.$lower }}"
+  require_ci_property ci-gate "          ${area}_RESULT: \${{ needs.$lower.result }}"
+done
 printf '%s\n' "workflow security tests passed"

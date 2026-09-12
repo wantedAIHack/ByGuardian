@@ -27,9 +27,26 @@ export default defineConfig({
   ],
   server: { port: 5173 },
   test: {
-    environment: 'jsdom',
-    globals: true,
-    setupFiles: ['./src/test/setup.ts'],
-    css: true,
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'ui',
+          include: ['src/**/*.{test,spec}.{ts,tsx}'],
+          environment: 'jsdom',
+          globals: true,
+          setupFiles: ['./src/test/setup.ts'],
+          css: true,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'assets',
+          include: ['scripts/**/*.{test,spec}.mjs'],
+          environment: 'node',
+        },
+      },
+    ],
   },
 });
