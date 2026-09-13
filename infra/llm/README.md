@@ -168,9 +168,11 @@ itself, so a `.git` directory, `.env` file, key, token, or other credential
 that happens to live in the checkout can never reach a release. It refuses a
 non-lowercase-hex SHA, a checkout whose HEAD does not match it, a symlinked
 source path, a missing or world-writable source file, and a pre-existing
-release directory whose actual bytes no longer match what would be staged
-(catching both a dirty checkout and direct tampering with an already-staged
-release). Staging the same commit again is a no-op reuse. Releases are never
+release directory whose actual contents no longer match what would be
+staged — both a changed byte in one of the seven allowlisted files and a
+wholly different file added to the release directory (catching both a dirty
+checkout and direct tampering with an already-staged release). Staging the
+same commit again is a no-op reuse. Releases are never
 deleted, so every prior SHA stays available for rollback: re-running
 `stage-runtime.sh` with an earlier commit's SHA and a checkout pinned to that
 commit stages nothing new and flips `current` back to it. `current` is

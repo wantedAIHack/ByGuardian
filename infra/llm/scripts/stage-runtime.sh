@@ -163,6 +163,27 @@ build_manifest() {
   done
 }
 
+# build_manifest only ever looks *at* the allowlisted paths, so a file
+# *added* to an already-staged release -- not a changed byte in one of the
+# seven allowlisted files, but a wholly new path -- is invisible to it: the
+# hash comparison above would find every allowlisted hash still matching and
+# call the release untouched. This lists every regular file actually present
+# under `root` and compares that set (not its content) to exactly the
+# allowlist plus the manifest file itself, so an addition anywhere in the
+# tree is caught even though its bytes are never hashed. Only meaningful for
+# an existing release directory -- the checkout root legitimately contains
+# the rest of the repository, which must stay irrelevant here.
+list_release_files() {
+  dir=$1
+  (CDPATH='' cd -- "$dir" && find . -type f) | sed 's#^\./##' | LC_ALL=C sort
+}
+
+expected_release_files="$(
+  printf '%s\n' "$allowlist" | sed '/^$/d'
+  printf '%s\n' 'RELEASE_MANIFEST.sha256'
+)"
+expected_release_files="$(printf '%s\n' "$expected_release_files" | LC_ALL=C sort)"
+
 manifest_content="$(build_manifest "$checkout_root")"
 release_dir="$releases_path/$sha"
 
@@ -177,52 +198,18 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-if [ -e "$release_dir" ]; then
-  [ -d "$release_dir" ] || fail "release path exists and is not a directory: $sha"
-  existing_manifest_content="$(build_manifest "$release_dir")"
-  [ "$existing_manifest_content" = "$manifest_content" ] ||
-    fail "release $sha already exists with different content"
-else
-  work_dir="$(mktemp -d "$releases_path/.stage.XXXXXX")"
-  chmod 0750 "$work_dir"
-  mkdir -p "$work_dir/scripts"
-  for rel in $allowlist; do
-    [ -n "$rel" ] || continue
-    dest="$work_dir/$rel"
-    cp -- "$checkout_root/$rel" "$dest"
-    chmod "$(mode_for "$rel")" "$dest"
-  done
-  printf '%s' "$manifest_content" >"$work_dir/RELEASE_MANIFEST.sha256"
-  chmod 0644 "$work_dir/RELEASE_MANIFEST.sha256"
-  # A per-file fsync isn't reachable from POSIX sh without extra tooling; the
-  # POSIX `sync` utility is the portable best-effort durability barrier before
-  # the rename below makes the release visible under its SHA.
-  sync
-  mv -- "$work_dir" "$release_dir"
-  work_dir=''
-fi
-
-# --- flip current atomically -------------------------------------------------
-#
-# A plain `mv tmp_link current_path` is unsafe once `current_path` already
-# exists as a symlink to a directory: both GNU and BSD mv resolve an existing
-# destination with stat(2) (which follows symlinks) to decide whether to
-# rename onto it or move *into* it, so a second deploy would silently nest
-# the new symlink inside the previous release directory instead of replacing
-# `current`. `-T` (GNU, --no-target-directory) and `-h` (BSD, do not follow a
-# destination symlink) both suppress that directory-target heuristic and make
-# mv perform a direct rename(2), which is what actually replaces a symlink
-# atomically.
-#
-# Which flag this `mv` accepts is probed once, against a disposable pair of
-# paths, rather than tried-and-caught against the real flip: `mv -T` failing
-# on the real current_path can mean the flag is unsupported (BSD), but it can
-# just as easily mean a genuine, non-recoverable failure -- EACCES, ENOSPC,
-# current having become a non-empty directory -- and chaining that attempt
-# into `mv -h` as a blind fallback would discard mv's real stderr and replace
-# it with "invalid option -- 'h'", a portability complaint that was never the
-# actual problem. Probing first means the real flip below runs exactly once,
-# with its own stderr intact.
+# Which flag this system's `mv` accepts (`-T` GNU --no-target-directory, `-h`
+# BSD, neither following an existing destination symlink into "move inside
+# it" behaviour) is probed once, against a disposable pair of paths, rather
+# than tried-and-caught against a real path: a failing `mv -T` there could
+# mean the flag is unsupported (BSD), but could just as easily mean a
+# genuine, non-recoverable failure -- EACCES, ENOSPC, the destination having
+# become a non-empty directory -- and chaining that attempt into `mv -h` as a
+# blind fallback would discard mv's real stderr and replace it with "invalid
+# option -- 'h'", a portability complaint that was never the actual problem.
+# Probing first means every real mv below (both the release-directory rename
+# and the current-symlink flip) runs exactly once, with its own stderr
+# intact.
 mv_no_target_flag() {
   probe_dir="$(mktemp -d)"
   : >"$probe_dir/a"
@@ -244,6 +231,54 @@ mv_no_target_flag() {
 no_target_flag="$(mv_no_target_flag)" ||
   fail "this system's mv supports neither -T (GNU --no-target-directory) nor -h (BSD); cannot atomically replace current"
 
+if [ -e "$release_dir" ]; then
+  [ -d "$release_dir" ] || fail "release path exists and is not a directory: $sha"
+  actual_release_files="$(list_release_files "$release_dir")"
+  [ "$actual_release_files" = "$expected_release_files" ] ||
+    fail "release $sha already exists with different content"
+  existing_manifest_content="$(build_manifest "$release_dir")"
+  [ "$existing_manifest_content" = "$manifest_content" ] ||
+    fail "release $sha already exists with different content"
+else
+  work_dir="$(mktemp -d "$releases_path/.stage.XXXXXX")"
+  chmod 0750 "$work_dir"
+  mkdir -p "$work_dir/scripts"
+  for rel in $allowlist; do
+    [ -n "$rel" ] || continue
+    dest="$work_dir/$rel"
+    cp -- "$checkout_root/$rel" "$dest"
+    chmod "$(mode_for "$rel")" "$dest"
+  done
+  printf '%s' "$manifest_content" >"$work_dir/RELEASE_MANIFEST.sha256"
+  chmod 0644 "$work_dir/RELEASE_MANIFEST.sha256"
+  # A per-file fsync isn't reachable from POSIX sh without extra tooling; the
+  # POSIX `sync` utility is the portable best-effort durability barrier before
+  # the rename below makes the release visible under its SHA.
+  sync
+  # The plain `[ -e "$release_dir" ]` check above is TOCTOU-racy (it can also
+  # report false on a dangling symlink), so the rename itself must not trust
+  # it: without -T/-h, if release_dir has appeared as a directory (or a
+  # symlink to one) by the time this mv runs, both GNU and BSD mv would
+  # silently move work_dir *inside* it instead of renaming onto it -- leaving
+  # a release whose Compose files are nested one level too deep and current
+  # pointed at a directory with none of the files the unit expects. Reusing
+  # the same no_target_flag probe used for the current flip below closes that
+  # the same way.
+  mv "$no_target_flag" -- "$work_dir" "$release_dir"
+  work_dir=''
+fi
+
+# --- flip current atomically -------------------------------------------------
+#
+# A plain `mv tmp_link current_path` is unsafe once `current_path` already
+# exists as a symlink to a directory: both GNU and BSD mv resolve an existing
+# destination with stat(2) (which follows symlinks) to decide whether to
+# rename onto it or move *into* it, so a second deploy would silently nest
+# the new symlink inside the previous release directory instead of replacing
+# `current`. `-T` (GNU, --no-target-directory) and `-h` (BSD, do not follow a
+# destination symlink) both suppress that directory-target heuristic and make
+# mv perform a direct rename(2), which is what actually replaces a symlink
+# atomically.
 tmp_link="$current_dir/.current.$$"
 rm -f "$tmp_link"
 ln -s "$release_dir" "$tmp_link"

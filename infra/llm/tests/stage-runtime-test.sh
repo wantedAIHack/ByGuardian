@@ -49,6 +49,14 @@ new_fixture() {
   chmod 0644 "$checkout/Dockerfile" "$checkout"/compose*.yml
   chmod 0755 "$checkout"/scripts/*.sh
 
+  # A checkout that never contains anything resembling a credential proves
+  # nothing about the allowlist -- it would "pass" identically whether or not
+  # stage-runtime.sh actually excludes credentials. These are obvious
+  # synthetic sentinels, not real secrets, planted purely so the "credential
+  # never reaches a release" assertions below have something to catch.
+  printf 'NEXTVISIT_FIXTURE_ENV_SENTINEL=not-a-real-secret\n' >"$checkout/.env"
+  printf 'nextvisit-fixture-secret-key-sentinel\n' >"$checkout/scripts/secret.key"
+
   git -C "$checkout" init -q -b main
   git -C "$checkout" config user.name 'Stage Fixture'
   git -C "$checkout" config user.email 'stage-fixture@example.invalid'
@@ -140,14 +148,29 @@ if ! cmp -s "$expected_listing" "$actual_listing"; then
 fi
 [ ! -e "$release_dir/.git" ] || { printf 'clean stage: .git must never be copied\n' >&2; exit 1; }
 [ ! -e "$release_dir/.env" ] || { printf 'clean stage: .env must never be copied\n' >&2; exit 1; }
+[ ! -e "$release_dir/scripts/secret.key" ] ||
+  { printf 'clean stage: scripts/secret.key must never be copied\n' >&2; exit 1; }
 
 # --- double staging is a true no-op reuse, not merely a successful re-copy --
 
-: >"$release_dir/.sentinel-untouched"
 run_stage "$sha" "$checkout"
 expect_pass "second stage of the same commit" "$sha"
-test -f "$release_dir/.sentinel-untouched"
 assert_current_target "second stage of the same commit" "$release_dir"
+
+# --- rejects: a file *added* to an already-staged release, not merely a
+# changed byte in one of the allowlisted files -----------------------------
+# build_manifest alone only ever hashes allowlisted paths, so a wholly new
+# path dropped into an already-staged release used to be invisible to it: a
+# planted file like this one used to be tolerated as an untouched reuse (see
+# git history for the fixture this replaced). list_release_files' file-set
+# comparison in stage-runtime.sh is what now catches it.
+
+: >"$release_dir/.sentinel-added"
+run_stage "$sha" "$checkout"
+expect_fail "file added to an already-staged release" \
+  "release $sha already exists with different content"
+assert_current_target "release with an added file leaves current unchanged" "$release_dir"
+rm -f "$release_dir/.sentinel-added"
 
 # --- rejects: non-40-hex / non-lowercase commit SHA -------------------------
 
