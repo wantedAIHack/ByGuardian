@@ -4,15 +4,41 @@
 외부 설정과 Ubuntu 실기 검증을 순서대로 정리한다. 상세 명령과 장애 대응은
 [`README.md`](./README.md)를 함께 참고한다.
 
-## 현재 상태 — 2026-09-09
+## 현재 상태 — 2026-09-14 (commit `06fd5f3`)
+
+이 절은 2026-09-09에 작성된 뒤 파일 전용 Tunnel secret, 멱등한 2단계 Ubuntu
+호스트 bootstrap, immutable release와 systemd 재부팅 복구 유닛, 응답 본문을
+노출하지 않는 Cloudflare Access smoke, 강화된 단일 목적 배포 workflow가
+추가되는 동안 갱신되지 않아 실제와 어긋나 있었다. 아래가 현재 상태다.
 
 - [x] 백엔드의 템플릿 우선 비동기 LLM 연동과 실패 시 전체 템플릿 폴백 구현
-- [x] Ollama CPU/GPU, 모델 초기화, Cloudflare Tunnel Compose 구성
+- [x] Ollama CPU/GPU, 모델 초기화, Cloudflare Tunnel Compose 구성 (파일 전용
+      Tunnel secret 설계 포함)
 - [x] macOS CPU에서 고정 이미지 빌드, `qwen3:4b-q8_0` 다운로드, 실제 smoke 완료
-- [x] Java 21 전체 테스트 250개와 shell/workflow/Compose 정적 검사 통과
-- [ ] Ubuntu/NVIDIA 노트북 실기 검증
-- [ ] GitHub 조직 runner group과 Cloudflare 외부 설정
-- [ ] 자동 배포 및 백엔드 LLM 활성화
+      (2026-09-09, macOS 개발 머신에서 1회성으로 수행 — Ubuntu 실기 검증이 아님)
+- [x] `infra/llm`의 모든 shell 스크립트 shellcheck, `infra/llm/tests/`의 10개
+      테스트 스위트, CPU/GPU/Tunnel 3단계 Compose 구조 검증(합성 토큰 파일 사용)을
+      각각 연속 2회 실행해 두 번 모두 동일하게 통과 (오프라인, commit `06fd5f3`,
+      2026-09-14 실행)
+- [x] `toolchain-test.sh`, 프런트엔드 `ci`/`test`/`typecheck`/`build`, 백엔드
+      `./gradlew --dependency-verification strict clean test`,
+      `integration-e2e.sh`(PostgreSQL + 브라우저 여정, LLM 비활성),
+      `actionlint`까지 hosted-동등 명령을 오프라인으로 전부 통과 (commit
+      `06fd5f3`, 2026-09-14 실행)
+- [ ] Ubuntu/NVIDIA 노트북 실기 검증 — 노트북이 꺼져 있어 전혀 수행되지 않음
+      (실패가 아니라 아직 시작하지 않은 상태): `nextvisit-runner` 비밀번호
+      회전/잠금 확인, `bootstrap-ubuntu-host.sh apply` 실행, 재부팅 복구,
+      GPU 추론(`ollama ps`의 `100% GPU`) 확인 중 어느 것도 실기로 증명되지 않았다.
+- [ ] Cloudflare/GitHub 외부 설정 — Access 정책 구성, Tunnel 연결, 외부(EC2)
+      Access smoke, GitHub runner group을 이 저장소와 `main` 배포 workflow로
+      제한하는 작업 중 어느 것도 수행되지 않았다.
+- [ ] 자동 배포 및 백엔드 LLM 활성화 — `LLM_DEPLOY_ENABLED`와
+      `NEXTVISIT_LLM_ENABLED`는 계속 `false`이며, 둘 다 위 두 항목이 실기로
+      전부 끝난 뒤에만 켠다.
+
+이 오프라인 실행 전체의 명령, 결과, 렌더링 검증 내역은
+`.superpowers/sdd/2026-09-10-ubuntu-llm-and-cloudflare-access/task-6-report.md`에
+있다.
 
 ## 완료 조건
 
