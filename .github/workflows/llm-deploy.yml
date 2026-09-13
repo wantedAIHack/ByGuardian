@@ -5,11 +5,17 @@ name: Deploy LLM Laptop
 # /opt/nextvisit/llm/current atomically; infra/llm/systemd/nextvisit-llm.service
 # recovers the exact three-file stack from that release after a reboot.
 # /opt/nextvisit/llm is now nextvisit-runner-owned (bootstrap-ubuntu-host.sh),
-# so this unprivileged job can flip `current` itself. This wiring is
-# deliberately minimal -- staging, then operating out of `current` instead of
-# the checkout -- and stops there; the full hardening of this job (trust
-# boundaries, concurrency, the no-port/no-token assertions) is a separate,
-# later change.
+# so this unprivileged job can flip `current` itself.
+#
+# This job is the trust boundary for the only self-hosted runner in this
+# repository: infra/llm/tests/workflows-test.sh,
+# infra/llm/tests/workflows-runner-group-test.sh, and
+# infra/llm/tests/llm-deploy-mutation-test.sh together prove that no PR, fork,
+# or unreviewed workflow edit can loosen the exact main-only gate, the
+# group+labels runner selection, the pinned-SHA credential-less checkout, or
+# the no-port/no-token assertions below. Re-running the same offline test
+# suite here, on the exact commit this job just checked out, is deliberate
+# defense in depth against a compromise between CI's check and this run.
 
 on:
   push:
@@ -41,6 +47,12 @@ jobs:
           ref: ${{ github.sha }}
           clean: true
           persist-credentials: false
+
+      - name: Run offline infra test suite
+        run: |
+          for test in infra/llm/tests/*.sh; do
+            sh "$test"
+          done
 
       - name: Verify Ubuntu GPU host
         run: infra/llm/scripts/verify-host.sh gpu
@@ -75,3 +87,16 @@ jobs:
           test -n "$ollama_id"
           test "$(docker inspect -f '{{len .HostConfig.PortBindings}}' "$ollama_id")" = 0
           test "$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps --status running --services | grep -Ec '^(ollama|cloudflared)$')" = 2
+          jq -e '.secrets.tunnel_token.file != null' "$rendered" >/dev/null
+          jq -e '.secrets.tunnel_token.environment == null' "$rendered" >/dev/null
+          jq -e '.services.cloudflared.environment == null' "$rendered" >/dev/null
+          jq -e '.services.cloudflared.labels == null' "$rendered" >/dev/null
+          jq -e '.services.cloudflared.command == ["tunnel","--no-autoupdate","run","--token-file","/run/secrets/tunnel_token"]' "$rendered" >/dev/null
+          cloudflared_id="$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps -q cloudflared)"
+          test -n "$cloudflared_id"
+          test "$(docker inspect -f '{{json .Config.Cmd}}' "$cloudflared_id")" = '["tunnel","--no-autoupdate","run","--token-file","/run/secrets/tunnel_token"]'
+
+      - name: Verify recovery unit remains enabled and active
+        run: |
+          test "$(systemctl is-enabled nextvisit-llm.service)" = enabled
+          test "$(systemctl is-active nextvisit-llm.service)" = active

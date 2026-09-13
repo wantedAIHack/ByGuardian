@@ -675,6 +675,41 @@ require_line "          chmod 600 \"\$rendered\"" "$deploy" "deploy rendered con
 require_line "          jq -e '.services.ollama.ports == null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify the rendered no-port configuration"
 require_line "          test \"\$(docker inspect -f '{{len .HostConfig.PortBindings}}' \"\$ollama_id\")\" = 0" "$deploy" "deploy must inspect the final runtime port bindings"
 
+# The deploy job re-runs the same offline policy/unit test suite on the exact
+# commit it just checked out -- defense in depth against a compromise between
+# CI's check of a different ref and this run's actual, privileged execution.
+require_line '      - name: Run offline infra test suite' "$deploy" "deploy must re-run the offline infra test suite on the checked-out commit"
+require_line '          for test in infra/llm/tests/*.sh; do' "$deploy" "deploy offline test suite must iterate every infra/llm test"
+require_line "            sh \"\$test\"" "$deploy" "deploy offline test suite must execute each test with sh"
+require_line '          done' "$deploy" "deploy offline test suite loop must be closed"
+
+require_line "        run: infra/llm/scripts/stage-runtime.sh \"\$GITHUB_SHA\" \"\$GITHUB_WORKSPACE\"" "$deploy" "deploy must stage the exact checked-out commit before operating on /opt/nextvisit/llm/current"
+if [ "$(grep -Fxc '        working-directory: /opt/nextvisit/llm/current' "$deploy")" -ne 2 ]; then
+  printf '%s\n' "deploy compose steps must operate only inside the staged /opt/nextvisit/llm/current release" >&2
+  exit 1
+fi
+forbid_ere 'working-directory:[[:space:]]*([$][{][{][[:space:]]*github\.workspace|[$]GITHUB_WORKSPACE)' "$deploy" "deploy must never operate directly from the Actions checkout workspace"
+
+# The Tunnel token is a Compose file-secret; these lines prove -- structurally,
+# on the exact rendered final configuration -- that it can never be sourced
+# from (or leak into) any service's environment, command, or labels.
+require_line "          jq -e '.secrets.tunnel_token.file != null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify the Tunnel secret is file-sourced"
+require_line "          jq -e '.secrets.tunnel_token.environment == null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify the Tunnel secret is never environment-sourced"
+require_line "          jq -e '.services.cloudflared.environment == null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify cloudflared defines no environment map"
+require_line "          jq -e '.services.cloudflared.labels == null' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify cloudflared defines no custom labels"
+require_line "          jq -e '.services.cloudflared.command == [\"tunnel\",\"--no-autoupdate\",\"run\",\"--token-file\",\"/run/secrets/tunnel_token\"]' \"\$rendered\" >/dev/null" "$deploy" "deploy must verify the exact rendered cloudflared command"
+require_line "          cloudflared_id=\"\$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps -q cloudflared)\"" "$deploy" "deploy must resolve the running cloudflared container id"
+require_line "          test -n \"\$cloudflared_id\"" "$deploy" "deploy must confirm the cloudflared container exists"
+require_line "          test \"\$(docker inspect -f '{{json .Config.Cmd}}' \"\$cloudflared_id\")\" = '[\"tunnel\",\"--no-autoupdate\",\"run\",\"--token-file\",\"/run/secrets/tunnel_token\"]'" "$deploy" "deploy must inspect the final runtime cloudflared command"
+
+# The reboot-recovery unit is installed and enabled by the repository owner,
+# never by this job (which must stay unprivileged); the job only proves that
+# state was not disturbed, using the unprivileged read subcommands.
+require_line '      - name: Verify recovery unit remains enabled and active' "$deploy" "deploy must verify the recovery unit remains enabled and active"
+require_line "          test \"\$(systemctl is-enabled nextvisit-llm.service)\" = enabled" "$deploy" "deploy must verify the recovery unit is enabled"
+require_line "          test \"\$(systemctl is-active nextvisit-llm.service)\" = active" "$deploy" "deploy must verify the recovery unit is active"
+forbid_ere '(^|[[:space:]])systemctl[[:space:]]+(start|stop|restart|reload|enable|disable|mask|unmask|daemon-reload|edit|set-property|kill)([[:space:]]|$)' "$deploy" "deploy must never call a privileged systemctl subcommand"
+
 # Scanner references, input binding, and privacy are part of the deployment boundary.
 require_line "            ghcr.io/google/osv-scanner:v2.5.1@sha256:1547b7c2783d4f266b24fe86ab4dfc18d058588244c58384ac9f56dddb304511 \\" "$ci" "OSV scanner image must match the audited digest"
 require_line "            scan source --recursive /src" "$ci" "OSV must scan the full dependency inventory"

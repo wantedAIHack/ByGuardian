@@ -68,6 +68,18 @@ perl -0pi -e 's{run: infra/llm/scripts/verify-tunnel-token-file.sh /etc/nextvisi
   "$fixture/.github/workflows/llm-deploy.yml"
 expect_rejected "deploy reverting to the unverified legacy environment file check"
 
+# The runner group is only as trustworthy as what can reach it: a fork or an
+# unreviewed PR must never gain a trigger that lands work on this group.
+prepare_fixture
+perl -0pi -e 's{  workflow_dispatch:\n}{  workflow_dispatch:\n  pull_request:\n    branches: [main]\n}' \
+  "$fixture/.github/workflows/llm-deploy.yml"
+expect_rejected "deploy gaining a pull_request trigger onto the self-hosted runner group"
+
+prepare_fixture
+perl -0pi -e 's{  workflow_dispatch:\n}{  workflow_dispatch:\n  pull_request_target:\n    branches: [main]\n}' \
+  "$fixture/.github/workflows/llm-deploy.yml"
+expect_rejected "deploy gaining a pull_request_target trigger onto the self-hosted runner group"
+
 mutate_ci() {
   prepare_fixture
   perl -0pi -e "$1" "$fixture/.github/workflows/ci.yml"

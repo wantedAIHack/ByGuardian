@@ -245,7 +245,7 @@ sudo install -o root -g root -m 0644 \
   "$repo_dir/infra/llm/systemd/nextvisit-llm.service" \
   /etc/systemd/system/nextvisit-llm.service
 sudo systemctl daemon-reload
-sudo systemctl enable nextvisit-llm.service
+sudo systemctl enable --now nextvisit-llm.service
 )
 ```
 
@@ -256,6 +256,7 @@ sudo systemctl enable nextvisit-llm.service
 - [ ] `/opt/nextvisit/llm/current`가 방금 만든 release SHA를 가리키는지
       `readlink /opt/nextvisit/llm/current`로 확인한다.
 - [ ] `systemctl is-enabled nextvisit-llm.service`가 `enabled`인지 확인한다.
+- [ ] `systemctl is-active nextvisit-llm.service`가 `active`인지 확인한다.
 
 5절에서 자동 배포가 활성화된 뒤에는 매 `main` 배포가
 `stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"`를 실행해 새 release를
