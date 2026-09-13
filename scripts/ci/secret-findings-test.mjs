@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { createFindingGate, HISTORICAL_FINDINGS, runQuiet, scanGate, SCANNER_IMAGE } from './secret-findings-gate.mjs';
 
@@ -141,13 +144,16 @@ test('the full process boundary never prints raw stdout or stderr', () => {
   assert.equal((result.stdout + result.stderr).includes(raw), false);
 });
 
-function scannerFixture({ stepFailure, digest = SCANNER_IMAGE.replace(':3.97.4@', '@'), lines = [], scannerCode = 0 } = {}) {
+function scannerFixture({ stepFailure, digest = SCANNER_IMAGE.replace(':3.97.4@', '@'), lines = [], scannerCode = 0,
+  commits = [commit] } = {}) {
   const calls = [];
   const execute = async (command, args, options = {}) => {
     calls.push([command, args]);
     if (command === 'git') {
-      if (stepFailure === 'range') return { code: 1, output: '' };
-      return { code: 0, output: args.includes('merge-base') ? 'c'.repeat(40) + '\n' : '' };
+      // A failed Git process can still emit syntactically valid partial output.
+      if (stepFailure === 'range') return { code: 1, output: commit + '\n' };
+      return { code: 0, output: args.includes('merge-base') ? 'c'.repeat(40) + '\n' :
+        args.includes('rev-list') ? commits.join('\n') + '\n' : '' };
     }
     if (args[0] === 'pull') return { code: stepFailure === 'download' ? 1 : 0, output: '' };
     if (args[0] === 'image') return { code: 0, output: JSON.stringify([digest]) };
@@ -175,6 +181,43 @@ test('empty validated base scans the complete reachable head', async () => {
   await scanGate({ repository: process.cwd(), base: '', head: commit, execute: fixture.execute });
   const args = fixture.calls.find(([command, args]) => command === 'docker' && args[0] === 'run')[1];
   assert.equal(args[args.indexOf('--since-commit') + 1], '');
+});
+for (const base of ['', 'b'.repeat(40)]) {
+  test('an empty effective commit set fails before either artifact or scanner execution', async () => {
+    const fixture = scannerFixture({ commits: [] });
+    await assert.rejects(scanGate({ repository: process.cwd(), base, head: commit, execute: fixture.execute }), generalFailure);
+    assert.equal(fixture.calls.some(([command]) => command === 'docker'), false);
+  });
+}
+test('a real reverse force-push must use the upstream full-head fallback, never an empty range', async () => {
+  const repository = mkdtempSync(path.join(tmpdir(), 'task8-reverse-range-test-'));
+  try {
+    const git = async args => {
+      const result = await runQuiet('git', ['-C', repository, ...args], { collect: true });
+      assert.equal(result.code, 0);
+      return result.output.trim();
+    };
+    await git(['init', '-q']);
+    const makeCommit = () => git(['-c', 'user.name=Range Fixture', '-c', 'user.email=range-fixture@example.invalid',
+      'commit', '--quiet', '--allow-empty', '-m', 'range fixture']);
+    await makeCommit();
+    const head = await git(['rev-parse', 'HEAD']);
+    await makeCommit();
+    const base = await git(['rev-parse', 'HEAD']);
+    assert.notEqual(base, head);
+    assert.equal(await git(['merge-base', base, head]), head);
+    assert.equal(await git(['rev-list', head, `^${head}`, '--']), '');
+    const fixture = scannerFixture();
+    const execute = (command, args, options) => command === 'git' ? runQuiet(command, args, options) : fixture.execute(command, args, options);
+    await assert.rejects(scanGate({ repository, base, head, execute }), generalFailure);
+    assert.equal(fixture.calls.length, 0);
+    await scanGate({ repository, base: '', head, execute });
+    const run = fixture.calls.find(([, args]) => args[0] === 'run')[1];
+    assert.equal(run[run.indexOf('--since-commit') + 1], '');
+    assert.equal(run[run.indexOf('--branch') + 1], head);
+  } finally {
+    rmSync(repository, { recursive: true, force: true });
+  }
 });
 for (const stepFailure of ['range', 'download', 'scanner']) {
   test(`${stepFailure} errors fail closed without raw diagnostics`, async () => {

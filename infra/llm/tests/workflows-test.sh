@@ -688,6 +688,8 @@ require_line "            0000000000000000000000000000000000000000)" "$ci" "init
 require_line "              base=; diff_base=\$(git hash-object -t tree /dev/null) ;;" "$ci" "initial push must scan reachable head and classify its tree"
 require_line "          test -n \"\$head\"" "$ci" "empty scan head must fail"
 require_line "          test \"\$base\" != \"\$head\"" "$ci" "empty/equal scan range must fail"
+require_ci_property changes "              merge_base=\$(git merge-base \"\$base\" \"\$head\")"
+require_ci_property changes "              if [ \"\$merge_base\" = \"\$head\" ]; then base=; fi ;;"
 require_line "          git cat-file -e \"\$head^{commit}\"" "$ci" "scan head must resolve"
 forbid_ere '(--only-verified|--exclude|--skip|--no-verification|--json|--no-github-actions|continue-on-error|dependency-verification[ =]+(off|lenient)|--severity|--ignore)' "$ci" "scans and verification must not be weakened"
 test "$(grep -c -- '--results=' "$ci")" -eq 1

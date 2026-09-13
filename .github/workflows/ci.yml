@@ -59,11 +59,15 @@ jobs:
               base=; diff_base=$(git hash-object -t tree /dev/null) ;;
             *)
               git cat-file -e "$base^{commit}"
+              merge_base=$(git merge-base "$base" "$head")
               if [ "$EVENT_NAME" = pull_request ]; then
-                diff_base=$(git merge-base "$base" "$head")
+                diff_base=$merge_base
               else
                 diff_base=$base
-              fi ;;
+              fi
+              # TruffleHog stops at its merge base. A rollback to an ancestor
+              # would scan nothing, so publish full-head mode to BOTH scanners.
+              if [ "$merge_base" = "$head" ]; then base=; fi ;;
           esac
           printf 'scan_base=%s\nscan_head=%s\ndiff_base=%s\n' "$base" "$head" "$diff_base" >>"$GITHUB_OUTPUT"
           # END scan range

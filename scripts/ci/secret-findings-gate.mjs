@@ -116,7 +116,10 @@ export async function scanGate({ repository, base, head, execute = runQuiet }) {
     }
     const commitOutput = await git(['rev-list', head, ...(mergeBase ? [`^${mergeBase}`] : []), '--']);
     const commits = new Set(commitOutput ? commitOutput.split('\n') : []);
-    requireCondition([...commits].every(isCommit));
+    // The workflow must publish a common full-head range for reverse pushes.
+    // Refuse an unnormalized/empty range here instead of silently diverging
+    // from the pinned action's inputs or accepting a vacuous validation.
+    requireCondition(commits.size > 0 && [...commits].every(isCommit));
     const gate = createFindingGate(commits);
 
     // Docker verifies the manifest/layer hashes while pulling this immutable digest.

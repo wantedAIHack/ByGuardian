@@ -30,6 +30,7 @@ const mutants = [
   ['all-status scan narrowed', '--results=verified,unverified,unknown', '--results=verified'],
   ['equal range accepted', ' && base !== head', ''],
   ['range resolution errors ignored', 'requireCondition(result.code === 0);', 'requireCondition(true);'],
+  ['empty effective commit set accepted', 'commits.size > 0 && ', ''],
   ['raw stdout forwarded', "child.stdout.setEncoding('utf8');", "child.stdout.setEncoding('utf8'); child.stdout.pipe(process.stdout);"],
   ['raw stderr forwarded', 'child.stderr.resume();', 'child.stderr.pipe(process.stderr);'],
 ];
@@ -38,7 +39,7 @@ test('the pristine secret contract is green before mutation rejection is counted
   const result = spawnSync(process.execPath, ['--test', '--experimental-test-isolation=none', new URL('./secret-findings-test.mjs', import.meta.url).pathname],
     { encoding: 'utf8', env: childEnvironment });
   assert.equal(result.status, 0);
-  assert(result.stdout.includes('# tests 55') && result.stdout.includes('# fail 0'), 'pristine contract must actually execute');
+  assert(result.stdout.includes('# tests 58') && result.stdout.includes('# fail 0'), 'pristine contract must actually execute');
 });
 
 for (const [name, before, after] of mutants) {

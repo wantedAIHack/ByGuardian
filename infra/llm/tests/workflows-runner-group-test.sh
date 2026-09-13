@@ -86,6 +86,9 @@ mutate_ci 's/GITHUB_WORKSPACE:\/src:ro/GITHUB_WORKSPACE:\/src:rw/' 'writable sca
 mutate_ci 's/test -n "\$head"/true/' 'empty secret scan head'
 mutate_ci 's/test "\$base" != "\$head"/true/' 'equal secret scan range'
 mutate_ci 's/base=; diff_base=\$\(git hash-object -t tree \/dev\/null\)/exit 0/' 'initial push silently skipped'
+mutate_ci 's/then base=; fi/then :; fi/' 'removed reverse-force-push full-head fallback'
+mutate_ci 's/then base=; fi/then diff_base=; fi/' 'fallback changes classification instead of the common scan range'
+mutate_ci 's/base: \$\{\{ needs.changes.outputs.scan_base \}\}/base: original-before-sha/' 'action bypasses the common full-head fallback'
 mutate_ci 's/true:success\|false:skipped/true:success|true:cancelled|false:skipped/' 'cancelled selected job accepted'
 mutate_ci 's/test "\$SECURITY_RESULT" = success/true/' 'ignored security failure'
 mutate_ci 's/(  ci-gate:\n    needs: [^\n]*\n)    if: [^\n]*/${1}    if: false/' 'conditional stable gate'
@@ -196,6 +199,15 @@ grep -qx "diff_base=$empty_tree" "$range_output"
 test "$(git -C "$range_repo" diff --name-only "$empty_tree" "$feature_commit" | wc -l | tr -d ' ')" = 2
 range_case pass EVENT_NAME=push PUSH_BEFORE="$target_commit"
 grep -qx "diff_base=$target_commit" "$range_output"
+range_case pass EVENT_NAME=push PUSH_BEFORE="$target_commit" PUSH_AFTER="$root_commit"
+grep -qx 'scan_base=' "$range_output"
+grep -qx "scan_head=$root_commit" "$range_output"
+grep -qx "diff_base=$target_commit" "$range_output"
+test "$(git -C "$range_repo" rev-list --count "$root_commit" --)" -gt 0
+range_case pass PR_BASE="$target_commit" PR_HEAD="$root_commit"
+grep -qx 'scan_base=' "$range_output"
+grep -qx "scan_head=$root_commit" "$range_output"
+grep -qx "diff_base=$root_commit" "$range_output"
 range_case fail PR_HEAD=''
 range_case fail PR_BASE=''
 range_case fail PR_HEAD=refs/heads/main
