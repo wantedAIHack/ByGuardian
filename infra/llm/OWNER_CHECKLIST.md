@@ -84,36 +84,67 @@ selected_workflows = [<ORG>/<REPO>/.github/workflows/llm-deploy.yml@refs/heads/m
 
 ## 2. Ubuntu 노트북 준비
 
-- [ ] Ubuntu Server와 보안 업데이트를 설치한다.
-- [ ] 노트북 GPU에 맞는 NVIDIA 권장 드라이버를 설치한다.
-- [ ] Docker Engine과 Compose plugin `v2.24.4` 이상을 설치한다.
-- [ ] NVIDIA Container Toolkit, `curl`, `jq`, `git`, `openssh-client`를 설치한다.
+- [ ] Ubuntu Server 24.04 x86_64와 보안 업데이트를 설치한다.
+- [ ] 노트북 GPU에 맞는 NVIDIA 권장 드라이버를 설치하고 `nvidia-smi`가 정상
+      동작하는지 확인한다. 아래 bootstrap은 드라이버 패키지를 절대 설치·변경하지
+      않으며, `nvidia-smi`가 동작하지 않으면 실행을 거부한다.
+- [ ] `curl`, `jq`, `git`, `openssh-client`를 설치한다.
 - [ ] Docker 데이터 영역에 최소 20 GiB 여유 공간을 확보한다.
-- [ ] 유선 네트워크와 전원을 연결하고 suspend/hibernate, 덮개 닫힘 절전을 끈다.
+- [ ] 유선 네트워크와 전원(AC)을 연결한다.
 - [ ] 공유기 포트포워딩이나 공인 inbound 포트를 만들지 않는다.
 
-설치 버전과 명령은 실행 시점의 공식 문서를 따른다.
-
-- [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
-- [NVIDIA Container Toolkit 설치](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-
-전용 계정을 만들고 Docker NVIDIA runtime을 구성한다.
+Docker Engine, Compose plugin, NVIDIA Container Toolkit, 전용 계정, 보호 디렉터리,
+서버용 전원 설정은 두 단계 bootstrap이 멱등하게 처리한다. `prepare`는 아무 패키지도
+설치하지 않고, 공식 서명 저장소 키·목록 파일만 쓴 뒤 해결된 후보 버전과 그 파일들의
+SHA-256을 비밀이 아닌 `/etc/nextvisit/ubuntu-packages.lock`(root 소유, `0444`)에
+기록한다.
 
 ```bash
-(
-set -eu
-sudo groupadd --gid 65532 nextvisit-cloudflared || true
-sudo useradd --create-home --shell /bin/bash nextvisit-runner
-sudo usermod --append --groups docker,nextvisit-cloudflared nextvisit-runner
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-sudo reboot
-)
+sudo infra/llm/scripts/bootstrap-ubuntu-host.sh prepare
 ```
+
+- [ ] 출력된 `package name=version` 목록이 설치하려는 버전인지 검토한다.
+- [ ] 출력된 `ubuntu-packages.lock sha256:` 값을 그대로 `apply`에 전달한다.
+
+```bash
+sudo infra/llm/scripts/bootstrap-ubuntu-host.sh apply <ubuntu-packages.lock sha256>
+```
+
+`apply`는 SHA-256이 다르거나 없으면 어떤 패키지도 건드리기 전에 중단하고, 후보
+버전을 다시 해결해 `prepare` 이후의 drift를 거부한 뒤 정확히 `package=version`
+인자로만 설치한다. 배포판 전체 업그레이드는 절대 실행하지 않는다. 이어서
+`nextvisit-cloudflared`(GID `65532`) 시스템 그룹, 사용 가능한 비밀번호가 없는
+`nextvisit-runner` 계정(홈 `/home/nextvisit-runner`, 셸 `/bin/bash`, 그룹
+`docker,nextvisit-cloudflared`), `nextvisit-runner` 전용
+`/opt/nextvisit/llm/releases`(`0750`), `root:65532 0750`인 `/etc/nextvisit`을
+만들고, Docker NVIDIA runtime 구성과
+`/etc/systemd/logind.conf.d/10-nextvisit-llm.conf` drop-in 작성,
+sleep/suspend/hibernate/hybrid-sleep target mask까지 수행한다. 스크립트는
+재부팅하지 않는다.
+
+- [ ] `apply` 마지막 줄이 `ubuntu host bootstrap apply completed`인지 확인한다.
+- [ ] 출력된 `installed name=version` 값을 아래 표에 기록한다.
+
+```text
+installed containerd.io=
+installed docker-ce=
+installed docker-ce-cli=
+installed docker-compose-plugin=
+installed libnvidia-container1=
+installed nvidia-container-toolkit=
+```
+
+- [ ] 기록을 마친 뒤 직접 재부팅한다.
 
 `nextvisit-cloudflared`(GID `65532`)는 3절에서 만드는 `/etc/nextvisit/llm.token`을
 `nextvisit-runner`가 `sudo` 없이도 읽을 수 있게 하며, 아래 파일·디렉터리를 만들
-때 쓰는 숫자 그룹과 반드시 같아야 한다.
+때 쓰는 숫자 그룹과 반드시 같아야 한다. `apply`는 이 token 파일을 만들지도,
+덮어쓰지도 않는다. 이미 있으면 바이트 단위로 그대로 둔다.
+
+설치 버전과 명령의 근거는 실행 시점의 공식 문서를 따른다.
+
+- [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+- [NVIDIA Container Toolkit 설치](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 재부팅 뒤 비공개 저장소에 쓰기 권한이 없는 전용 deploy key를 만든다.
 
@@ -168,6 +199,14 @@ cd "$repo_dir/infra/llm" || exit 1
 ./scripts/verify-host.sh gpu
 RUNNER
 ```
+
+GPU 모드는 Docker/Compose·디스크·`nvidia-smi`·`nvidia-ctk`·Docker nvidia runtime에
+더해 `nextvisit-runner`의 잠긴 비밀번호 상태, `/opt/nextvisit/llm/releases` 소유와
+권한, 절전 target mask, `11434` 공개 listener 부재까지 확인한다. `nextvisit-runner`는
+자기 자신의 비밀번호 상태를 `sudo` 없이 읽을 수 있으므로 이 명령도 그 계정으로 실행
+하며, 이렇게 해야 이 저장소의 배포 워크플로가 실제로 그 계정으로 Docker 소켓에
+접근할 수 있는지까지 검증된다. Tunnel token은 요구하지 않으므로 3절보다 먼저 통과
+해야 한다.
 
 - [ ] 마지막 줄이 `host verification passed for gpu mode`인지 확인한다.
 - [ ] `docker compose version --short`가 `2.24.4` 이상인지 확인한다.

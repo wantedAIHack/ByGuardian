@@ -26,19 +26,44 @@ Never use `docker compose down --volumes` for routine deployment.
 
 ## Ubuntu laptop preparation — deferred and organization-gated
 
-1. Install Ubuntu Server, the NVIDIA driver recommended for the laptop,
-   Docker Engine with the Compose plugin, and NVIDIA Container Toolkit.
-2. Create the dedicated runner account, grant its required Docker access,
-   configure Docker's NVIDIA runtime, and reboot:
+1. Install Ubuntu Server 24.04 x86_64 and the NVIDIA driver recommended for the
+   laptop, then confirm `nvidia-smi` works. The bootstrap below never installs,
+   upgrades, or otherwise touches a driver package; it refuses to run unless the
+   driver already works.
+2. Run the two-phase host bootstrap on AC power. `prepare` installs nothing: it
+   writes only the official signed Docker and NVIDIA repository key and list
+   files, then records the resolved candidate versions and those files'
+   SHA-256 fingerprints in the non-secret, root-owned, mode-`0444` lock
+   `/etc/nextvisit/ubuntu-packages.lock`.
 
    ```bash
-   sudo groupadd --gid 65532 nextvisit-cloudflared || true
-   sudo useradd --create-home --shell /bin/bash nextvisit-runner
-   sudo usermod --append --groups docker,nextvisit-cloudflared nextvisit-runner
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
-   sudo reboot
+   sudo infra/llm/scripts/bootstrap-ubuntu-host.sh prepare
    ```
+
+   Review the printed `package name=version` lines. Only when they are the
+   versions you intend to run, pass the printed lock SHA-256 back to `apply`:
+
+   ```bash
+   sudo infra/llm/scripts/bootstrap-ubuntu-host.sh apply <ubuntu-packages.lock sha256>
+   ```
+
+   `apply` refuses a missing or mismatched SHA-256 before touching any package,
+   re-resolves the candidates to reject drift since `prepare`, and then installs
+   exactly those `package=version` arguments. It never runs a general
+   distribution upgrade. It also creates the system group `nextvisit-cloudflared`
+   with numeric GID `65532`, the locked `nextvisit-runner` account (no usable
+   password, home `/home/nextvisit-runner`, shell `/bin/bash`, groups
+   `docker,nextvisit-cloudflared`), the runner-owned release directory
+   `/opt/nextvisit/llm/releases` (mode `0750`), and `/etc/nextvisit` as
+   `root:65532` mode `0750`. It configures Docker's NVIDIA runtime, writes the
+   logind drop-in `/etc/systemd/logind.conf.d/10-nextvisit-llm.conf`, and masks
+   the sleep, suspend, hibernate, and hybrid-sleep targets. Both phases are
+   idempotent; re-running either leaves host state unchanged.
+
+   `apply` never creates or overwrites `/etc/nextvisit/llm.token` — step 5
+   installs it, and an existing token file survives `apply` byte for byte.
+   Record the printed `installed name=version` lines in `OWNER_CHECKLIST.md`
+   section 2. Reboot yourself afterwards; the script never reboots.
 
    `nextvisit-cloudflared` (GID `65532`) lets the unattended deploy job read
    `/etc/nextvisit/llm.token` without `sudo`; it must match the numeric group
@@ -55,6 +80,14 @@ Never use `docker compose down --volumes` for routine deployment.
    cd infra/llm
    ./scripts/verify-host.sh gpu
    ```
+
+   GPU mode also verifies the service account's locked password, the
+   runner-owned release directory, the masked sleep targets, and the absence of
+   a public `11434` listener. `nextvisit-runner` can read its own password
+   state without `sudo`, so this still runs unprivileged as that account —
+   which is what actually proves the account this repo's deploy workflow runs
+   as can reach the Docker socket. It deliberately does not require the Tunnel
+   token, so it can pass before step 5.
 
 4. In Cloudflare Zero Trust, create a remotely managed Tunnel route whose
    service is `http://ollama:11434`. Protect its public hostname with an Access

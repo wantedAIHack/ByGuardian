@@ -150,6 +150,7 @@ jobs:
           sh infra/llm/tests/workflows-test.sh
           sh infra/llm/tests/workflows-runner-group-test.sh
           sh infra/llm/tests/tunnel-token-file-test.sh
+          sh infra/llm/tests/bootstrap-ubuntu-host-test.sh
       - name: Build pinned Ollama image
         working-directory: infra/llm
         run: docker build --tag nextvisit-ollama:0.33.3 .
