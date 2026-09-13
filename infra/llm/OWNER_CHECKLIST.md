@@ -365,74 +365,29 @@ RUNNER
 - [ ] healthcheck가 있는 `ollama`는 healthy, `cloudflared`는 running인지 확인한다.
 - [ ] `PortBindings` 검사가 성공하고 호스트의 `11434` 포트가 공개되지 않는지 확인한다.
 
-백엔드 서버의 secret store가 환경변수를 주입한 셸에서 아래 검사를 실행한다.
-Client ID/Secret 값을 명령줄에 직접 붙여넣지 말고 xtrace를 끈다. 응답은 권한이
-제한된 임시 파일로만 검사하며 화면에 출력하지 않는다.
+백엔드 EC2에서, AWS SSM으로 이 저장소의 release bundle에 포함된
+`infra/llm/scripts/smoke-access.sh`를 실행한다. Client ID/Secret 값은 절대
+환경변수나 명령줄 인자로 넘기지 않고, secret store가 그 값들을 구체화해 둔
+파일 경로 두 개만 인자로 전달한다. 각 파일은 일반 파일(symlink 아님)이어야
+하고 권한은 `0440`/`0400`/`0600` 중 하나, 값은 한 줄, header-safe ASCII여야
+한다 — 하나라도 어긋나면 스크립트는 값 대신 고정 문구만 출력하고 거부한다.
+이 스크립트는 노트북이 아니라 오직 EC2에서만 외부 인증에 쓰인다.
 
 ```bash
-(
-set -eu
-set +x
-: "${NEXTVISIT_LLM_BASE_URL:?missing LLM base URL}"
-: "${NEXTVISIT_LLM_CF_ACCESS_CLIENT_ID:?missing Access Client ID}"
-: "${NEXTVISIT_LLM_CF_ACCESS_CLIENT_SECRET:?missing Access Client Secret}"
-umask 077
-payload_file="$(mktemp)"
-response_file="$(mktemp)"
-auth_config="$(mktemp)"
-trap 'rm -f "$payload_file" "$response_file" "$auth_config"' EXIT HUP INT TERM
-printf '%s\n' \
-  'silent' \
-  'show-error' \
-  'connect-timeout = 5' \
-  'max-time = 45' \
-  'header = "Content-Type: application/json"' \
-  "header = \"CF-Access-Client-Id: $NEXTVISIT_LLM_CF_ACCESS_CLIENT_ID\"" \
-  "header = \"CF-Access-Client-Secret: $NEXTVISIT_LLM_CF_ACCESS_CLIENT_SECRET\"" \
-  >"$auth_config"
-jq -n --arg model "${NEXTVISIT_LLM_MODEL:-qwen3:4b-q8_0}" '{
-  model: $model,
-  stream: false,
-  temperature: 0.1,
-  seed: 0,
-  max_tokens: 128,
-  response_format: {type: "json_object"},
-  messages: [
-    {role: "system", content: "/no_think JSON 객체만 반환하세요. 정확히 {\"questions\":[{\"rank\":1,\"sentence\":\"확인할까요?\"}]} 형식입니다."},
-    {role: "user", content: "{\"questions\":[{\"rank\":1,\"templateSentence\":\"확인할까요?\"}]}"}
-  ]
-}' >"$payload_file"
-status="$(curl --config "$auth_config" \
-  --output "$response_file" --write-out '%{http_code}' \
-  --data-binary "@$payload_file" \
-  "${NEXTVISIT_LLM_BASE_URL%/}/chat/completions")"
-test "$status" = 200
-jq -e '(.choices | type == "array" and length > 0)
-  and (.choices[0].message.content | type == "string")
-  and ((.choices[0].message.content | fromjson) as $content
-    | ($content | keys == ["questions"])
-    and ($content.questions | type == "array" and length == 1)
-    and ($content.questions[0] | type == "object" and keys == ["rank", "sentence"])
-    and ($content.questions[0].rank == 1)
-    and ($content.questions[0].sentence | type == "string" and endswith("?")))' \
-  "$response_file" >/dev/null 2>&1
-status="$(curl --silent --show-error --connect-timeout 5 --max-time 45 \
-  --output "$response_file" --write-out '%{http_code}' \
-  --header 'Content-Type: application/json' \
-  --data-binary "@$payload_file" \
-  "${NEXTVISIT_LLM_BASE_URL%/}/chat/completions")"
-case "$status" in
-  302|401|403) ;;
-  *) exit 1 ;;
-esac
-printf '%s\n' 'Access-authenticated smoke passed; unauthenticated request blocked'
-rm -f "$payload_file" "$response_file" "$auth_config"
-trap - EXIT HUP INT TERM
-)
+infra/llm/scripts/smoke-access.sh \
+  "$NEXTVISIT_LLM_BASE_URL" \
+  /etc/nextvisit/access-client-id \
+  /etc/nextvisit/access-client-secret
 ```
 
-- [ ] 고정 성공 문구가 출력되고 응답 본문은 출력되지 않는지 확인한다.
-- [ ] Access 인증 요청은 HTTP 200, 무인증 요청은 302/401/403 중 하나인지 확인한다.
+응답 본문과 자격증명은 권한이 제한된 임시 파일로만 다뤄지며 화면에 출력되지
+않는다. 인증 요청이 HTTP 200에 [`smoke-openai.sh`](./scripts/smoke-openai.sh)와
+동일한 질문 1개 봉투를 반환하고 무인증 요청이 302/401/403 중 하나로 거부될
+때만 스크립트는 고정 문구 `Access smoke passed`를 출력하고 종료코드 0을
+반환한다.
+
+- [ ] 고정 성공 문구 `Access smoke passed`만 출력되고 응답 본문·자격증명은
+      출력되지 않는지 확인한다.
 - [ ] 인증된 요청 직후 노트북에서 아래 명령으로 다시 `100% GPU`를 확인한다.
 
 ```bash

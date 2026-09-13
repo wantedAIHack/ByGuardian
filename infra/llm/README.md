@@ -222,8 +222,36 @@ Record `100% GPU`, response time with the 2K context, behavior after a reboot,
 runner service status, Tunnel reachability through Access, and volume reuse.
 These results cannot be claimed from macOS and remain open until the laptop is ready.
 
+## Cloudflare Access smoke (EC2, not the laptop)
+
+`infra/llm/scripts/smoke-access.sh BASE_URL CLIENT_ID_FILE CLIENT_SECRET_FILE`
+proves the Cloudflare Access boundary end to end without ever letting a
+credential or a model response body reach stdout, stderr, a log, or a process
+argument list. The two credential arguments are file paths, never values: it
+requires an HTTPS base URL and, for each credential file, a regular
+non-symlink file with mode `0440`, `0400`, or `0600`, a single header-safe
+ASCII line, and a bounded size — a newline embedded in the value (which could
+forge an extra HTTP header) is rejected the same way any other unsafe
+character is. The two `CF-Access-Client-Id`/`CF-Access-Client-Secret` headers
+are written into a mode-`0600` curl config file that is the only thing passed
+on curl's argv; response bodies land in private temporary files; `jq` always
+runs with both output streams suppressed (a parse error would otherwise echo
+the offending fragment); every temporary file is removed by a trap on every
+exit path, including signals. Connect timeout is 5 seconds, total timeout 45
+seconds. It exits zero only when the authenticated request returns HTTP 200
+with an OpenAI-compatible envelope whose decoded assistant content matches
+`smoke-openai.sh`'s exact one-question key set (additive outer envelope
+fields, like an OpenAI-style `id`/`object`, remain accepted — only the
+decoded question object's key set is closed) and the unauthenticated request
+is refused with HTTP 302, 401, or 403; any other pairing, a timeout, or an
+invalid envelope fails with a fixed diagnostic that never interpolates a
+response, a header, or a credential. This is why the AWS release bundle
+allowlists this script for SSM to run on EC2 beside the Access configtree
+files — it is the sole authorised caller's own acceptance check, and it is
+never executed on the laptop for external authentication.
+
 ## Secrets and logs
 
 Never print the Tunnel token, Access service-token values, Authorization
 headers, prompts, provider response bodies, generated sentences, or guardian
-data. The smoke script reports only fixed status text.
+data. The smoke scripts report only fixed status text.
