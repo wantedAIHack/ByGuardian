@@ -133,7 +133,13 @@ mutate_deploy \
 # --- the offline test suite must actually run on this checkout -------------
 
 mutate_deploy \
-  's{      - name: Run offline infra test suite\n        run: \|\n          for test in infra/llm/tests/\*\.sh; do\n            sh "\$test"\n          done\n\n}{}' \
+  's{      - name: Run offline infra test suite\n        run: \|\n          sh infra/llm/tests/workflows-test\.sh\n          sh infra/llm/tests/workflows-runner-group-test\.sh\n          sh infra/llm/tests/llm-deploy-mutation-test\.sh\n          for test in infra/llm/tests/\*\.sh; do\n            sh "\$test"\n          done\n\n}{}' \
   'deploy missing the offline infra test suite step'
+mutate_deploy \
+  's{          sh infra/llm/tests/workflows-test\.sh\n          sh infra/llm/tests/workflows-runner-group-test\.sh\n          sh infra/llm/tests/llm-deploy-mutation-test\.sh\n          for test in infra/llm/tests/\*\.sh; do\n}{          for test in infra/llm/tests/*.sh; do\n}' \
+  'deploy offline test suite dropping the explicit named-first ordering, leaving only the arbitrary glob loop'
+mutate_deploy \
+  's{          sh infra/llm/tests/workflows-test\.sh\n          sh infra/llm/tests/workflows-runner-group-test\.sh\n          sh infra/llm/tests/llm-deploy-mutation-test\.sh\n          for test in infra/llm/tests/\*\.sh; do\n            sh "\$test"\n          done\n}{          for test in infra/llm/tests/*.sh; do\n            sh "$test"\n          done\n          sh infra/llm/tests/workflows-test.sh\n          sh infra/llm/tests/workflows-runner-group-test.sh\n          sh infra/llm/tests/llm-deploy-mutation-test.sh\n}' \
+  'deploy offline test suite running the named policy suites after the arbitrary glob loop instead of before it'
 
 printf 'llm-deploy mutation policy: %s mutations rejected\n' "$fixture_number"

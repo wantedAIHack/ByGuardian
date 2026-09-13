@@ -10,12 +10,18 @@ name: Deploy LLM Laptop
 # This job is the trust boundary for the only self-hosted runner in this
 # repository: infra/llm/tests/workflows-test.sh,
 # infra/llm/tests/workflows-runner-group-test.sh, and
-# infra/llm/tests/llm-deploy-mutation-test.sh together prove that no PR, fork,
-# or unreviewed workflow edit can loosen the exact main-only gate, the
-# group+labels runner selection, the pinned-SHA credential-less checkout, or
-# the no-port/no-token assertions below. Re-running the same offline test
-# suite here, on the exact commit this job just checked out, is deliberate
-# defense in depth against a compromise between CI's check and this run.
+# infra/llm/tests/llm-deploy-mutation-test.sh together reject the specific
+# named loosenings of the exact main-only gate, the group+labels runner
+# selection, the pinned-SHA credential-less checkout, and the no-port/no-token
+# assertions below. They do not by themselves stop an added test file, or any
+# other new `run:` step, from executing arbitrary code on this runner before
+# (or instead of) those checks -- the actual boundary against that is the
+# organization runner-group restriction plus branch protection on main. The
+# "Run offline infra test suite" step below runs the three policy suites by
+# explicit name first, so a commit cannot smuggle a same-directory script
+# ahead of them in glob order; re-running them here, on the exact commit this
+# job just checked out, is deliberate defense in depth against a compromise
+# between CI's check and this run.
 
 on:
   push:
@@ -50,6 +56,9 @@ jobs:
 
       - name: Run offline infra test suite
         run: |
+          sh infra/llm/tests/workflows-test.sh
+          sh infra/llm/tests/workflows-runner-group-test.sh
+          sh infra/llm/tests/llm-deploy-mutation-test.sh
           for test in infra/llm/tests/*.sh; do
             sh "$test"
           done

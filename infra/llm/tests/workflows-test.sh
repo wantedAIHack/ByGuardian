@@ -683,6 +683,27 @@ require_line '          for test in infra/llm/tests/*.sh; do' "$deploy" "deploy 
 require_line "            sh \"\$test\"" "$deploy" "deploy offline test suite must execute each test with sh"
 require_line '          done' "$deploy" "deploy offline test suite loop must be closed"
 
+# The glob loop above runs whatever file a commit places under
+# infra/llm/tests/, in glob order, as the root-equivalent runner -- including
+# a same-commit test file with an arbitrary run body. The three policy suites
+# must therefore run first, by explicit name, so they always execute before
+# any such file could pre-empt them.
+require_line '          sh infra/llm/tests/workflows-test.sh' "$deploy" "deploy offline test suite must run workflows-test.sh by explicit name before the glob loop"
+require_line '          sh infra/llm/tests/workflows-runner-group-test.sh' "$deploy" "deploy offline test suite must run workflows-runner-group-test.sh by explicit name before the glob loop"
+require_line '          sh infra/llm/tests/llm-deploy-mutation-test.sh' "$deploy" "deploy offline test suite must run llm-deploy-mutation-test.sh by explicit name before the glob loop"
+
+glob_loop_line="$(grep -Fnx '          for test in infra/llm/tests/*.sh; do' "$deploy" | head -1 | cut -d: -f1)"
+for named_line in \
+  '          sh infra/llm/tests/workflows-test.sh' \
+  '          sh infra/llm/tests/workflows-runner-group-test.sh' \
+  '          sh infra/llm/tests/llm-deploy-mutation-test.sh'; do
+  named_suite_line="$(grep -Fnx "$named_line" "$deploy" | head -1 | cut -d: -f1)"
+  if [ "$named_suite_line" -ge "$glob_loop_line" ]; then
+    printf '%s\n' "deploy must run the named policy test suites before the arbitrary infra/llm/tests/*.sh glob loop" >&2
+    exit 1
+  fi
+done
+
 require_line "        run: infra/llm/scripts/stage-runtime.sh \"\$GITHUB_SHA\" \"\$GITHUB_WORKSPACE\"" "$deploy" "deploy must stage the exact checked-out commit before operating on /opt/nextvisit/llm/current"
 if [ "$(grep -Fxc '        working-directory: /opt/nextvisit/llm/current' "$deploy")" -ne 2 ]; then
   printf '%s\n' "deploy compose steps must operate only inside the staged /opt/nextvisit/llm/current release" >&2
