@@ -1,0 +1,57 @@
+# Reboot recovery for the self-hosted LLM origin (Ollama + Cloudflare Tunnel).
+#
+# Installed by the repository owner (not this repo's automation) as
+# /etc/systemd/system/nextvisit-llm.service, then enabled with
+# `systemctl enable nextvisit-llm.service`.
+#
+# This unit never builds or downloads anything new: it applies the exact
+# three-file, single-project Compose configuration that infra/llm/scripts/
+# stage-runtime.sh already staged under /opt/nextvisit/llm/current, brings
+# Ollama up healthy, runs model-init idempotently (it only pulls the model
+# when it is missing), and only then starts cloudflared -- the same order
+# stage-runtime.sh's own release layout is designed for. ExecStop always
+# leaves the named volume alone; the final stack intentionally publishes no
+# host Ollama port, so this unit's own success criteria are container health
+# and exit codes only. Proof of end-to-end inference through Cloudflare
+# Access is the separate EC2 smoke, not anything this unit can check.
+#
+# Environment= carries only the non-secret path to the Tunnel token file,
+# never a value: verify-tunnel-token-file.sh reads the file itself and prints
+# nothing but its fixed status line. SupplementaryGroups grants exactly the
+# two groups the deploy workflow's own nextvisit-runner account already has
+# (docker to reach the Docker socket, nextvisit-cloudflared to read the
+# token file's parent directory) -- nothing here runs as root.
+
+[Unit]
+Description=NextVisit LLM origin (Ollama + Cloudflare Tunnel)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+ConditionPathExists=/opt/nextvisit/llm/current
+# RestartSec=15 alone never trips systemd's default 5-starts-in-10s limiter,
+# so a persistently failing unit would retry forever, driving `docker compose
+# up` against the same project every 15 seconds -- the same "fight a live
+# deploy" scenario Restart=always was rejected for. This bounds the total
+# retry window instead: after 5 starts within 600 seconds, systemd stops
+# restarting the unit and it stays failed until an operator intervenes.
+StartLimitBurst=5
+StartLimitIntervalSec=600
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=nextvisit-runner
+SupplementaryGroups=docker nextvisit-cloudflared
+WorkingDirectory=/opt/nextvisit/llm/current
+Environment=NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
+TimeoutStartSec=600
+Restart=on-failure
+RestartSec=15
+ExecStartPre=/opt/nextvisit/llm/current/scripts/verify-tunnel-token-file.sh ${NEXTVISIT_LLM_TOKEN_FILE}
+ExecStart=/usr/bin/docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach --wait ollama
+ExecStart=/usr/bin/docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml run --rm model-init
+ExecStart=/usr/bin/docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach --wait cloudflared
+ExecStop=/usr/bin/docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml down
+
+[Install]
+WantedBy=multi-user.target

@@ -271,7 +271,14 @@ ensure_runner_account() {
 
 ensure_directories() {
   install_dir /opt/nextvisit root root 0755
-  install_dir /opt/nextvisit/llm root root 0755
+  # nextvisit-runner (not root) must be able to create and atomically replace
+  # /opt/nextvisit/llm/current: creating or renaming a directory entry needs
+  # write access to its parent, so this directory has to be runner-writable,
+  # not merely traversable. 0750 keeps it as tight as releases/ below; only
+  # root and nextvisit-runner itself can enter it. nextvisit-runner is already
+  # in the docker group (root-equivalent for this host) and already owns
+  # everything under releases/, so this grants no new capability.
+  install_dir /opt/nextvisit/llm "$runner_user" "$runner_user" 0750
   install_dir "$releases_dir" "$runner_user" "$runner_user" 0750
 
   # Tightened before any token can exist: only root, cloudflared's numeric

@@ -116,7 +116,9 @@ sudo infra/llm/scripts/bootstrap-ubuntu-host.sh apply <ubuntu-packages.lock sha2
 `nextvisit-cloudflared`(GID `65532`) 시스템 그룹, 사용 가능한 비밀번호가 없는
 `nextvisit-runner` 계정(홈 `/home/nextvisit-runner`, 셸 `/bin/bash`, 그룹
 `docker,nextvisit-cloudflared`), `nextvisit-runner` 전용
-`/opt/nextvisit/llm/releases`(`0750`), `root:65532 0750`인 `/etc/nextvisit`을
+`/opt/nextvisit/llm`과 `/opt/nextvisit/llm/releases`(둘 다 `0750` —
+`current`를 원자적으로 바꾸려면 `nextvisit-runner`가 상위 디렉터리 자체에도
+쓰기 권한이 있어야 한다), `root:65532 0750`인 `/etc/nextvisit`을
 만들고, Docker NVIDIA runtime 구성과
 `/etc/systemd/logind.conf.d/10-nextvisit-llm.conf` drop-in 작성,
 sleep/suspend/hibernate/hybrid-sleep target mask까지 수행한다. 스크립트는
@@ -201,8 +203,9 @@ RUNNER
 ```
 
 GPU 모드는 Docker/Compose·디스크·`nvidia-smi`·`nvidia-ctk`·Docker nvidia runtime에
-더해 `nextvisit-runner`의 잠긴 비밀번호 상태, `/opt/nextvisit/llm/releases` 소유와
-권한, 절전 target mask, `11434` 공개 listener 부재까지 확인한다. `nextvisit-runner`는
+더해 `nextvisit-runner`의 잠긴 비밀번호 상태, `/opt/nextvisit/llm`과
+`/opt/nextvisit/llm/releases` 소유와 권한, 절전 target mask, `11434` 공개
+listener 부재까지 확인한다. `nextvisit-runner`는
 자기 자신의 비밀번호 상태를 `sudo` 없이 읽을 수 있으므로 이 명령도 그 계정으로 실행
 하며, 이렇게 해야 이 저장소의 배포 워크플로가 실제로 그 계정으로 Docker 소켓에
 접근할 수 있는지까지 검증된다. Tunnel token은 요구하지 않으므로 3절보다 먼저 통과
@@ -214,6 +217,50 @@ GPU 모드는 Docker/Compose·디스크·`nvidia-smi`·`nvidia-ctk`·Docker nvid
 
 Docker 그룹은 사실상 root 권한이므로 `nextvisit-runner`를 일반 사용자 작업에
 사용하지 않는다.
+
+재부팅 복구용 systemd 유닛을 설치한다. 이 유닛은 `/opt/nextvisit/llm/current`가
+가리키는 release만 사용하며, `nextvisit-runner`로만 실행되고 token 값이 아닌
+파일 경로만 다룬다. `/opt/nextvisit/llm`이 `nextvisit-runner:nextvisit-runner
+0750`이므로 release를 만들고 `current`를 바꾸는 작업 자체는 `sudo` 없이
+`nextvisit-runner`로 실행한다. 5절에서 자동 배포를 활성화하면 이후에는
+`llm-deploy.yml`의 `Stage immutable release` 단계가 매 배포마다 같은 일을
+하지만, 여기 2절 시점에는 아직 그 workflow가 실행된 적이 없으므로 최초
+release는 직접 한 번 만들어 둔다. 유닛 파일을 `/etc/systemd/system/`에 설치하고
+활성화하는 부분만 `root` 권한이 필요하다.
+
+```bash
+sudo -iu nextvisit-runner bash <<'RUNNER'
+set -eu
+repo_dir=/home/nextvisit-runner/wanted_Hackaton
+sha="$(git -C "$repo_dir" rev-parse HEAD)"
+"$repo_dir/infra/llm/scripts/stage-runtime.sh" "$sha" "$repo_dir"
+RUNNER
+```
+
+```bash
+(
+set -eu
+repo_dir=/home/nextvisit-runner/wanted_Hackaton
+sudo install -o root -g root -m 0644 \
+  "$repo_dir/infra/llm/systemd/nextvisit-llm.service" \
+  /etc/systemd/system/nextvisit-llm.service
+sudo systemctl daemon-reload
+sudo systemctl enable nextvisit-llm.service
+)
+```
+
+`stage-runtime.sh`는 인자를 넘기지 않으면 기본값
+`/opt/nextvisit/llm/releases`와 `/opt/nextvisit/llm/current`를 그대로
+사용하므로 별도 환경변수가 필요 없다.
+
+- [ ] `/opt/nextvisit/llm/current`가 방금 만든 release SHA를 가리키는지
+      `readlink /opt/nextvisit/llm/current`로 확인한다.
+- [ ] `systemctl is-enabled nextvisit-llm.service`가 `enabled`인지 확인한다.
+
+5절에서 자동 배포가 활성화된 뒤에는 매 `main` 배포가
+`stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"`를 실행해 새 release를
+만들고 `current`를 그쪽으로 옮긴다. 이 유닛은 그 `current`만 바라보므로,
+배포와 재부팅 복구가 항상 같은 release를 가리킨다.
 
 ## 3. Cloudflare Tunnel과 비밀값 준비
 
@@ -445,6 +492,10 @@ sudo ./svc.sh status
 
 - [ ] 노트북을 재부팅한다.
 - [ ] `docker`와 GitHub runner service가 자동 시작됐는지 확인한다.
+- [ ] `systemctl status nextvisit-llm.service`가 `active (exited)`인지 확인한다.
+      `nextvisit-llm.service`는 2절에서 설치한 `/opt/nextvisit/llm/current`
+      release만 사용해 `ollama`를 healthy로 올리고, `model-init`을 멱등하게
+      실행한 뒤 `cloudflared`를 마지막에 시작한다.
 - [ ] `ollama`는 다시 healthy, `cloudflared`는 다시 running인지 확인한다.
 - [ ] `nextvisit-llm-ollama-data` volume이 유지되고 모델을 다시 다운로드하지 않는지 확인한다.
 - [ ] Tunnel hostname이 Access 인증 chat completion에 다시 응답하는지 확인한다.

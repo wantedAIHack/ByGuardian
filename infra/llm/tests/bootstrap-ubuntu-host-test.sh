@@ -866,6 +866,21 @@ grep -Fqx "dir $apply_host/opt/nextvisit/llm/releases nextvisit-runner nextvisit
   printf 'apply must create the release directory owned only by nextvisit-runner\n' >&2
   exit 1
 }
+# nextvisit-runner must own its parent too: creating or atomically replacing
+# /opt/nextvisit/llm/current needs write access to /opt/nextvisit/llm itself,
+# not merely to releases/ under it.
+grep -Fqx "dir $apply_host/opt/nextvisit/llm nextvisit-runner nextvisit-runner 0750" \
+  "$first_apply_ownership" || {
+  printf 'apply must create /opt/nextvisit/llm owned by nextvisit-runner so it can flip current\n' >&2
+  exit 1
+}
+test "$(mode_of "$apply_host/opt/nextvisit/llm")" = "750"
+# Its own parent stays root-owned: only /opt/nextvisit/llm itself is loosened.
+if grep -Fqx "dir $apply_host/opt/nextvisit nextvisit-runner nextvisit-runner 0755" "$first_apply_ownership"; then
+  printf 'apply must not loosen /opt/nextvisit itself, only /opt/nextvisit/llm\n' >&2
+  exit 1
+fi
+test "$(mode_of "$apply_host/opt/nextvisit")" = "755"
 grep -Fqx "dir $apply_host/etc/nextvisit root 65532 0750" "$first_apply_ownership" || {
   printf 'apply must tighten /etc/nextvisit to root:65532 0750\n' >&2
   exit 1

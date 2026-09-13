@@ -53,9 +53,11 @@ Never use `docker compose down --volumes` for routine deployment.
    distribution upgrade. It also creates the system group `nextvisit-cloudflared`
    with numeric GID `65532`, the locked `nextvisit-runner` account (no usable
    password, home `/home/nextvisit-runner`, shell `/bin/bash`, groups
-   `docker,nextvisit-cloudflared`), the runner-owned release directory
-   `/opt/nextvisit/llm/releases` (mode `0750`), and `/etc/nextvisit` as
-   `root:65532` mode `0750`. It configures Docker's NVIDIA runtime, writes the
+   `docker,nextvisit-cloudflared`), the runner-owned `/opt/nextvisit/llm` and
+   `/opt/nextvisit/llm/releases` (both mode `0750` — `nextvisit-runner` needs
+   to write the parent directly to atomically replace `current`, not only its
+   contents), and `/etc/nextvisit` as `root:65532` mode `0750`. It configures
+   Docker's NVIDIA runtime, writes the
    logind drop-in `/etc/systemd/logind.conf.d/10-nextvisit-llm.conf`, and masks
    the sleep, suspend, hibernate, and hybrid-sleep targets. Both phases are
    idempotent; re-running either leaves host state unchanged.
@@ -81,9 +83,10 @@ Never use `docker compose down --volumes` for routine deployment.
    ./scripts/verify-host.sh gpu
    ```
 
-   GPU mode also verifies the service account's locked password, the
-   runner-owned release directory, the masked sleep targets, and the absence of
-   a public `11434` listener. `nextvisit-runner` can read its own password
+   GPU mode also verifies the service account's locked password, that
+   `/opt/nextvisit/llm` and its `releases/` are both runner-owned, the masked
+   sleep targets, and the absence of a public `11434` listener. `nextvisit-runner`
+   can read its own password
    state without `sudo`, so this still runs unprivileged as that account —
    which is what actually proves the account this repo's deploy workflow runs
    as can reach the Docker socket. It deliberately does not require the Tunnel
@@ -153,6 +156,63 @@ test "$(docker inspect -f '{{len .HostConfig.PortBindings}}' "$ollama_id")" = 0
 
 The first start exposes only loopback for the local smoke. The final command
 recreates Ollama with no published host port and connects it to `cloudflared`.
+
+## Immutable releases and reboot recovery
+
+`infra/llm/scripts/stage-runtime.sh FULL_COMMIT_SHA CHECKOUT_ROOT` copies only
+`Dockerfile`, the three Compose files, and the three runtime scripts the
+Compose stack actually reads at build or run time (`scripts/wait-for-ollama.sh`,
+`scripts/ensure-model.sh`, `scripts/verify-tunnel-token-file.sh`) into
+`/opt/nextvisit/llm/releases/<FULL_COMMIT_SHA>` — never the checkout tree
+itself, so a `.git` directory, `.env` file, key, token, or other credential
+that happens to live in the checkout can never reach a release. It refuses a
+non-lowercase-hex SHA, a checkout whose HEAD does not match it, a symlinked
+source path, a missing or world-writable source file, and a pre-existing
+release directory whose actual bytes no longer match what would be staged
+(catching both a dirty checkout and direct tampering with an already-staged
+release). Staging the same commit again is a no-op reuse. Releases are never
+deleted, so every prior SHA stays available for rollback: re-running
+`stage-runtime.sh` with an earlier commit's SHA and a checkout pinned to that
+commit stages nothing new and flips `current` back to it. `current` is
+replaced with a fresh symlink to the release directory via an atomic rename,
+never a copy.
+
+`infra/llm/systemd/nextvisit-llm.service` recovers that exact stack after a
+reboot: it starts after `docker.service` and `network-online.target`,
+requires `/opt/nextvisit/llm/current` to exist, and runs entirely as
+`nextvisit-runner` (`SupplementaryGroups=docker nextvisit-cloudflared`,
+`WorkingDirectory=/opt/nextvisit/llm/current`). Its only token-related setting
+is the non-secret path `NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token`,
+which its `ExecStartPre` passes straight to `verify-tunnel-token-file.sh`
+before anything else runs. It then applies the exact
+`compose.yml -f compose.gpu.yml -f compose.tunnel.yml` project, brings up
+healthy `ollama`, runs `model-init` (idempotent — it only pulls when the
+model is missing), and starts `cloudflared` last. `ExecStop` always uses the
+same three-file `down` without `--volumes`, so the named model volume
+survives a stop. `Restart=on-failure` with a bounded `TimeoutStartSec` is
+deliberate: `Restart=always` would fight a deploy that drives the same
+Compose project directly. `OWNER_CHECKLIST.md` section 2 has the exact
+install sequence: stage a release, install the unit at
+`/etc/systemd/system/nextvisit-llm.service`, `systemctl daemon-reload`, then
+`systemctl enable` it (only after `/opt/nextvisit/llm/current` exists, since
+its `ConditionPathExists` requires that).
+
+`bootstrap-ubuntu-host.sh` owns `/opt/nextvisit/llm` itself to
+`nextvisit-runner:nextvisit-runner 0750` (not only `releases/` under it), so
+this unprivileged account can create and atomically replace `current` without
+`sudo` — it already fully controls `releases/` and is in the `docker` group,
+which is root-equivalent for this host, so this grants no new capability.
+`verify-host.sh gpu` asserts that ownership alongside its existing `releases/`
+check. `llm-deploy.yml`'s `deploy` job calls
+`stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"` right after verifying the
+host and the token file, then runs every Compose command with
+`working-directory: /opt/nextvisit/llm/current` instead of the checkout. The
+loopback smoke script isn't staged (it's a CI verification aid, not something
+the running stack reads), so that step invokes it by its checkout path,
+`"$GITHUB_WORKSPACE/infra/llm/scripts/smoke-openai.sh"`, while everything else
+in that step still runs from `current`. This wiring is intentionally minimal;
+the job's broader hardening (trust-boundary mutations, concurrency, the
+no-port/no-token assertions) is separate, later work.
 
 ## Deferred hardware acceptance
 

@@ -1,5 +1,16 @@
 name: Deploy LLM Laptop
 
+# infra/llm/scripts/stage-runtime.sh stages this commit into an immutable
+# /opt/nextvisit/llm/releases/<sha> directory and flips
+# /opt/nextvisit/llm/current atomically; infra/llm/systemd/nextvisit-llm.service
+# recovers the exact three-file stack from that release after a reboot.
+# /opt/nextvisit/llm is now nextvisit-runner-owned (bootstrap-ubuntu-host.sh),
+# so this unprivileged job can flip `current` itself. This wiring is
+# deliberately minimal -- staging, then operating out of `current` instead of
+# the checkout -- and stops there; the full hardening of this job (trust
+# boundaries, concurrency, the no-port/no-token assertions) is a separate,
+# later change.
+
 on:
   push:
     branches: [main]
@@ -37,16 +48,19 @@ jobs:
       - name: Verify local Tunnel token file
         run: infra/llm/scripts/verify-tunnel-token-file.sh /etc/nextvisit/llm.token
 
+      - name: Stage immutable release
+        run: infra/llm/scripts/stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"
+
       - name: Build, initialize, and smoke Ollama on loopback
-        working-directory: infra/llm
+        working-directory: /opt/nextvisit/llm/current
         run: |
           docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml build ollama
           docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml up --detach --wait ollama
           docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init
-          ./scripts/smoke-openai.sh http://127.0.0.1:11434/v1
+          "$GITHUB_WORKSPACE/infra/llm/scripts/smoke-openai.sh" http://127.0.0.1:11434/v1
 
       - name: Apply final no-port Tunnel configuration
-        working-directory: infra/llm
+        working-directory: /opt/nextvisit/llm/current
         env:
           NEXTVISIT_LLM_TOKEN_FILE: /etc/nextvisit/llm.token
         run: |

@@ -110,6 +110,22 @@ if [ "$mode" = "gpu" ]; then
   esac
 
   releases_path="${NEXTVISIT_LLM_RELEASES_PATH:-/opt/nextvisit/llm/releases}"
+
+  # stage-runtime.sh atomically replaces /opt/nextvisit/llm/current, which
+  # needs write access to this directory itself, not merely to releases/
+  # under it -- so bootstrap-ubuntu-host.sh owns it to nextvisit-runner too.
+  llm_path="$(dirname -- "$releases_path")"
+  if [ -L "$llm_path" ] || [ ! -d "$llm_path" ]; then
+    printf '%s\n' "$llm_path must be a directory" >&2
+    exit 1
+  fi
+  llm_meta="$(stat -c '%U %a' -- "$llm_path" 2>/dev/null ||
+    stat -f '%Su %Lp' -- "$llm_path")"
+  if [ "$llm_meta" != "$runner_user 750" ]; then
+    printf '%s\n' "$llm_path must be owned by $runner_user with mode 0750" >&2
+    exit 1
+  fi
+
   if [ -L "$releases_path" ] || [ ! -d "$releases_path" ]; then
     printf '%s\n' "$releases_path must be a directory" >&2
     exit 1

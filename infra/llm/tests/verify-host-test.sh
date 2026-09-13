@@ -95,7 +95,15 @@ cat >"$test_root/bin/stat" <<'FAKE'
 #!/bin/sh
 set -eu
 test "${1:-}" = -c
-printf '%s %s\n' "${FAKE_RELEASES_OWNER:-nextvisit-runner}" "${FAKE_RELEASES_MODE:-750}"
+path=$4
+if [ "$path" = "${FAKE_RELEASES_PATH:-}" ]; then
+  printf '%s %s\n' "${FAKE_RELEASES_OWNER:-nextvisit-runner}" "${FAKE_RELEASES_MODE:-750}"
+elif [ "$path" = "${FAKE_LLM_DIR_PATH:-}" ]; then
+  printf '%s %s\n' "${FAKE_LLM_DIR_OWNER:-nextvisit-runner}" "${FAKE_LLM_DIR_MODE:-750}"
+else
+  printf 'fake stat: unexpected target %s\n' "$path" >&2
+  exit 2
+fi
 FAKE
 
 cat >"$test_root/bin/systemctl" <<'FAKE'
@@ -122,7 +130,11 @@ chmod +x "$test_root/bin/nvidia-smi" "$test_root/bin/nvidia-ctk" \
   "$test_root/bin/passwd" "$test_root/bin/stat" "$test_root/bin/systemctl" \
   "$test_root/ssbin/ss"
 
-releases_dir="$test_root/releases"
+# Nested the way the real host lays it out (llm_dir is releases_dir's parent)
+# so verify-host.sh's own `dirname -- "$releases_path"` lands on a directory
+# this fixture controls independently of releases_dir.
+llm_dir="$test_root/opt/nextvisit/llm"
+releases_dir="$llm_dir/releases"
 mkdir -p "$releases_dir"
 
 gpu_path="$test_root/bin:$test_root/ssbin:$PATH"
@@ -134,6 +146,8 @@ run_gpu() {
       NEXTVISIT_LLM_DATA_PATH=. \
       FAKE_AVAILABLE_KIB=20971520 \
       NEXTVISIT_LLM_RELEASES_PATH="$releases_dir" \
+      FAKE_RELEASES_PATH="$releases_dir" \
+      FAKE_LLM_DIR_PATH="$llm_dir" \
       "$script_dir/../scripts/verify-host.sh" gpu 2>&1
   )"
   gpu_status=$?
@@ -144,6 +158,7 @@ run_gpu() {
   # leaking into the next and making it pass for an unrelated reason.
   unset GPU_PATH_OVERRIDE FAKE_DOCKER_RUNTIMES FAKE_PASSWD_STATE \
     FAKE_PASSWD_MISSING FAKE_RELEASES_OWNER FAKE_RELEASES_MODE \
+    FAKE_LLM_DIR_OWNER FAKE_LLM_DIR_MODE \
     FAKE_MASKED_TARGETS FAKE_LISTENERS FAKE_SS_FAIL
 }
 
@@ -190,6 +205,14 @@ FAKE_PASSWD_MISSING=1 run_gpu
 expect_gpu_fail "unreadable account state" \
   "unable to read the nextvisit-runner password state; create the account first, then run gpu mode as nextvisit-runner or root"
 
+FAKE_LLM_DIR_OWNER=root run_gpu
+expect_gpu_fail "llm directory owned by root" \
+  "$llm_dir must be owned by nextvisit-runner with mode 0750"
+
+FAKE_LLM_DIR_MODE=755 run_gpu
+expect_gpu_fail "world-readable llm directory" \
+  "$llm_dir must be owned by nextvisit-runner with mode 0750"
+
 FAKE_RELEASES_OWNER=root run_gpu
 expect_gpu_fail "release directory owned by root" \
   "$releases_dir must be owned by nextvisit-runner with mode 0750"
@@ -199,7 +222,13 @@ expect_gpu_fail "world-readable release directory" \
   "$releases_dir must be owned by nextvisit-runner with mode 0750"
 
 NEXTVISIT_LLM_RELEASES_PATH_SAVED="$releases_dir"
-releases_dir="$test_root/missing-releases"
+releases_dir="$test_root/missing-llm-dir/releases"
+run_gpu
+expect_gpu_fail "missing llm directory" "$test_root/missing-llm-dir must be a directory"
+releases_dir="$NEXTVISIT_LLM_RELEASES_PATH_SAVED"
+
+NEXTVISIT_LLM_RELEASES_PATH_SAVED="$releases_dir"
+releases_dir="$llm_dir/missing-releases"
 run_gpu
 expect_gpu_fail "missing release directory" "$releases_dir must be a directory"
 releases_dir="$NEXTVISIT_LLM_RELEASES_PATH_SAVED"
