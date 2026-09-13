@@ -256,7 +256,16 @@ Docker 그룹은 사실상 root 권한이므로 `nextvisit-runner`를 일반 사
 `llm-deploy.yml`의 `Stage immutable release` 단계가 매 배포마다 같은 일을
 하지만, 여기 2절 시점에는 아직 그 workflow가 실행된 적이 없으므로 최초
 release는 직접 한 번 만들어 둔다. 유닛 파일을 `/etc/systemd/system/`에 설치하고
-활성화하는 부분만 `root` 권한이 필요하다.
+enable하는 부분만 `root` 권한이 필요하다.
+
+이 시점에는 유닛을 설치하고 enable만 해 둔다. `ExecStartPre`가 요구하는
+`/etc/nextvisit/llm.token`은 3절에서야 만들어지고, `ExecStart`가 기대하는
+빌드된 이미지와 pull된 모델도 4절에서야 준비되므로, 지금 시작하면
+`ExecStartPre`가 즉시 거부하거나(token 없음) `TimeoutStartSec=600` 안에
+이미지 빌드와 모델 pull, Tunnel 연결까지 다 끝내야 하는 상태로 반드시
+실패한다. 실제 `systemctl start`와 `is-enabled`/`is-active` 확인은 token·
+이미지·모델이 모두 준비되고 Tunnel/Access 검증까지 끝난 뒤인 4절 끝에서
+한다.
 
 ```bash
 sudo -iu nextvisit-runner bash <<'RUNNER'
@@ -267,6 +276,14 @@ sha="$(git -C "$repo_dir" rev-parse HEAD)"
 RUNNER
 ```
 
+`root`가 지금 설치하는 유닛 파일의 바이트는 `nextvisit-runner`가 쓸 수 있는
+저장소 checkout(`$repo_dir`)에서 그대로 온다. 오늘은 `nextvisit-runner`가
+이미 docker 그룹(이 호스트에서 사실상 root와 동급)이라 새로운 권한 상승이
+아니지만, 이 계정이 나중에 rootless Docker나 socket proxy로 재구성돼
+docker-root 동급성을 잃으면 이 설치 스텝은 조용히 상승 경로가 된다. 그때는
+`sudo install` 전에 `nextvisit-runner`가 쓸 수 없는 위치(`/root` 등)로 복사한
+뒤 `diff`로 내용을 확인하고 나서 설치하도록 바꿔야 한다.
+
 ```bash
 (
 set -eu
@@ -275,7 +292,7 @@ sudo install -o root -g root -m 0644 \
   "$repo_dir/infra/llm/systemd/nextvisit-llm.service" \
   /etc/systemd/system/nextvisit-llm.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now nextvisit-llm.service
+sudo systemctl enable nextvisit-llm.service
 )
 ```
 
@@ -285,8 +302,10 @@ sudo systemctl enable --now nextvisit-llm.service
 
 - [ ] `/opt/nextvisit/llm/current`가 방금 만든 release SHA를 가리키는지
       `readlink /opt/nextvisit/llm/current`로 확인한다.
-- [ ] `systemctl is-enabled nextvisit-llm.service`가 `enabled`인지 확인한다.
-- [ ] `systemctl is-active nextvisit-llm.service`가 `active`인지 확인한다.
+
+`systemctl start`와 `is-enabled`/`is-active` 확인은 아직 하지 않는다. 3절에서
+token을 만들고 4절에서 이미지·모델·Tunnel·Access를 모두 검증한 뒤, 4절 끝에서
+이 유닛을 시작한다.
 
 5절에서 자동 배포가 활성화된 뒤에는 매 `main` 배포가
 `stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"`를 실행해 새 release를
@@ -433,6 +452,17 @@ RUNNER
 
 - [ ] 실측 시간, GPU 사용 상태, 검증 일시를 운영 기록에 남기되 요청·응답 본문과
       자격증명은 기록하지 않는다.
+
+token(3절)과 이미지·모델(위 loopback 검증), Tunnel/Access(위 두 블록)가 모두
+준비되고 확인됐으므로, 이제 2절에서 설치·enable만 해 둔 재부팅 복구 유닛을
+시작한다.
+
+```bash
+sudo systemctl start nextvisit-llm.service
+```
+
+- [ ] `systemctl is-enabled nextvisit-llm.service`가 `enabled`인지 확인한다.
+- [ ] `systemctl is-active nextvisit-llm.service`가 `active`인지 확인한다.
 
 ## 5. GitHub runner 등록
 

@@ -191,13 +191,20 @@ model is missing), and starts `cloudflared` last. `ExecStop` always uses the
 same three-file `down` without `--volumes`, so the named model volume
 survives a stop. `Restart=on-failure` with a bounded `TimeoutStartSec` is
 deliberate: `Restart=always` would fight a deploy that drives the same
-Compose project directly. `OWNER_CHECKLIST.md` section 2 has the exact
-install sequence: stage a release, install the unit at
-`/etc/systemd/system/nextvisit-llm.service`, `systemctl daemon-reload`, then
-`systemctl enable --now` it (only after `/opt/nextvisit/llm/current` exists,
-since its `ConditionPathExists` requires that), then confirm
-`systemctl is-active nextvisit-llm.service` reports `active`, since the
-deploy workflow hard-gates on that.
+Compose project directly. Starting successfully needs three things to exist
+first, not just `ConditionPathExists`'s `/opt/nextvisit/llm/current`: the
+Tunnel token file `ExecStartPre` verifies, the built `ollama` image, and the
+already-pulled model — this unit never builds or downloads anything itself.
+`OWNER_CHECKLIST.md` section 2 stages a release and installs the unit
+(`/etc/systemd/system/nextvisit-llm.service`, `systemctl daemon-reload`,
+`systemctl enable`) but deliberately does not start it yet, because none of
+those three preconditions exist at that point in the checklist. Section 3
+creates the token file; section 4 builds the image, pulls the model, and
+verifies Tunnel/Access end to end — only at the end of section 4, once all
+three preconditions hold, does the checklist run `systemctl start
+nextvisit-llm.service` and confirm `systemctl is-active
+nextvisit-llm.service` reports `active`, since the deploy workflow hard-gates
+on that.
 
 `bootstrap-ubuntu-host.sh` owns `/opt/nextvisit/llm` itself to
 `nextvisit-runner:nextvisit-runner 0750` (not only `releases/` under it), so
