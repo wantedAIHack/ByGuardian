@@ -58,6 +58,16 @@ perl -0pi -e 's{    runs-on: ubuntu-latest}{    runs-on:\n      group: llm-produ
   "$fixture/.github/workflows/ci.yml"
 expect_rejected "CI job using a self-hosted runner group"
 
+prepare_fixture
+perl -0pi -e 's{NEXTVISIT_LLM_TOKEN_FILE: /etc/nextvisit/llm.token}{NEXTVISIT_LLM_ENV_FILE: /etc/nextvisit/llm.env}' \
+  "$fixture/.github/workflows/llm-deploy.yml"
+expect_rejected "deploy reintroducing the legacy Tunnel environment file variable"
+
+prepare_fixture
+perl -0pi -e 's{run: infra/llm/scripts/verify-tunnel-token-file.sh /etc/nextvisit/llm.token}{run: |\n          test -r /etc/nextvisit/llm.env\n          test "\$(stat -c \x27%a\x27 /etc/nextvisit/llm.env)" = 600}' \
+  "$fixture/.github/workflows/llm-deploy.yml"
+expect_rejected "deploy reverting to the unverified legacy environment file check"
+
 mutate_ci() {
   prepare_fixture
   perl -0pi -e "$1" "$fixture/.github/workflows/ci.yml"
@@ -94,6 +104,10 @@ mutate_ci 's/test "\$SECURITY_RESULT" = success/true/' 'ignored security failure
 mutate_ci 's/(  ci-gate:\n    needs: [^\n]*\n)    if: [^\n]*/${1}    if: false/' 'conditional stable gate'
 mutate_ci 's/(  security:\n    needs: changes\n)    if: [^\n]*/${1}    if: false/' 'conditional security inventory'
 mutate_ci 's/needs[.]frontend[.]result/needs.backend.result/' 'cross-wired gate result'
+mutate_ci 's/ci-render-only-token-sentinel/legacy-TUNNEL_TOKEN-sentinel/' 'reintroduced TUNNEL_TOKEN literal'
+mutate_ci 's/NEXTVISIT_LLM_TOKEN_FILE="\$token_file"/NEXTVISIT_LLM_ENV_FILE="\$token_file"/' 'reintroduced NEXTVISIT_LLM_ENV_FILE variable'
+mutate_ci 's{          ! jq -e }{          jq -e }' 'disabled structural token-absence check'
+mutate_ci 's/umask 077/umask 077 # --token/' 'introduced a bare --token argument reference'
 
 prepare_fixture
 cp "$fixture/.github/workflows/ci.yml" "$fixture/.github/workflows/extra.yml"

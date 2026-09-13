@@ -149,6 +149,7 @@ jobs:
           sh infra/llm/tests/verify-host-test.sh
           sh infra/llm/tests/workflows-test.sh
           sh infra/llm/tests/workflows-runner-group-test.sh
+          sh infra/llm/tests/tunnel-token-file-test.sh
       - name: Build pinned Ollama image
         working-directory: infra/llm
         run: docker build --tag nextvisit-ollama:0.33.3 .
@@ -156,16 +157,17 @@ jobs:
         working-directory: infra/llm
         run: |
           umask 077
-          tunnel_env="$(mktemp "$RUNNER_TEMP/llm-tunnel.XXXXXX")"
+          token_file="$(mktemp "$RUNNER_TEMP/llm-tunnel-token.XXXXXX")"
           rendered="$(mktemp "$RUNNER_TEMP/llm-compose.XXXXXX")"
-          trap 'rm -f "$tunnel_env" "$rendered"' EXIT
-          printf '%s\n' 'TUNNEL_TOKEN=ci-render-only-value' >"$tunnel_env"
-          chmod 600 "$tunnel_env" "$rendered"
+          trap 'rm -f "$token_file" "$rendered"' EXIT
+          printf '%s\n' 'ci-render-only-token-sentinel' >"$token_file"
+          chmod 600 "$token_file" "$rendered"
           docker compose -f compose.yml config --quiet
           docker compose -f compose.yml -f compose.gpu.yml config --quiet
-          NEXTVISIT_LLM_ENV_FILE="$tunnel_env" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --quiet
-          NEXTVISIT_LLM_ENV_FILE="$tunnel_env" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --format json >"$rendered"
+          NEXTVISIT_LLM_TOKEN_FILE="$token_file" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --quiet
+          NEXTVISIT_LLM_TOKEN_FILE="$token_file" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --format json >"$rendered"
           jq -e '.services.ollama.ports == null' "$rendered" >/dev/null
+          ! jq -e '[.services[] | ((.environment // {}) | to_entries[]?.value), ((.command // [])[]), ((.labels // {}) | to_entries[]?.value)] | any(. == "ci-render-only-token-sentinel")' "$rendered" >/dev/null
 
   integration:
     needs: changes

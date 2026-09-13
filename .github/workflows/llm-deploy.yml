@@ -34,10 +34,8 @@ jobs:
       - name: Verify Ubuntu GPU host
         run: infra/llm/scripts/verify-host.sh gpu
 
-      - name: Verify local Tunnel environment file
-        run: |
-          test -r /etc/nextvisit/llm.env
-          test "$(stat -c '%a' /etc/nextvisit/llm.env)" = 600
+      - name: Verify local Tunnel token file
+        run: infra/llm/scripts/verify-tunnel-token-file.sh /etc/nextvisit/llm.token
 
       - name: Build, initialize, and smoke Ollama on loopback
         working-directory: infra/llm
@@ -50,7 +48,7 @@ jobs:
       - name: Apply final no-port Tunnel configuration
         working-directory: infra/llm
         env:
-          NEXTVISIT_LLM_ENV_FILE: /etc/nextvisit/llm.env
+          NEXTVISIT_LLM_TOKEN_FILE: /etc/nextvisit/llm.token
         run: |
           umask 077
           rendered="$(mktemp "$RUNNER_TEMP/llm-compose.XXXXXX")"

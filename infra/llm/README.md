@@ -32,12 +32,17 @@ Never use `docker compose down --volumes` for routine deployment.
    configure Docker's NVIDIA runtime, and reboot:
 
    ```bash
+   sudo groupadd --gid 65532 nextvisit-cloudflared || true
    sudo useradd --create-home --shell /bin/bash nextvisit-runner
-   sudo usermod --append --groups docker nextvisit-runner
+   sudo usermod --append --groups docker,nextvisit-cloudflared nextvisit-runner
    sudo nvidia-ctk runtime configure --runtime=docker
    sudo systemctl restart docker
    sudo reboot
    ```
+
+   `nextvisit-cloudflared` (GID `65532`) lets the unattended deploy job read
+   `/etc/nextvisit/llm.token` without `sudo`; it must match the numeric group
+   the token file and its parent directory are created with below.
 
 3. Do **not** register this laptop as a self-hosted runner for the current
    personal-account repository `y-minion/wanted_Hackaton`. Its remote owner is
@@ -54,18 +59,23 @@ Never use `docker compose down --volumes` for routine deployment.
 4. In Cloudflare Zero Trust, create a remotely managed Tunnel route whose
    service is `http://ollama:11434`. Protect its public hostname with an Access
    service-token policy.
-5. Store only the Tunnel token locally:
+5. Store only the raw Tunnel token locally, as a file Compose mounts as a
+   secret rather than as an environment variable:
 
    ```bash
-   sudo install -d -o root -g nextvisit-runner -m 0750 /etc/nextvisit
-   sudo install -o nextvisit-runner -g nextvisit-runner -m 0600 /dev/null /etc/nextvisit/llm.env
-   sudoedit /etc/nextvisit/llm.env
-   sudo test "$(stat -c '%a' /etc/nextvisit/llm.env)" = 600
-   sudo -u nextvisit-runner test -r /etc/nextvisit/llm.env
+   sudo install -d -o root -g 65532 -m 0750 /etc/nextvisit
+   sudo install -o root -g 65532 -m 0440 /dev/null /etc/nextvisit/llm.token
+   sudoedit /etc/nextvisit/llm.token
+   sudo infra/llm/scripts/verify-tunnel-token-file.sh /etc/nextvisit/llm.token
    ```
 
-   The file has one line named `TUNNEL_TOKEN` whose value is issued by
-   Cloudflare. Do not store Access credentials in this file.
+   The file holds exactly one line: the raw token value issued by Cloudflare,
+   terminated by a single LF, with no `TUNNEL_TOKEN=` prefix. GID `65532` is
+   the cloudflared container's non-root runtime user; the host-side
+   `nextvisit-cloudflared` group above reuses that same number so
+   `nextvisit-runner` can read it. Do not store Access credentials in this
+   file. The verify script prints only `tunnel token file verified` and
+   never the token itself.
 6. Protect `main` in the repository settings by requiring pull-request review.
    Confirm `LLM CI` succeeds before merging changes covered by its path filters.
    Do not make this path-filtered workflow an unconditional required check:
@@ -98,7 +108,7 @@ Never use `docker compose down --volumes` for routine deployment.
 
 ```bash
 cd infra/llm
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml up --detach --wait --build ollama
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init
 ./scripts/smoke-openai.sh http://127.0.0.1:11434/v1

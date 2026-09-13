@@ -199,6 +199,7 @@ infra/llm/
     ensure-model.sh
     smoke-openai.sh
     verify-host.sh
+    verify-tunnel-token-file.sh
   README.md
 ```
 
@@ -222,7 +223,7 @@ Cloudflare Tunnel은 인바운드 포트포워딩 없이 외부로 연결한다.
 
 | 비밀 | 저장 위치 |
 | --- | --- |
-| Tunnel token | Ubuntu `/etc/nextvisit/llm.env` |
+| Tunnel token | Ubuntu `/etc/nextvisit/llm.token` (root:65532, mode 0440, mounted at `/run/secrets/tunnel_token` via Compose secret) |
 | Cloudflare Access client ID/secret | Spring API 배포 환경 변수 |
 | 호스팅 API key(사용 시) | Spring API 배포 환경 변수 |
 

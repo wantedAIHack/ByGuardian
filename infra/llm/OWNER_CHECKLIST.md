@@ -102,13 +102,18 @@ selected_workflows = [<ORG>/<REPO>/.github/workflows/llm-deploy.yml@refs/heads/m
 ```bash
 (
 set -eu
+sudo groupadd --gid 65532 nextvisit-cloudflared || true
 sudo useradd --create-home --shell /bin/bash nextvisit-runner
-sudo usermod --append --groups docker nextvisit-runner
+sudo usermod --append --groups docker,nextvisit-cloudflared nextvisit-runner
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 sudo reboot
 )
 ```
+
+`nextvisit-cloudflared`(GID `65532`)는 3절에서 만드는 `/etc/nextvisit/llm.token`을
+`nextvisit-runner`가 `sudo` 없이도 읽을 수 있게 하며, 아래 파일·디렉터리를 만들
+때 쓰는 숫자 그룹과 반드시 같아야 한다.
 
 재부팅 뒤 비공개 저장소에 쓰기 권한이 없는 전용 deploy key를 만든다.
 
@@ -189,26 +194,26 @@ Docker 그룹은 사실상 root 권한이므로 `nextvisit-runner`를 일반 사
 통과 기준: 이 hostname의 Access 정책에는 백엔드 전용 token 하나만 포함되고,
 다른 사용자·그룹·Service Token을 허용하거나 Access를 우회하는 규칙이 없어야 한다.
 
-노트북에는 Tunnel token만 저장한다.
+노트북에는 Tunnel token만, 환경변수가 아닌 Compose secret 파일 mount로 저장한다.
 
 ```bash
 (
 set -eu
-sudo install -d -o root -g nextvisit-runner -m 0750 /etc/nextvisit
-sudo install -o nextvisit-runner -g nextvisit-runner -m 0600 /dev/null /etc/nextvisit/llm.env
-sudoedit /etc/nextvisit/llm.env
-sudo test "$(stat -c '%a' /etc/nextvisit/llm.env)" = 600
-sudo -u nextvisit-runner test -r /etc/nextvisit/llm.env
+sudo install -d -o root -g 65532 -m 0750 /etc/nextvisit
+sudo install -o root -g 65532 -m 0440 /dev/null /etc/nextvisit/llm.token
+sudoedit /etc/nextvisit/llm.token
+repo_dir=/home/nextvisit-runner/wanted_Hackaton
+sudo "$repo_dir/infra/llm/scripts/verify-tunnel-token-file.sh" /etc/nextvisit/llm.token
 )
 ```
 
-`/etc/nextvisit/llm.env`에는 아래 키 한 줄만 둔다.
+`/etc/nextvisit/llm.token`에는 `TUNNEL_TOKEN=` 접두사 없이 Cloudflare가 발급한
+원본 token 값 한 줄만, LF 한 개로 끝나도록 저장한다. group `65532`는 원래
+cloudflared 컨테이너의 non-root 실행 사용자 번호이며, 2절에서 만든
+`nextvisit-cloudflared` 그룹이 같은 GID를 재사용해 `nextvisit-runner`에게도
+읽기 권한을 준다.
 
-```dotenv
-TUNNEL_TOKEN=<CLOUDFLARE_TUNNEL_TOKEN>
-```
-
-- [ ] 파일 권한이 `600`이고 `nextvisit-runner`만 읽을 수 있는지 확인한다.
+- [ ] 위 검사 스크립트가 `tunnel token file verified`만 출력하는지 확인한다.
 - [ ] Access Client ID/Secret이 이 파일에 들어 있지 않은지 확인한다.
 
 백엔드 서버의 secret store에는 다음 값을 별도로 저장하되 아직 활성화하지 않는다.
@@ -231,7 +236,7 @@ sudo -iu nextvisit-runner bash <<'RUNNER'
 set -eu
 repo_dir=/home/nextvisit-runner/wanted_Hackaton
 cd "$repo_dir/infra/llm" || exit 1
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml up --detach --wait --build ollama
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml run --rm model-init
 attempt=1
@@ -263,7 +268,7 @@ sudo -iu nextvisit-runner bash <<'RUNNER'
 set -eu
 repo_dir=/home/nextvisit-runner/wanted_Hackaton
 cd "$repo_dir/infra/llm" || exit 1
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml up --detach --wait ollama cloudflared
 ollama_id="$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml ps -q ollama)"
 test -n "$ollama_id"
@@ -349,7 +354,7 @@ sudo -iu nextvisit-runner bash <<'RUNNER'
 set -eu
 repo_dir=/home/nextvisit-runner/wanted_Hackaton
 cd "$repo_dir/infra/llm" || exit 1
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml exec ollama ollama ps
 RUNNER
 ```
@@ -454,7 +459,7 @@ sudo -iu nextvisit-runner bash <<'RUNNER'
 set -eu
 repo_dir=/home/nextvisit-runner/wanted_Hackaton
 cd "$repo_dir/infra/llm" || exit 1
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm \
   -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml down
 RUNNER
@@ -470,15 +475,16 @@ RUNNER
 - Tunnel token이 의심되면 즉시 회전하고 **기존 Tunnel 연결을 전부 강제 종료**한다.
   token 회전만으로는 이미 연결된 connector가 끊기지 않는다. Cloudflare의
   [compromised token 절차](https://developers.cloudflare.com/tunnel/advanced/tunnel-tokens/#rotate-a-compromised-token)에 따라 연결이 모두 종료됐는지 확인한다.
-- 새 Tunnel token으로 `/etc/nextvisit/llm.env`를 교체한 뒤 아래 명령으로 정상
-  `cloudflared`만 다시 만든다.
+- 새 Tunnel token으로 `/etc/nextvisit/llm.token`을 교체하고
+  `verify-tunnel-token-file.sh /etc/nextvisit/llm.token`으로 다시 확인한 뒤
+  아래 명령으로 정상 `cloudflared`만 다시 만든다.
 
 ```bash
 sudo -iu nextvisit-runner bash <<'RUNNER'
 set -eu
 repo_dir=/home/nextvisit-runner/wanted_Hackaton
 cd "$repo_dir/infra/llm" || exit 1
-export NEXTVISIT_LLM_ENV_FILE=/etc/nextvisit/llm.env
+export NEXTVISIT_LLM_TOKEN_FILE=/etc/nextvisit/llm.token
 docker compose --project-name nextvisit-llm \
   -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml \
   up --detach --wait --force-recreate cloudflared
