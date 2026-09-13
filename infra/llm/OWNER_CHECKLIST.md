@@ -11,6 +11,10 @@
 노출하지 않는 Cloudflare Access smoke, 강화된 단일 목적 배포 workflow가
 추가되는 동안 갱신되지 않아 실제와 어긋나 있었다. 아래가 현재 상태다.
 
+(`06fd5f3`는 이 문서 자신을 갱신하는 커밋의 부모다 — 커밋은 자기 자신의 SHA를
+가리킬 수 없고, 그 커밋은 이 문서 한 파일만 바꾸므로 아래 Step 1/Step 2 결과는
+그 커밋이 만든 tree에도 그대로 적용된다.)
+
 - [x] 백엔드의 템플릿 우선 비동기 LLM 연동과 실패 시 전체 템플릿 폴백 구현
 - [x] Ollama CPU/GPU, 모델 초기화, Cloudflare Tunnel Compose 구성 (파일 전용
       Tunnel secret 설계 포함)
@@ -36,9 +40,9 @@
       `NEXTVISIT_LLM_ENABLED`는 계속 `false`이며, 둘 다 위 두 항목이 실기로
       전부 끝난 뒤에만 켠다.
 
-이 오프라인 실행 전체의 명령, 결과, 렌더링 검증 내역은
-`.superpowers/sdd/2026-09-10-ubuntu-llm-and-cloudflare-access/task-6-report.md`에
-있다.
+이 오프라인 실행 전체의 명령과 결과는 위 항목에 요약돼 있다. 더 상세한 근거가
+필요하면 이 커밋들의 이력과 각 커밋 메시지의 `Claude-Session` URL을 참고한다 —
+검증 과정에서 쓰인 임시 작업 디렉터리는 저장소에 커밋되지 않는 scratch였다.
 
 ## 완료 조건
 
