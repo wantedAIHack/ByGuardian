@@ -194,8 +194,10 @@ deliberate: `Restart=always` would fight a deploy that drives the same
 Compose project directly. `OWNER_CHECKLIST.md` section 2 has the exact
 install sequence: stage a release, install the unit at
 `/etc/systemd/system/nextvisit-llm.service`, `systemctl daemon-reload`, then
-`systemctl enable` it (only after `/opt/nextvisit/llm/current` exists, since
-its `ConditionPathExists` requires that).
+`systemctl enable --now` it (only after `/opt/nextvisit/llm/current` exists,
+since its `ConditionPathExists` requires that), then confirm
+`systemctl is-active nextvisit-llm.service` reports `active`, since the
+deploy workflow hard-gates on that.
 
 `bootstrap-ubuntu-host.sh` owns `/opt/nextvisit/llm` itself to
 `nextvisit-runner:nextvisit-runner 0750` (not only `releases/` under it), so
