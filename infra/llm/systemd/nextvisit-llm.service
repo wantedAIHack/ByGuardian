@@ -32,10 +32,20 @@ ConditionPathExists=/opt/nextvisit/llm/current
 # so a persistently failing unit would retry forever, driving `docker compose
 # up` against the same project every 15 seconds -- the same "fight a live
 # deploy" scenario Restart=always was rejected for. This bounds the total
-# retry window instead: after 5 starts within 600 seconds, systemd stops
-# restarting the unit and it stays failed until an operator intervenes.
+# retry window instead: after 5 starts within StartLimitIntervalSec, systemd
+# stops restarting the unit and it stays failed until an operator intervenes.
+#
+# That window has to cover the slowest realistic failure, not only a fast
+# one. TimeoutStartSec=600 below bounds ExecStart itself, so an attempt that
+# fails by hanging (the `docker compose up --wait` case, e.g. a stuck GPU
+# runtime or an unreachable Tunnel edge) still costs up to TimeoutStartSec
+# plus RestartSec before the next attempt begins: 5 such attempts span up to
+# 5 * (600 + 15) = 3075 seconds. A 600-second StartLimitIntervalSec would
+# never see more than one attempt in-window and the limiter would never
+# trip, retrying the hang forever -- exactly what this exists to prevent.
+# 3700 stays comfortably above that 3075-second bound.
 StartLimitBurst=5
-StartLimitIntervalSec=600
+StartLimitIntervalSec=3700
 
 [Service]
 Type=oneshot

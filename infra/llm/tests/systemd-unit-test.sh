@@ -133,9 +133,13 @@ forbid_ere '^Restart=always$' "unit must never use Restart=always"
 # 15s spacing, so a persistently failing unit would retry forever -- driving
 # `docker compose up` against the same project every 15 seconds, exactly the
 # "fight a live deploy" scenario Restart=always was rejected for. These two
-# bound the total retry window instead.
+# bound the total retry window instead -- but the window must exceed
+# 5 * (TimeoutStartSec + RestartSec) = 5 * (600 + 15) = 3075 seconds, or a
+# unit that fails by *hanging* until TimeoutStartSec (not failing fast) would
+# never accumulate 5 starts inside the window and the limiter would never
+# trip, retrying the hang forever.
 require_line 'StartLimitBurst=5' "unit restart attempts must be bounded"
-require_line 'StartLimitIntervalSec=600' "unit restart window must be bounded"
+require_line 'StartLimitIntervalSec=3700' "unit restart window must exceed 5 * (TimeoutStartSec + RestartSec) so a hanging start still trips the limiter"
 
 # --- no token value, env file, or root execution anywhere in the unit -------
 
