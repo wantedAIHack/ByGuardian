@@ -167,12 +167,34 @@ write_repositories() {
     "$architecture" "$docker_key" "$codename" >"$work_dir/docker.list"
   install_file "$work_dir/docker.list" "$docker_list" 0644
 
-  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey |
-    gpg --dearmor >"$work_dir/nvidia.gpg"
+  # Downloaded to a plain file first, never straight into a pipe: with
+  # `set -eu` and no `pipefail` (dash has none), `curl | gpg --dearmor` would
+  # let a 5xx, DNS failure, or captive portal leave gpg's output empty while
+  # the pipeline's last-command exit status (gpg's) still looked like
+  # success, and `install_file` would then happily install that empty file
+  # as a *trusted* keyring. Checking curl's own exit status and the
+  # downloaded bytes before transforming them closes both holes.
+  if ! curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+    >"$work_dir/nvidia.gpgkey"; then
+    fail "download of the NVIDIA repository key failed"
+  fi
+  [ -s "$work_dir/nvidia.gpgkey" ] ||
+    fail "download of the NVIDIA repository key was empty"
+  gpg --dearmor <"$work_dir/nvidia.gpgkey" >"$work_dir/nvidia.gpg"
+  [ -s "$work_dir/nvidia.gpg" ] ||
+    fail "NVIDIA repository key failed to dearmor into a non-empty keyring"
   install_file "$work_dir/nvidia.gpg" "$nvidia_key" 0644
 
-  curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list |
-    sed "s#deb https://#deb [signed-by=$nvidia_key] https://#g" >"$work_dir/nvidia.list"
+  if ! curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+    >"$work_dir/nvidia.list.raw"; then
+    fail "download of the NVIDIA repository list failed"
+  fi
+  [ -s "$work_dir/nvidia.list.raw" ] ||
+    fail "download of the NVIDIA repository list was empty"
+  sed "s#deb https://#deb [signed-by=$nvidia_key] https://#g" \
+    <"$work_dir/nvidia.list.raw" >"$work_dir/nvidia.list"
+  [ -s "$work_dir/nvidia.list" ] ||
+    fail "NVIDIA repository list transform produced empty output"
   install_file "$work_dir/nvidia.list" "$nvidia_list" 0644
 }
 
@@ -277,7 +299,9 @@ ensure_directories() {
   # not merely traversable. 0750 keeps it as tight as releases/ below; only
   # root and nextvisit-runner itself can enter it. nextvisit-runner is already
   # in the docker group (root-equivalent for this host) and already owns
-  # everything under releases/, so this grants no new capability.
+  # everything under releases/, so this grants no new capability today; that
+  # reasoning breaks if this account is ever de-escalated from docker-group
+  # root-equivalence (e.g. rootless Docker, a socket proxy).
   install_dir /opt/nextvisit/llm "$runner_user" "$runner_user" 0750
   install_dir "$releases_dir" "$runner_user" "$runner_user" 0750
 

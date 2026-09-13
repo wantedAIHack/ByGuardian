@@ -104,12 +104,22 @@ case "$url" in
     printf '%s\n' '-----END PGP PUBLIC KEY BLOCK-----'
     ;;
   https://nvidia.github.io/libnvidia-container/gpgkey)
-    printf '%s\n' '-----BEGIN PGP PUBLIC KEY BLOCK-----'
-    printf '%s\n' 'ZmFrZS1udmlkaWEtcmVwb3NpdG9yeS1rZXk='
-    printf '%s\n' '-----END PGP PUBLIC KEY BLOCK-----'
+    case "${FAKE_CURL_NVIDIA_KEY:-ok}" in
+      fail) exit 22 ;;
+      empty) : ;;
+      *)
+        printf '%s\n' '-----BEGIN PGP PUBLIC KEY BLOCK-----'
+        printf '%s\n' 'ZmFrZS1udmlkaWEtcmVwb3NpdG9yeS1rZXk='
+        printf '%s\n' '-----END PGP PUBLIC KEY BLOCK-----'
+        ;;
+    esac
     ;;
   https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list)
-    printf '%s\n' 'deb https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /'
+    case "${FAKE_CURL_NVIDIA_LIST:-ok}" in
+      fail) exit 22 ;;
+      empty) : ;;
+      *) printf '%s\n' 'deb https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /' ;;
+    esac
     ;;
   *) exit 22 ;;
 esac
@@ -357,7 +367,7 @@ new_host() {
   # of the script. Reset every knob explicitly so one case's rejection reason
   # can never leak into the next case and make it pass for the wrong reason.
   unset FAKE_UID FAKE_ARCH FAKE_NVIDIA_SMI_STATUS FAKE_AVAILABLE_KIB \
-    FAKE_DOCKER_RUNTIMES
+    FAKE_DOCKER_RUNTIMES FAKE_CURL_NVIDIA_KEY FAKE_CURL_NVIDIA_LIST
   host_number=$((host_number + 1))
   host="$test_root/host-$host_number"
   mkdir -p "$host/etc/apt/sources.list.d" "$host/etc/systemd" \
@@ -743,6 +753,47 @@ if ! cmp -s "$prepare_manifest" "$prepare_manifest_2"; then
   diff "$prepare_manifest" "$prepare_manifest_2" >&2 || true
   exit 1
 fi
+
+# --- IMPORTANT 2: a failed or empty NVIDIA curl must never leave an empty
+# trusted keyring/list installed. Each case must never even reach
+# install_file for the NVIDIA key/list, so the created-file set stays exactly
+# what a completely fresh host started with (no keyring, no list). ----------
+
+new_host
+nvidia_key_fail_host="$host"
+FAKE_CURL_NVIDIA_KEY=fail run_bootstrap prepare
+expect_fail "NVIDIA key download failure" "download of the NVIDIA repository key failed"
+[ ! -e "$nvidia_key_fail_host/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg" ] || {
+  printf 'a failed NVIDIA key download must never produce an installed keyring\n' >&2
+  exit 1
+}
+
+new_host
+nvidia_key_empty_host="$host"
+FAKE_CURL_NVIDIA_KEY=empty run_bootstrap prepare
+expect_fail "NVIDIA key download empty" "download of the NVIDIA repository key was empty"
+[ ! -e "$nvidia_key_empty_host/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg" ] || {
+  printf 'an empty NVIDIA key download must never produce an installed keyring\n' >&2
+  exit 1
+}
+
+new_host
+nvidia_list_fail_host="$host"
+FAKE_CURL_NVIDIA_LIST=fail run_bootstrap prepare
+expect_fail "NVIDIA list download failure" "download of the NVIDIA repository list failed"
+[ ! -e "$nvidia_list_fail_host/etc/apt/sources.list.d/nvidia-container-toolkit.list" ] || {
+  printf 'a failed NVIDIA list download must never produce an installed list\n' >&2
+  exit 1
+}
+
+new_host
+nvidia_list_empty_host="$host"
+FAKE_CURL_NVIDIA_LIST=empty run_bootstrap prepare
+expect_fail "NVIDIA list download empty" "download of the NVIDIA repository list was empty"
+[ ! -e "$nvidia_list_empty_host/etc/apt/sources.list.d/nvidia-container-toolkit.list" ] || {
+  printf 'an empty NVIDIA list download must never produce an installed list\n' >&2
+  exit 1
+}
 
 # --- Step 3: apply gates on the approved lock SHA before mutating packages --
 
