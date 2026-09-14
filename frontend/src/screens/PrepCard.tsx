@@ -41,17 +41,20 @@ export function PrepCard() {
         {data.nextVisitDate ? `${formatDate(data.nextVisitDate)} 진료` : '진료 준비'}
       </h1>
 
-      {/* 질문은 최대 3개이고 0개일 수 있다. 빈 칸을 만들지 않는다. */}
+      {/* 질문은 최대 3개이고 0개일 수 있다. 빈 칸을 만들지 않는다.
+          질문과 그 '근거 보기' 사이 간격이 질문끼리의 간격과 거의 같아서 근거가
+          어느 질문에 붙은 것인지 알 수 없었다. 근접성이 그룹을 만들도록 항목
+          안은 좁히고 항목 사이는 선으로 끊는다. */}
       {data.questions.length === 0 ? (
         data.emptyMessage ? <p className="pt-8">{data.emptyMessage}</p> : null
       ) : (
-        <ol className="flex flex-col gap-10 pt-8">
+        <ol className="mt-8 divide-y divide-line border-t border-line">
           {data.questions.map((q) => (
-            <li key={q.rank}>
+            <li key={q.rank} className="py-5">
               {/* rank 접두사를 별도 노드로 둔다: q.sentence가 p 자신의 유일한 텍스트 노드로
                   남아야 '서버 문장을 그대로 낸다'가 정확히 그 문장만으로 검증된다. */}
               <p className="font-semibold"><span>{q.rank}. </span>{q.sentence}</p>
-              <div className="pt-3">
+              <div className="pt-1">
                 <Collapse label="근거 보기">
                   <div className="flex flex-col gap-4">
                     {q.evidence.items.map((it) => (
