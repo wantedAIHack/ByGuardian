@@ -739,7 +739,14 @@ require_line "            --security-opt no-new-privileges --read-only \\" "$ci"
 require_line "            --tmpfs /tmp:rw,noexec,nosuid,size=256m --env XDG_CACHE_HOME=/tmp/osv-cache \\" "$ci" "OSV cache must be bounded and ephemeral"
 require_line "            --volume \"\$GITHUB_WORKSPACE:/src:ro\" \\" "$ci" "OSV checkout must be read-only"
 require_line "          version: 3.97.4@sha256:d366c22dadaeaf5ce5686035028deb97d365233cd7c9955f424dac4612c3ef25" "$ci" "TruffleHog version must match the audited digest"
-require_line "          extra_args: --results=verified --fail --no-update --fail-on-scan-errors --log-level=-1" "$ci" "the pinned action must block verified secrets; the combined all-status gate must also run"
+# `--fail` is NOT in extra_args: the pinned action appends its own, and
+# trufflehog aborts on a repeated flag, which failed every hosted run.
+# The blocking property is still asserted -- by the action supplying it --
+# so what this pins is that nobody re-adds the duplicate or drops
+# --results=verified / --fail-on-scan-errors, which are what make the scan
+# gate rather than merely report.
+require_line "          extra_args: --results=verified --no-update --fail-on-scan-errors --log-level=-1" "$ci" "the scan must report only verified results and fail closed on scan errors"
+forbid_ere 'extra_args:.*[[:space:]]--fail([[:space:]]|$)' "$ci" "extra_args must not repeat the action's own --fail flag"
 require_ci_property security '        run: node --test scripts/ci/secret-findings-test.mjs scripts/ci/secret-findings-mutations-test.mjs'
 require_secret_gate_property '        run: node scripts/ci/secret-findings-gate.mjs'
 require_secret_gate_property "        if: \${{ always() }}"

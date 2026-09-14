@@ -78,7 +78,21 @@ cleanup() {
         printf 'integration: %s diagnostic markers (allowlisted lines only)\n' "$component"
         printf '%s\n' "$diagnostic"
       else
-        printf 'integration: no allowlisted failure marker found in %s.log\n' "$component"
+        # No marker matched. Components that fail BEFORE the browser journey
+        # starts cannot have handled a single request yet, so their logs hold
+        # startup output only -- no response body, prompt, or guardian note can
+        # exist. For those, a bounded tail is safe and is the only way to
+        # diagnose a remote failure. The browser component is excluded: by then
+        # real records have flowed.
+        case "$component" in
+          postgres|api|frontend|frontend-build|java|ports)
+            printf 'integration: %s pre-journey log tail (no request served yet)\n' "$component"
+            tail -n 40 "$logs/$component.log" || true
+            ;;
+          *)
+            printf 'integration: no allowlisted failure marker found in %s.log\n' "$component"
+            ;;
+        esac
       fi
     fi
   else
