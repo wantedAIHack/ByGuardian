@@ -745,8 +745,8 @@ require_line "          version: 3.97.4@sha256:d366c22dadaeaf5ce5686035028deb97d
 # so what this pins is that nobody re-adds the duplicate or drops
 # --results=verified / --fail-on-scan-errors, which are what make the scan
 # gate rather than merely report.
-require_line "          extra_args: --results=verified --no-update --fail-on-scan-errors --log-level=-1" "$ci" "the scan must report only verified results and fail closed on scan errors"
-forbid_ere 'extra_args:.*[[:space:]]--fail([[:space:]]|$)' "$ci" "extra_args must not repeat the action's own --fail flag"
+require_line "          extra_args: --results=verified --fail-on-scan-errors --log-level=-1" "$ci" "the scan must report only verified results and fail closed on scan errors"
+forbid_ere 'extra_args:.*[[:space:]]--(fail|no-update)([[:space:]]|$)' "$ci" "extra_args must not repeat --fail or --no-update, which the pinned action supplies itself"
 require_ci_property security '        run: node --test scripts/ci/secret-findings-test.mjs scripts/ci/secret-findings-mutations-test.mjs'
 require_secret_gate_property '        run: node scripts/ci/secret-findings-gate.mjs'
 require_secret_gate_property "        if: \${{ always() }}"

@@ -248,9 +248,10 @@ jobs:
           base: ${{ needs.changes.outputs.scan_base }}
           head: ${{ needs.changes.outputs.scan_head }}
           version: 3.97.4@sha256:d366c22dadaeaf5ce5686035028deb97d365233cd7c9955f424dac4612c3ef25
-          # No --fail here: the action appends its own, and trufflehog rejects a
-          # repeated flag ("flag 'fail' cannot be repeated") which failed every run.
-          extra_args: --results=verified --no-update --fail-on-scan-errors --log-level=-1
+          # Neither --fail nor --no-update here: the pinned action appends both
+          # itself (action.yml lines 108-109) and trufflehog aborts on a repeated
+          # flag, which failed every hosted run.
+          extra_args: --results=verified --fail-on-scan-errors --log-level=-1
       - name: Test secret candidate fail-closed contract
         run: node --test scripts/ci/secret-findings-test.mjs scripts/ci/secret-findings-mutations-test.mjs
       - name: Scan every secret status with exact historical occurrence checks

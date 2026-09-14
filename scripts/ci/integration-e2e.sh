@@ -85,7 +85,7 @@ cleanup() {
         # diagnose a remote failure. The browser component is excluded: by then
         # real records have flowed.
         case "$component" in
-          postgres|api|frontend|frontend-build|java|ports)
+          postgres|api|api-build|frontend|frontend-build|java|ports)
             printf 'integration: %s pre-journey log tail (no request served yet)\n' "$component"
             tail -n 40 "$logs/$component.log" || true
             ;;
@@ -138,6 +138,15 @@ node --input-type=module -e '
 
 component=postgres
 run_bounded 240 postgres docker compose --project-name nextvisit-integration -f "$root/infra/local/compose.integration.yml" up --detach --wait --wait-timeout 60
+
+# Resolve and compile BEFORE starting, under a bound sized for a cold machine.
+# The 60s readiness window below exists to catch a HUNG startup, not to time a
+# first-run Gradle distribution download and dependency resolution; on a cold
+# GitHub-hosted runner those alone blow past 60s and the whole journey failed
+# with the API still printing "Downloading gradle-8.12-bin.zip".
+component=api-build
+run_bounded 900 api-build "$root/backend/gradlew" --project-dir "$root/backend" \
+  --no-daemon --console=plain :api:classes
 
 component=api
 (cd "$root/backend" && exec ./gradlew --no-daemon --console=plain :api:bootRun) >"$logs/api.log" 2>&1 &
