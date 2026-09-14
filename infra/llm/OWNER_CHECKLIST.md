@@ -4,16 +4,20 @@
 외부 설정과 Ubuntu 실기 검증을 순서대로 정리한다. 상세 명령과 장애 대응은
 [`README.md`](./README.md)를 함께 참고한다.
 
-## 현재 상태 — 2026-09-14 (commit `06fd5f3`)
+## 현재 상태 — 2026-09-14 (실기 검증 완료, commit `6e60483`)
 
 이 절은 2026-09-09에 작성된 뒤 파일 전용 Tunnel secret, 멱등한 2단계 Ubuntu
 호스트 bootstrap, immutable release와 systemd 재부팅 복구 유닛, 응답 본문을
 노출하지 않는 Cloudflare Access smoke, 강화된 단일 목적 배포 workflow가
 추가되는 동안 갱신되지 않아 실제와 어긋나 있었다. 아래가 현재 상태다.
 
-(`06fd5f3`는 이 문서 자신을 갱신하는 커밋의 부모다 — 커밋은 자기 자신의 SHA를
-가리킬 수 없고, 그 커밋은 이 문서 한 파일만 바꾸므로 아래 Step 1/Step 2 결과는
-그 커밋이 만든 tree에도 그대로 적용된다.)
+(`6e60483`는 이 문서 자신을 갱신하는 커밋의 부모다 — 커밋은 자기 자신의 SHA를
+가리킬 수 없고, 그 커밋은 문서만 바꾸므로 아래 결과는 그 커밋이 만든 tree에도
+그대로 적용된다.)
+
+**2026-09-14: Ubuntu/NVIDIA 노트북 실기 검증을 실제로 수행해 통과했다.** 아래
+목록에서 해당 항목이 `[x]`로 바뀌었다. Cloudflare/GitHub 외부 설정과 자동 배포,
+백엔드 LLM 활성화는 여전히 수행되지 않았다.
 
 - [x] 백엔드의 템플릿 우선 비동기 LLM 연동과 실패 시 전체 템플릿 폴백 구현
 - [x] Ollama CPU/GPU, 모델 초기화, Cloudflare Tunnel Compose 구성 (파일 전용
@@ -29,10 +33,16 @@
       `integration-e2e.sh`(PostgreSQL + 브라우저 여정, LLM 비활성),
       `actionlint`까지 hosted-동등 명령을 오프라인으로 전부 통과 (commit
       `06fd5f3`, 2026-09-14 실행)
-- [ ] Ubuntu/NVIDIA 노트북 실기 검증 — 노트북이 꺼져 있어 전혀 수행되지 않음
-      (실패가 아니라 아직 시작하지 않은 상태): `nextvisit-runner` 비밀번호
-      회전/잠금 확인, `bootstrap-ubuntu-host.sh apply` 실행, 재부팅 복구,
-      GPU 추론(`ollama ps`의 `100% GPU`) 확인 중 어느 것도 실기로 증명되지 않았다.
+- [x] Ubuntu/NVIDIA 노트북 실기 검증 완료 (2026-09-14). `nextvisit-runner`
+      비밀번호 잠금 확인, `bootstrap-ubuntu-host.sh prepare`/`apply` 실행,
+      `verify-host.sh gpu` 통과(`host verification passed for gpu mode`),
+      고정 CUDA 컨테이너(`nvidia/cuda@sha256:c87e78933f4c16e3272123bf2f75537306596d0fbaa395a29696a22786e5ee0e`)에서
+      GPU 가시성 확인, base+GPU Compose 기동, 모델 초기화(99초),
+      loopback smoke 3회(**9초 / 5초 / 6초**, 모두 45초 기준 미만),
+      `ollama ps`가 **`100% GPU`**·컨텍스트 2048 보고,
+      `down`(`--volumes` 미사용) 후 재기동 시 모델 재다운로드 없음(6초),
+      포트 11434는 `127.0.0.1` 전용이며 외부 리스너 없음.
+      **재부팅 복구는 아직 검증하지 않았다**(6절).
 - [ ] Cloudflare/GitHub 외부 설정 — Access 정책 구성, Tunnel 연결, 외부(EC2)
       Access smoke, GitHub runner group을 이 저장소와 `main` 배포 workflow로
       제한하는 작업 중 어느 것도 수행되지 않았다.
@@ -311,6 +321,50 @@ token을 만들고 4절에서 이미지·모델·Tunnel·Access를 모두 검증
 `stage-runtime.sh "$GITHUB_SHA" "$GITHUB_WORKSPACE"`를 실행해 새 release를
 만들고 `current`를 그쪽으로 옮긴다. 이 유닛은 그 `current`만 바라보므로,
 배포와 재부팅 복구가 항상 같은 release를 가리킨다.
+
+### 2026-09-14 실기 설치 기록 (비밀값 없음)
+
+호스트: Ubuntu 24.04, x86_64, 커널 6.8.0-139, Intel i7-7700HQ, RAM 23.2 GiB,
+GPU **GeForce GTX 1060 6144 MiB / 드라이버 580.173.02**(bootstrap이 건드리지 않음),
+AC 전원 연결, 시간 동기 정상, Secure Boot 비활성.
+
+`apply`가 설치한 정확한 버전:
+
+```text
+containerd.io=2.3.5-1~ubuntu.24.04~noble
+docker-buildx-plugin=0.37.1-1~ubuntu.24.04~noble
+docker-ce-cli=5:29.8.0-1~ubuntu.24.04~noble
+docker-ce=5:29.8.0-1~ubuntu.24.04~noble
+docker-compose-plugin=5.5.1-1~ubuntu.24.04~noble
+libnvidia-container1=1.20.0-1
+nvidia-container-toolkit=1.20.0-1
+```
+
+승인에 사용한 lock SHA-256: `2afe9ed30156d025966f3f67cd865afb486c2366e10f0ba7c431f2e1e3fa5a79`
+
+서명 저장소 지문(두 번의 `prepare`에서 동일했고, 공식 출처와 대조해 일치 확인):
+
+```text
+/etc/apt/keyrings/docker.asc                          sha256:1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
+/etc/apt/sources.list.d/docker.list                   sha256:2e87eb934ec45a4f64c6b0570da3faf4073267498fcc73eaa28ed8938718a3e3
+/etc/apt/sources.list.d/nvidia-container-toolkit.list sha256:d6229affd0edd66579f7dd75dfd09d31a32aba77dbbc7ed7e154fdb29bc3aab9
+/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg sha256:425822bb25bfa7f5ce96e598a7bbd27db128649e4113017b3ff765b98b43b166
+```
+
+두 `apply` 모두 `0 upgraded, ... 0 to remove and 49 not upgraded`로 끝나 배포판
+전체 업그레이드가 없었음을 보였다. 2차 `apply`는 `nvidia-ctk`를 다시 실행하지도
+Docker를 재시작하지도 않아 멱등성이 실기에서 확인됐다.
+
+적용된 호스트 상태: `/etc/nextvisit` = `root:nextvisit-cloudflared 0750`,
+`/opt/nextvisit/llm`과 `releases/` = `nextvisit-runner:nextvisit-runner 0750`,
+`/opt/nextvisit` = `root:root 0755`(변경 없음), sleep/suspend/hibernate/
+hybrid-sleep 타깃 4개 모두 `masked`, `nextvisit-runner`의 그룹은
+`nextvisit-runner docker nextvisit-cloudflared`.
+
+주의: `docker-buildx-plugin`은 처음 6개 목록에 빠져 있었다. `infra/llm/Dockerfile`이
+`COPY --chmod=`을 쓰는데 이는 BuildKit 전용이라, buildx 없이는
+`the --chmod option requires BuildKit`으로 빌드가 실패한다. 첫 실기 빌드에서
+드러나 목록에 추가했다.
 
 ## 3. Cloudflare Tunnel과 비밀값 준비
 
