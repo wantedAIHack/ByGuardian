@@ -19,3 +19,14 @@ nextvisit:
     allowed-origins: ${NEXTVISIT_CORS_ORIGINS:http://localhost:5173}
   demo:
     enabled: ${NEXTVISIT_DEMO_ENABLED:true}
+  llm:
+    enabled: ${NEXTVISIT_LLM_ENABLED:false}
+    base-url: ${NEXTVISIT_LLM_BASE_URL:http://localhost:11434/v1}
+    model: ${NEXTVISIT_LLM_MODEL:qwen3:4b-q8_0}
+    api-key: ${NEXTVISIT_LLM_API_KEY:ollama}
+    cf-access-client-id: ${NEXTVISIT_LLM_CF_ACCESS_CLIENT_ID:}
+    cf-access-client-secret: ${NEXTVISIT_LLM_CF_ACCESS_CLIENT_SECRET:}
+    connect-timeout: ${NEXTVISIT_LLM_CONNECT_TIMEOUT:3s}
+    read-timeout: ${NEXTVISIT_LLM_READ_TIMEOUT:45s}
+    max-attempts: ${NEXTVISIT_LLM_MAX_ATTEMPTS:3}
+    max-output-tokens: ${NEXTVISIT_LLM_MAX_OUTPUT_TOKENS:512}

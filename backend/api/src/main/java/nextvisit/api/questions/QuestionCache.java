@@ -2,6 +2,8 @@ package nextvisit.api.questions;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
@@ -23,8 +25,12 @@ public class QuestionCache {
     @Column(nullable = false)
     private int week;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String status;
+    private QuestionCacheStatus status;
+
+    @Column(name = "generation_id")
+    private UUID generationId;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false)
@@ -35,18 +41,22 @@ public class QuestionCache {
 
     protected QuestionCache() {}
 
-    public QuestionCache(UUID caseId, int week, String status, String body, Instant generatedAt) {
+    public QuestionCache(UUID caseId, int week, QuestionCacheStatus status, UUID generationId,
+                         String body, Instant generatedAt) {
         this.id = UUID.randomUUID();
         this.caseId = caseId;
         this.week = week;
         this.status = status;
+        this.generationId = generationId;
         this.body = body;
         this.generatedAt = generatedAt;
     }
 
-    public void update(int week, String status, String body, Instant generatedAt) {
+    public void update(int week, QuestionCacheStatus status, UUID generationId,
+                       String body, Instant generatedAt) {
         this.week = week;
         this.status = status;
+        this.generationId = generationId;
         this.body = body;
         this.generatedAt = generatedAt;
     }
@@ -54,7 +64,8 @@ public class QuestionCache {
     public UUID getId() { return id; }
     public UUID getCaseId() { return caseId; }
     public int getWeek() { return week; }
-    public String getStatus() { return status; }
+    public QuestionCacheStatus getStatus() { return status; }
+    public UUID getGenerationId() { return generationId; }
     public String getBody() { return body; }
     public Instant getGeneratedAt() { return generatedAt; }
 }

@@ -1,0 +1,18 @@
+services:
+  ollama:
+    ports: !reset []
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.8.3@sha256:51c9cefcb4569df44e1ad403ab1d3d8065aa8e84339bcfc6aee75502e1140339
+    command: ["tunnel", "--no-autoupdate", "run", "--token-file", "/run/secrets/tunnel_token"]
+    secrets:
+      - source: tunnel_token
+        target: tunnel_token
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  tunnel_token:
+    file: "${NEXTVISIT_LLM_TOKEN_FILE:?Set NEXTVISIT_LLM_TOKEN_FILE to the protected raw token file}"

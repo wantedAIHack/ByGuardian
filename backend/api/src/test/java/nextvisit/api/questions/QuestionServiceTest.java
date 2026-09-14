@@ -2,11 +2,21 @@ package nextvisit.api.questions;
 
 import static nextvisit.api.ApiTestSupport.onboardDefault;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doAnswer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import nextvisit.api.ApiTestSupport.Onboarded;
 import nextvisit.api.auth.Guardian;
 import nextvisit.api.auth.GuardianRepository;
@@ -26,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -41,7 +52,7 @@ class QuestionServiceTest {
     @Autowired QuestionCacheRepository caches;
     @Autowired QuestionService questions;
     @Autowired DemoSeedWriter writer;
-    @Autowired EngineBridge bridge;
+    @MockitoSpyBean EngineBridge bridge;
 
     @Test
     void baselineOnlyYieldsNoQuestions() throws Exception {
@@ -51,7 +62,9 @@ class QuestionServiceTest {
         assertTrue(body.questions().isEmpty());
         assertEquals(0, body.engineDetectionCount());
         assertEquals(1, caches.findByCaseId(caseId).orElseThrow().getWeek());
-        assertEquals("READY", caches.findByCaseId(caseId).orElseThrow().getStatus());
+        assertEquals(QuestionCacheStatus.READY,
+            caches.findByCaseId(caseId).orElseThrow().getStatus());
+        assertTrue(caches.findByCaseId(caseId).orElseThrow().getGenerationId() != null);
         assertTrue(questions.current(caseId).orElseThrow().questions().isEmpty());
     }
 
@@ -86,6 +99,8 @@ class QuestionServiceTest {
         assertEquals(List.of("toilet", "ambulation"), body.questions().get(0).items());
         assertEquals(20, body.engineDetectionCount());
         assertEquals(6, caches.findByCaseId(caseId).orElseThrow().getWeek());
+        assertEquals(QuestionCacheStatus.READY,
+            caches.findByCaseId(caseId).orElseThrow().getStatus());
     }
 
     @Test
@@ -111,5 +126,52 @@ class QuestionServiceTest {
         CaseInput fromDb = bridge.toCaseInput(kase, snapshots.findByCaseIdOrderByWeekAsc(caseId));
         assertTrue(fromDb.signals().isEmpty());
         assertTrue(Pipeline.run(fromDb).patterns().isEmpty());
+    }
+
+    @Test
+    void overlappingRefreshesSerializeBeforeSnapshotReads() throws Exception {
+        Onboarded onboarded = onboardDefault(mvc, mapper);
+        UUID caseId = UUID.fromString(onboarded.caseId());
+        CaseEntity kase = cases.findById(caseId).orElseThrow();
+        Guardian author = guardians.findByCaseId(caseId).get(0);
+        CountDownLatch olderBridgeEntered = new CountDownLatch(1);
+        CountDownLatch releaseOlderBridge = new CountDownLatch(1);
+        CountDownLatch newerBridgeEntered = new CountDownLatch(1);
+        AtomicInteger bridgeCalls = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (bridgeCalls.incrementAndGet() == 1) {
+                olderBridgeEntered.countDown();
+                if (!releaseOlderBridge.await(5, TimeUnit.SECONDS)) {
+                    throw new AssertionError("older refresh was not released");
+                }
+            } else {
+                newerBridgeEntered.countDown();
+            }
+            return invocation.callRealMethod();
+        }).when(bridge).run(any(CaseEntity.class), anyList());
+
+        ExecutorService refreshes = Executors.newFixedThreadPool(2);
+        try {
+            Future<QuestionCacheBody> older = refreshes.submit(() -> questions.refresh(caseId));
+            assertTrue(olderBridgeEntered.await(2, TimeUnit.SECONDS));
+
+            writer.write(kase, author);
+            Future<QuestionCacheBody> newer = refreshes.submit(() -> questions.refresh(caseId));
+
+            assertFalse(newerBridgeEntered.await(300, TimeUnit.MILLISECONDS));
+
+            releaseOlderBridge.countDown();
+            QuestionCacheBody olderBody = older.get(5, TimeUnit.SECONDS);
+            QuestionCacheBody newerBody = newer.get(5, TimeUnit.SECONDS);
+
+            assertTrue(olderBody.questions().isEmpty());
+            assertEquals(3, newerBody.questions().size());
+            assertEquals(newerBody, questions.current(caseId).orElseThrow());
+            assertEquals(6, caches.findByCaseId(caseId).orElseThrow().getWeek());
+        } finally {
+            releaseOlderBridge.countDown();
+            refreshes.shutdownNow();
+            assertTrue(refreshes.awaitTermination(5, TimeUnit.SECONDS));
+        }
     }
 }

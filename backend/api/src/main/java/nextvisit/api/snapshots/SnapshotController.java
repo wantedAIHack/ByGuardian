@@ -29,9 +29,9 @@ public class SnapshotController {
         boolean refreshed = true;
         try {
             questions.refresh(ctx.kase().getId());
-        } catch (RuntimeException e) {
+        } catch (RuntimeException ignored) {
             // 기록은 이미 커밋됐다. 질문 생성 실패로 보호자의 한 주를 버리지 않는다(README §4 층 1).
-            log.warn("question refresh failed for case {} week {}", ctx.kase().getId(), week, e);
+            log.warn("QUESTION_REFRESH_FAILED");
             refreshed = false;
         }
         return new WeeklyRecordResponse(saved.week(), saved.kind(), refreshed);

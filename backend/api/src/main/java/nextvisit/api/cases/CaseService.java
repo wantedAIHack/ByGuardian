@@ -3,6 +3,7 @@ package nextvisit.api.cases;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import nextvisit.api.auth.AuthContext;
 import nextvisit.api.auth.Guardian;
@@ -67,12 +68,18 @@ public class CaseService {
     public MeResponse me(AuthContext ctx) {
         CaseEntity kase = ctx.kase();
         int week = weeks.currentWeek(kase.getStartDate());
-        Optional<Snapshot> latest = snapshots.findFirstByCaseIdOrderByWeekDesc(kase.getId());
-        boolean recordedThisWeek = snapshots.findByCaseIdAndWeek(kase.getId(), week).isPresent();
+        List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(kase.getId());
+        Integer lastRecordedWeek = snaps.isEmpty() ? null : snaps.get(snaps.size() - 1).getWeek();
+        boolean recordedThisWeek = lastRecordedWeek != null && lastRecordedWeek == week;
+        // TherapistSummaryService의 Density와 같은 셈이다. 주차는 하나뿐이고 미래 주차는 저장될 수 없으므로
+        // 마지막 스냅샷의 주차가 곧 이번 주 기록 여부다.
+        int lastRecorded = lastRecordedWeek == null ? 0 : lastRecordedWeek;
+        int totalWeeks = Math.max(1, Math.max(lastRecorded, recordedThisWeek ? week : week - 1));
         return new MeResponse(
             kase.getId(), ctx.guardian().getRelation(), weeks.today(), week,
             weeks.isFullRecheck(week), kase.signalsEnabled(), kase.handEnabled(),
-            week >= 2, recordedThisWeek, latest.map(Snapshot::getWeek).orElse(null), kase.getNextVisitDate());
+            week >= 2, recordedThisWeek, lastRecordedWeek, kase.getNextVisitDate(),
+            snaps.size(), totalWeeks);
     }
 
     /** ctx의 case 엔티티는 필터가 요청 시작 시 붙인 것이라 detach 상태일 수 있어, 여기서 다시 읽어 저장한다. */
@@ -91,5 +98,18 @@ public class CaseService {
         String token = tokens.newToken();
         guardians.save(new Guardian(kase.getId(), req.relation().trim(), tokens.hash(token), Instant.now(clock)));
         return new RecoverResponse(token, kase.getId());
+    }
+
+    /**
+     * 설정의 "복구 코드 다시 만들기". 적어둔 종이를 잃은 경우에만 쓴다.
+     * ctx의 엔티티는 필터가 트랜잭션 밖에서 붙인 detach 상태라 반드시 id로 다시 읽고 쓴다.
+     */
+    public RecoveryCodeResponse reissueRecoveryCode(AuthContext ctx) {
+        CaseEntity kase = cases.findById(ctx.kase().getId())
+            .orElseThrow(() -> new NotFoundException("케이스를 찾을 수 없습니다"));
+        String code = tokens.newRecoveryCode();
+        kase.setRecoveryCodeHash(tokens.hash(code));
+        cases.save(kase);
+        return new RecoveryCodeResponse(code);
     }
 }

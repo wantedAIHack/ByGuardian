@@ -470,7 +470,9 @@ class ReadmeConformanceTest {
     void section8_guardrail() {
         List<String> readmeList = List.of("개선", "악화", "호전", "위험", "정상", "비정상", "회복",
             "좋아지", "좋아졌", "나빠지", "나빠졌", "나아지", "나아졌",
-            "좋아져", "나빠져", "나아져", "좋아짐", "나빠짐", "나아짐");
+            "좋아져", "나빠져", "나아져", "좋아짐", "나빠짐", "나아짐",
+            "재활", "치료", "낙상", "점수", "처방", "운동", "진단", "기능검사",
+            "병원에 가", "받으셔야", "하셔야");
         check("G1 FORBIDDEN이 README §8 목록과 같음", Templates.FORBIDDEN.equals(readmeList), Templates.FORBIDDEN.size() + " entries");
         check("G2a 평서문+금지어 거부", !Templates.isSafe("보행 기능이 개선되었습니다."), "");
         check("G2b 질문형이라도 활용형 거부 (졌/짐/져)",

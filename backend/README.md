@@ -1,15 +1,19 @@
 # 백엔드 — 구현된 것
 
-2026-09-06 기준. **구현 완료 두 계획 중 두 번째까지 끝났고, 세 번째(LLM 연동)가 남았습니다.**
+2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. Ubuntu/NVIDIA 실기 검증과 외부 배포 활성화는 장비·소유자 설정 준비 뒤 남습니다.
 
 이 문서는 코드를 검토하려는 사람을 위한 것입니다. 제품이 무엇이고 왜 이렇게 설계했는지는 최상위 `README.md`(제품 스펙)에 있고, 이 문서는 **그 스펙이 코드의 어디에 어떻게 들어갔는지**만 다룹니다.
 
 | 문서 | 역할 |
 | --- | --- |
 | `../README.md` | 제품 스펙. 무엇을 만들고 무엇을 안 만드는가. 충돌하면 이 문서가 이깁니다 |
+| `../frontend/README.md` | React PWA 실행, 환경변수, 화면·테스트 지도 |
 | `../docs/superpowers/specs/2026-09-05-api-design.md` | API 계약. 데이터·주차 규칙·엔드포인트 |
+| `../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정 |
+| `../docs/superpowers/specs/2026-09-07-llm-server-design.md` | LLM, Docker, Tunnel, CI/CD의 승인된 계약 |
+| `../infra/llm/README.md` | macOS CPU 실행과 향후 Ubuntu/NVIDIA 운영 절차 |
 | `../docs/superpowers/plans/2026-09-06-api-followups.md` | 다음 계획이 알아야 할 것 |
-| `../docs/superpowers/plans/2026-09-05-engine-followups.md` | 엔진 후속. **LLM 병합 전 금지 어휘 확장 필요** |
+| `../docs/superpowers/plans/2026-09-05-engine-followups.md` | 엔진 후속 판단 근거 |
 
 ---
 
@@ -19,18 +23,19 @@
 | --- | --- |
 | `engine` — 판정 규칙 엔진 | ✅ 완료 |
 | `api` (api-core) — 저장·조회·화면 데이터 | ✅ 완료 |
-| **api-llm — LLM 문장 다듬기와 가드레일** | ❌ **미착수** |
-| frontend — React PWA | ❌ 미착수 |
-| infra — EC2·Compose·Caddy·노트북 Ollama | ❌ 미착수 |
+| **api-llm — 비동기 문장 다듬기·검증·전체 폴백** | ✅ 코드·로컬 검증 완료 |
+| frontend — React PWA | ✅ 같은 저장소에 통합 완료 |
+| infra — Ollama CPU/GPU·Tunnel·CI/CD | ✅ 구성 완료, Ubuntu/NVIDIA 실기 대기 |
 
-**지금 상태로도 제품은 동작합니다.** 질문 문장이 템플릿으로 나오고, LLM은 그 문장을 더 자연스럽게 다듬는 역할만 남았습니다. §8 가드레일 3번의 폴백이 곧 지금 상태입니다.
+**LLM 가용성과 관계없이 제품은 동작합니다.** 템플릿을 먼저 저장하므로 LLM이 비활성이거나 응답 검증이 실패해도 준비 카드는 안전한 문장을 유지합니다.
 
-```
-engine  30개 파일 1,112줄   테스트 14개 파일 1,830줄 → 112개 통과
-api     74개 파일 2,600줄   테스트 16개 파일 1,531줄 →  59개 통과
-```
+현재 `y-minion/wanted_Hackaton`은 개인 계정 저장소이므로 노트북을 자체 호스팅 runner로 등록하지 않고 `LLM_DEPLOY_ENABLED`를 absent/false로 둡니다. 향후 GitHub 조직으로 이전 또는 미러한 뒤에도 `llm-production` 조직 runner group이 정확한 `main` 배포 workflow로 외부 제한될 때만 배포를 검토합니다. 저장소 안의 workflow linter는 그 경계의 보조 검사일 뿐 runner 할당 전 보안 경계가 아닙니다.
 
-테스트가 본문보다 많습니다. 의도한 것입니다. 이 제품은 출력이 전부 한국어 문장이라, 문장을 글자 단위로 고정하지 않으면 회귀를 눈으로 잡을 수 없습니다.
+LLM의 기본값은 `NEXTVISIT_LLM_ENABLED=false`입니다. 따라서 Ollama가 없어도 템플릿과 규칙 엔진으로 안전하게 동작합니다.
+
+2026-09-10 병합 뒤 Java 21 `./gradlew clean test` 기준으로 **253개 테스트가 통과했습니다(실패 0, 오류 0)**. 기존 250개에 통합된 FE 이력의 API 계약 테스트 3개가 더해진 기준입니다. 로컬 테스트는 Docker 없이 H2로 실행됩니다.
+
+테스트를 촘촘히 둔 것은 의도한 것입니다. 이 제품은 출력이 전부 한국어 문장이라, 문장을 글자 단위로 고정하지 않으면 회귀를 눈으로 잡을 수 없습니다.
 
 ---
 
@@ -108,7 +113,7 @@ Templates.render(detection, set, verdicts) → 한국어 문장
 `Templates`는 문장 조립과 **금지 어휘 검사**를 합니다.
 
 ```java
-containsForbiddenWord(String)   19개 금지어. NFC 정규화 후 부분 문자열 검사
+containsForbiddenWord(String)   30개 금지어. NFC 정규화 후 부분 문자열 검사
 isQuestion(String)              물음표로 끝나는가
 isSafe(String)                  둘 다
 ```
@@ -259,7 +264,7 @@ else if (status == FLUCTUATING) → 전환인지만 본다
 
 감소는 "악화"가 아니라 "도움이 더 필요해지셨습니다"로 씁니다. 가치 판정을 피하는 것이 규제 방어이자 보호자에게 잘못된 확신을 주지 않는 방법입니다.
 
-**LLM이 붙는 순간 이 그림이 바뀝니다.** 지금은 생성되는 문장이 전부 상수 표에서 나와 금지 어휘 목록이 좁아도 안전하지만, LLM이 문장을 쓰면 그 목록이 유일한 방어선이 됩니다. 현재 목록은 §2가 금지한 다섯 갈래 중 한 갈래만 막습니다. **엔진 후속 문서 2번을 LLM 계획 전에 처리해야 합니다.**
+LLM 출력은 같은 구조 경계 안으로 들어옵니다. `QuestionService.refresh`는 같은 케이스의 권위 행을 먼저 쓰기 잠금한 뒤 스냅샷과 캐시를 읽어 새 입력을 직렬화하고, `AFTER_COMMIT` worker는 그대로 유지합니다. 엔진 템플릿을 먼저 `LLM_PENDING`으로 저장한 뒤 최소 입력만 비동기로 보내며, `QuestionOutputGuard`는 JSON 구조, rank, 길이, 질문형, 금지 표현, 행동 지시와 숫자 보존뿐 아니라 NFC 템플릿 원문 또는 명시된 마지막 연결형 두 가지만 확인합니다. 하나라도 실패하면 전체 batch를 버리고 템플릿을 유지합니다. 늦은 응답은 `generation_id` 조건부 갱신이 차단합니다. 새로고침과 공통 오류 로그는 케이스·요청·throwable 대신 고정 코드만 남깁니다.
 
 ---
 
@@ -269,10 +274,21 @@ else if (status == FLUCTUATING) → 전환인지만 본다
 export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # 이 맥 기본 java가 26이라 Gradle이 안 뜹니다
 cd backend
 
-./gradlew test                    # 엔진 112 + API 59, 도커 불필요 (H2)
+./gradlew test                    # 전체 Java 테스트, 도커 불필요 (H2)
 
 docker compose up -d              # Postgres 16
 ./gradlew :api:bootRun            # http://localhost:8080
+```
+
+```bash
+# 기본값: 안전한 템플릿만 사용, Ollama 불필요
+NEXTVISIT_LLM_ENABLED=false ./gradlew :api:bootRun
+
+# Ollama 또는 OpenAI 호환 서버를 사용할 때
+NEXTVISIT_LLM_ENABLED=true \
+NEXTVISIT_LLM_BASE_URL=http://localhost:11434/v1 \
+NEXTVISIT_LLM_MODEL=qwen3:4b-q8_0 \
+./gradlew :api:bootRun
 ```
 
 데모를 한 번 돌려보시면 전체가 한눈에 들어옵니다.
@@ -312,11 +328,10 @@ curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
 
 정직하게 적습니다.
 
-- **LLM 연동 전체.** 문장은 템플릿에서 나옵니다. 비동기 호출, 재생성, 폴백이 다음 계획입니다.
+- **Ubuntu/NVIDIA 실기 결과.** 장비 준비 뒤 GPU 적재, 2K 컨텍스트 응답 시간, 재부팅 복구, runner와 Tunnel을 검증합니다.
+- **재시작 뒤 `LLM_PENDING` 자동 복구.** 현재는 다음 기록 갱신 때 다시 시도하며 durable queue는 MVP 범위 밖입니다.
 - **주간 알림.** 기본 화면이 침묵이라 보호자가 앱을 열 이유는 알림뿐인데 설계가 없습니다. 스펙 §11의 열린 질문입니다.
-- **로깅.** 예외 처리기 외에는 없습니다. 배포 모듈에서 넣습니다.
-- **Dockerfile과 배포 구성.** `docker-compose.yml`은 개발용 Postgres만 있습니다.
-- **금지 어휘 확장.** 치료사 확인 대기 중입니다.
+- **상세 오류 진단 로그.** 새로고침과 공통 오류 처리는 의도적으로 고정 코드만 남기며, request/throwable 상세는 개인정보·자격증명 유출 위험 때문에 기록하지 않습니다.
 - **과거 주차 소급 기록.** 이번 범위 밖입니다.
 
 미뤄둔 사소한 지적들과 각각의 판단 근거는 `../docs/superpowers/plans/2026-09-06-api-followups.md`에 있습니다.

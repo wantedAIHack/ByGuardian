@@ -1,0 +1,297 @@
+name: Service CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.areas.outputs.frontend }}
+      backend: ${{ steps.areas.outputs.backend }}
+      infra: ${{ steps.areas.outputs.infra }}
+      integration: ${{ steps.areas.outputs.integration }}
+      security: ${{ steps.areas.outputs.security }}
+      scan_base: ${{ steps.range.outputs.scan_base }}
+      scan_head: ${{ steps.range.outputs.scan_head }}
+      diff_base: ${{ steps.range.outputs.diff_base }}
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Validate event commit range
+        id: range
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          # BEGIN scan range
+          set -eu
+          case "$EVENT_NAME" in
+            pull_request) base=$PR_BASE; head=$PR_HEAD ;;
+            push) base=$PUSH_BEFORE; head=$PUSH_AFTER ;;
+            *) exit 1 ;;
+          esac
+          test -n "$head"
+          printf '%s\n' "$head" | grep -Eq '^[0-9a-f]{40}$'
+          printf '%s\n' "$base" | grep -Eq '^[0-9a-f]{40}$'
+          test "$base" != "$head"
+          git cat-file -e "$head^{commit}"
+          case "$base" in
+            0000000000000000000000000000000000000000)
+              test "$EVENT_NAME" = push
+              base=; diff_base=$(git hash-object -t tree /dev/null) ;;
+            *)
+              git cat-file -e "$base^{commit}"
+              merge_base=$(git merge-base "$base" "$head")
+              if [ "$EVENT_NAME" = pull_request ]; then
+                diff_base=$merge_base
+              else
+                diff_base=$base
+              fi
+              # TruffleHog stops at its merge base. A rollback to an ancestor
+              # would scan nothing, so publish full-head mode to BOTH scanners.
+              if [ "$merge_base" = "$head" ]; then base=; fi ;;
+          esac
+          printf 'scan_base=%s\nscan_head=%s\ndiff_base=%s\n' "$base" "$head" "$diff_base" >>"$GITHUB_OUTPUT"
+          # END scan range
+      - name: Classify every changed path
+        id: areas
+        env:
+          DIFF_BASE: ${{ steps.range.outputs.diff_base }}
+          HEAD_SHA: ${{ steps.range.outputs.scan_head }}
+        run: |
+          sh scripts/ci/changed-areas-test.sh
+          changed=$(mktemp "$RUNNER_TEMP/changed-paths.XXXXXX")
+          trap 'rm -f "$changed"' EXIT
+          git diff --name-only --no-renames "$DIFF_BASE" "$HEAD_SHA" >"$changed"
+          sh scripts/ci/changed-areas.sh <"$changed"
+
+  frontend:
+    needs: changes
+    if: ${{ needs.changes.outputs.frontend == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install and verify frontend
+        run: |
+          sh scripts/ci/toolchain-test.sh
+          npm --prefix frontend ci
+          npm --prefix frontend test
+          npm --prefix frontend run typecheck
+          npm --prefix frontend run build
+
+  backend:
+    needs: changes
+    if: ${{ needs.changes.outputs.backend == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Java 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Verify locked backend
+        working-directory: backend
+        run: ./gradlew --no-daemon --dependency-verification strict clean test
+
+  infra:
+    needs: changes
+    if: ${{ needs.changes.outputs.infra == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check shell syntax and policy fixtures
+        run: |
+          shellcheck scripts/ci/*.sh infra/llm/scripts/*.sh infra/llm/tests/*.sh
+          sh infra/llm/tests/ensure-model-test.sh
+          sh infra/llm/tests/verify-host-test.sh
+          sh infra/llm/tests/workflows-test.sh
+          sh infra/llm/tests/workflows-runner-group-test.sh
+          sh infra/llm/tests/llm-deploy-mutation-test.sh
+          sh infra/llm/tests/tunnel-token-file-test.sh
+          sh infra/llm/tests/bootstrap-ubuntu-host-test.sh
+          sh infra/llm/tests/stage-runtime-test.sh
+          sh infra/llm/tests/systemd-unit-test.sh
+          sh infra/llm/tests/smoke-access-test.sh
+      - name: Build pinned Ollama image
+        working-directory: infra/llm
+        run: docker build --tag nextvisit-ollama:0.33.3 .
+      - name: Render CPU, GPU, and Tunnel Compose variants
+        working-directory: infra/llm
+        run: |
+          umask 077
+          token_file="$(mktemp "$RUNNER_TEMP/llm-tunnel-token.XXXXXX")"
+          rendered="$(mktemp "$RUNNER_TEMP/llm-compose.XXXXXX")"
+          trap 'rm -f "$token_file" "$rendered"' EXIT
+          printf '%s\n' 'ci-render-only-token-sentinel' >"$token_file"
+          chmod 600 "$token_file" "$rendered"
+          docker compose -f compose.yml config --quiet
+          docker compose -f compose.yml -f compose.gpu.yml config --quiet
+          NEXTVISIT_LLM_TOKEN_FILE="$token_file" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --quiet
+          NEXTVISIT_LLM_TOKEN_FILE="$token_file" docker compose -f compose.yml -f compose.gpu.yml -f compose.tunnel.yml config --format json >"$rendered"
+          jq -e '.services.ollama.ports == null' "$rendered" >/dev/null
+          ! jq -e '[.services[] | ((.environment // {}) | to_entries[]?.value), ((.command // [])[]), ((.labels // {}) | to_entries[]?.value)] | any(. == "ci-render-only-token-sentinel")' "$rendered" >/dev/null
+
+  integration:
+    needs: changes
+    if: ${{ needs.changes.outputs.integration == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.22.2"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Set up Java 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install browser dependencies
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run test:e2e:install -- --with-deps
+      - name: Run real PostgreSQL and browser journey
+        run: sh scripts/ci/integration-e2e.sh
+
+  security:
+    needs: changes
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out triggering commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up exact Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.22.2"
+      - name: Verify dependency reproducibility and ownership
+        env:
+          DIFF_BASE: ${{ needs.changes.outputs.diff_base }}
+          HEAD_SHA: ${{ needs.changes.outputs.scan_head }}
+        run: |
+          sh scripts/ci/repository-contract-test.sh
+          sh scripts/ci/toolchain-test.sh
+          sh scripts/ci/dependency-contract-test.sh
+          test -n "$DIFF_BASE"
+          test -n "$HEAD_SHA"
+          changed=$(mktemp "$RUNNER_TEMP/dependency-paths.XXXXXX")
+          trap 'rm -f "$changed"' EXIT
+          git diff --name-only --no-renames "$DIFF_BASE" "$HEAD_SHA" >"$changed"
+          sh scripts/ci/dependency-contract-test.sh --diff-stdin <"$changed"
+      - name: Scan the complete dependency inventory
+        run: |
+          docker run --rm --platform linux/amd64 --cap-drop ALL \
+            --security-opt no-new-privileges --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=256m --env XDG_CACHE_HOME=/tmp/osv-cache \
+            --volume "$GITHUB_WORKSPACE:/src:ro" \
+            ghcr.io/google/osv-scanner:v2.5.1@sha256:1547b7c2783d4f266b24fe86ab4dfc18d058588244c58384ac9f56dddb304511 \
+            scan source --recursive /src
+      - name: Scan secrets with value-free GitHub annotations
+        uses: trufflesecurity/trufflehog@363923b901c911a9164f50b6c423f47c15372b1c
+        with:
+          base: ${{ needs.changes.outputs.scan_base }}
+          head: ${{ needs.changes.outputs.scan_head }}
+          version: 3.97.4@sha256:d366c22dadaeaf5ce5686035028deb97d365233cd7c9955f424dac4612c3ef25
+          # Neither --fail nor --no-update here: the pinned action appends both
+          # itself (action.yml lines 108-109) and trufflehog aborts on a repeated
+          # flag, which failed every hosted run.
+          extra_args: --results=verified --fail-on-scan-errors --log-level=-1
+      - name: Test secret candidate fail-closed contract
+        run: node --test scripts/ci/secret-findings-test.mjs scripts/ci/secret-findings-mutations-test.mjs
+      - name: Scan every secret status with exact historical occurrence checks
+        if: ${{ always() }}
+        env:
+          BASE_SHA: ${{ needs.changes.outputs.scan_base }}
+          HEAD_SHA: ${{ needs.changes.outputs.scan_head }}
+        run: node scripts/ci/secret-findings-gate.mjs
+
+  ci-gate:
+    needs: [changes, frontend, backend, infra, integration, security]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every selected verification to succeed
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          SECURITY_RESULT: ${{ needs.security.result }}
+          FRONTEND_SELECTED: ${{ needs.changes.outputs.frontend }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          BACKEND_SELECTED: ${{ needs.changes.outputs.backend }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          INFRA_SELECTED: ${{ needs.changes.outputs.infra }}
+          INFRA_RESULT: ${{ needs.infra.result }}
+          INTEGRATION_SELECTED: ${{ needs.changes.outputs.integration }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: |
+          # BEGIN ci gate
+          set -eu
+          test "$CHANGES_RESULT" = success
+          test "$SECURITY_RESULT" = success
+          check_job() {
+            case "$1:$2" in
+              true:success|false:skipped) ;;
+              *) printf '%s\n' 'A required verification did not complete as expected' >&2; exit 1 ;;
+            esac
+          }
+          check_job "$FRONTEND_SELECTED" "$FRONTEND_RESULT"
+          check_job "$BACKEND_SELECTED" "$BACKEND_RESULT"
+          check_job "$INFRA_SELECTED" "$INFRA_RESULT"
+          check_job "$INTEGRATION_SELECTED" "$INTEGRATION_RESULT"
+          # END ci gate

@@ -11,19 +11,20 @@ import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.common.Json;
 import nextvisit.api.common.NotFoundException;
 import nextvisit.api.engine.EngineBridge;
+import nextvisit.api.llm.LlmProperties;
+import nextvisit.api.llm.QuestionGenerationRequested;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotRepository;
 import nextvisit.engine.Detection;
 import nextvisit.engine.PipelineResult;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** README §8: 저장할 때마다 질문을 만들어 캐시한다. 이 계획에서는 템플릿 문장으로 채운다(설계 6.2). */
+/** README §8: 저장할 때마다 안전한 템플릿 질문을 먼저 만들어 캐시한다. */
 @Service
 @Transactional
 public class QuestionService {
-
-    public static final String STATUS_READY = "READY";
 
     private final CaseRepository cases;
     private final SnapshotRepository snapshots;
@@ -31,19 +32,27 @@ public class QuestionService {
     private final EngineBridge bridge;
     private final Json json;
     private final Clock clock;
+    private final LlmProperties properties;
+    private final ApplicationEventPublisher events;
 
-    public QuestionService(CaseRepository cases, SnapshotRepository snapshots, QuestionCacheRepository caches,
-                           EngineBridge bridge, Json json, Clock clock) {
+    public QuestionService(CaseRepository cases, SnapshotRepository snapshots,
+                           QuestionCacheRepository caches, EngineBridge bridge, Json json,
+                           Clock clock, LlmProperties properties,
+                           ApplicationEventPublisher events) {
         this.cases = cases;
         this.snapshots = snapshots;
         this.caches = caches;
         this.bridge = bridge;
         this.json = json;
         this.clock = clock;
+        this.properties = properties;
+        this.events = events;
     }
 
     public QuestionCacheBody refresh(UUID caseId) {
-        CaseEntity kase = cases.findById(caseId).orElseThrow(() -> new NotFoundException("케이스가 없습니다"));
+        // Lock order is case -> snapshots -> cache for every refresh of one case.
+        CaseEntity kase = cases.findByIdForQuestionRefresh(caseId)
+            .orElseThrow(() -> new NotFoundException("케이스가 없습니다"));
         List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(caseId);
         PipelineResult r = bridge.run(kase, snaps);
 
@@ -60,12 +69,20 @@ public class QuestionService {
         int week = snaps.isEmpty() ? 0 : snaps.get(snaps.size() - 1).getWeek();
         String js = json.toJson(body);
         Instant now = Instant.now(clock);
+        boolean generateWithLlm = properties.enabled() && !body.questions().isEmpty();
+        QuestionCacheStatus status = generateWithLlm
+            ? QuestionCacheStatus.LLM_PENDING : QuestionCacheStatus.READY;
+        UUID generationId = UUID.randomUUID();
+
         Optional<QuestionCache> existing = caches.findByCaseId(caseId);
         if (existing.isPresent()) {
-            existing.get().update(week, STATUS_READY, js, now);
+            existing.get().update(week, status, generationId, js, now);
             caches.save(existing.get());
         } else {
-            caches.save(new QuestionCache(caseId, week, STATUS_READY, js, now));
+            caches.save(new QuestionCache(caseId, week, status, generationId, js, now));
+        }
+        if (generateWithLlm) {
+            events.publishEvent(new QuestionGenerationRequested(caseId, generationId));
         }
         return body;
     }

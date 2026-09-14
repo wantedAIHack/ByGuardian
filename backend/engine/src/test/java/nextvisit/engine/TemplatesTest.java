@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class TemplatesTest {
 
@@ -133,6 +135,15 @@ class TemplatesTest {
         assertFalse(Templates.isSafe("좋아짐이 느껴지시나요?"));
         assertFalse(Templates.isSafe("나빠짐이 걱정되시나요?"));
         assertFalse(Templates.isSafe("나아짐이 있었을까요?"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "재활", "치료", "낙상", "점수", "처방", "운동", "진단", "기능검사",
+        "병원에 가", "받으셔야", "하셔야"
+    })
+    void isSafeRejectsTermsThatAnLlmMustNotIntroduce(String term) {
+        assertFalse(Templates.isSafe(term + " 관련해서 확인할까요?"), term);
     }
 
     @Test

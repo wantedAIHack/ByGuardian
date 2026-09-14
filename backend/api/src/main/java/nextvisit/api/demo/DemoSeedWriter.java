@@ -31,6 +31,19 @@ public class DemoSeedWriter {
         4, "오후에 어깨를 만지고 계셔서 물어봐도 대답을 안 하신다",
         6, "낮잠 자고 일어나면 어깨 쪽을 감싸신다");
 
+    /**
+     * README §5·§9의 야간 수면(3단계, 매주 필수 관찰). 평범하고 튀지 않는 값으로 채운다 —
+     * 이 시드는 심사위원이 /t/:token에서 직접 보는 화면이라, 전부 비어 있으면(과거엔 그랬다)
+     * 실제로는 매주 걷는 관찰인 '야간 수면' 구역 자체가 렌더되지 않는다.
+     */
+    public static final Map<Integer, Integer> SLEEP = Map.of(
+        1, 1,
+        2, 1,
+        3, 2,
+        4, 1,
+        5, 1,
+        6, 2);
+
     private final SnapshotRepository snapshots;
     private final EngineBridge bridge;
     private final WeekCalculator weeks;
@@ -48,7 +61,7 @@ public class DemoSeedWriter {
     public List<Snapshot> write(CaseEntity kase, Guardian author) {
         List<Snapshot> out = new ArrayList<>();
         for (WeekRecord w : DemoSeed.stroke().toWeeks()) {
-            SnapshotBody body = bridge.toBody(w, FREE_NOTES.get(w.week()));
+            SnapshotBody body = bridge.toBody(w, SLEEP.get(w.week()), FREE_NOTES.get(w.week()));
             SnapshotKind kind = w.week() == 1 ? SnapshotKind.BASELINE
                 : weeks.isFullRecheck(w.week()) ? SnapshotKind.FULL_RECHECK : SnapshotKind.WEEKLY;
             boolean noChange = w.week() == DemoSeed.CARRIED_WEEK;

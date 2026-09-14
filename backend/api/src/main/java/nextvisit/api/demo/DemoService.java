@@ -58,6 +58,6 @@ public class DemoService {
         writer.write(kase, daughter);
         questions.refresh(kase.getId());
         TherapistSummaryService.Link link = therapist.issueLink(kase);
-        return new DemoResponse(kase.getId(), token, recoveryCode, link.url());
+        return new DemoResponse(kase.getId(), token, recoveryCode, link.url(), link.token());
     }
 }

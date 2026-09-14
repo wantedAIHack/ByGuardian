@@ -5,4 +5,14 @@ build/
 .idea/
 node_modules/
 dist/
+*.tsbuildinfo
 .superpowers/
+.context/
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+infra/llm/.env
+frontend/test-results/
+frontend/playwright-report/

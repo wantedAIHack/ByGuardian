@@ -1,0 +1,62 @@
+import { useState } from 'react';
+import { useIssueLink } from '../lib/queries';
+import { therapistShareUrl } from '../lib/therapistToken';
+import { Button } from './Button';
+import { Notice } from './Notice';
+
+/**
+ * 치료사용 요약 링크를 발급해 보여준다.
+ * API 토큰으로 같은 오리진의 fragment 공유 주소를 만든다.
+ */
+export function TherapistLinkPanel() {
+  const issue = useIssueLink();
+  const [copied, setCopied] = useState(false);
+
+  const url = issue.data ? therapistShareUrl(issue.data.token) : null;
+
+  if (!url) {
+    return (
+      <div>
+        <Button variant="plain" disabled={issue.isPending} onClick={() => issue.mutate()}>
+          {issue.isPending ? '만드는 중입니다…' : '치료사에게 보여드리기'}
+        </Button>
+        {issue.isError ? <Notice>링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-line p-4">
+      <p className="text-small text-ink-soft">치료사에게 이 주소를 보여드리세요.</p>
+      <p className="break-all pt-2">{url}</p>
+      <div className="flex flex-col gap-3 pt-4">
+        <Button
+          variant="plain"
+          onClick={() => {
+            void navigator.clipboard?.writeText(url).then(() => setCopied(true));
+          }}
+        >
+          {copied ? '복사했습니다' : '주소 복사하기'}
+        </Button>
+        <a className="btn btn-quiet" href={url} target="_blank" rel="noreferrer">
+          어떻게 보이는지 확인하기
+        </a>
+      </div>
+      <Notice>새로 만들면 먼저 드린 주소는 열리지 않습니다.</Notice>
+      {/* 위 경고가 실제로 할 수 있는 일을 가리켜야 한다. 주소를 잃어버린 보호자를 위한
+          조용한 탈출구다 — 눈에 띄는 행동은 여전히 주소 복사하기다. */}
+      <button
+        type="button"
+        disabled={issue.isPending}
+        className="inline-flex min-h-[48px] items-center pt-1 text-small text-ink-soft underline"
+        onClick={() => {
+          setCopied(false);
+          issue.mutate();
+        }}
+      >
+        {issue.isPending ? '만드는 중입니다…' : '새 주소 만들기'}
+      </button>
+      {issue.isError ? <Notice>링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
+    </div>
+  );
+}
