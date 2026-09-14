@@ -54,7 +54,7 @@ PATH="$test_root/bin:$script_dir/../scripts:$PATH" \
 FAKE_OLLAMA_LOG="$fake_log" \
 FAKE_MODEL_PRESENT=true \
 OLLAMA_HOST=http://fake-ollama:11434 \
-OLLAMA_MODEL=qwen3:4b-q8_0 \
+OLLAMA_MODEL=qwen3:4b-q4_K_M \
 OLLAMA_WAIT_ATTEMPTS=1 \
 "$script_dir/../scripts/ensure-model.sh"
 test ! -e "$fake_log"
@@ -63,10 +63,10 @@ PATH="$test_root/bin:$script_dir/../scripts:$PATH" \
 FAKE_OLLAMA_LOG="$fake_log" \
 FAKE_MODEL_PRESENT=false \
 OLLAMA_HOST=http://fake-ollama:11434 \
-OLLAMA_MODEL=qwen3:4b-q8_0 \
+OLLAMA_MODEL=qwen3:4b-q4_K_M \
 OLLAMA_WAIT_ATTEMPTS=1 \
 "$script_dir/../scripts/ensure-model.sh"
-test "$(cat "$fake_log")" = "qwen3:4b-q8_0"
+test "$(cat "$fake_log")" = "qwen3:4b-q4_K_M"
 
 printf '%s\n' "ensure-model tests passed"
 

@@ -26,7 +26,7 @@ set +x
 # never touches the laptop for external authentication.
 
 max_credential_bytes=512
-model="qwen3:4b-q8_0"
+model="qwen3:4b-q4_K_M"
 
 fail() {
   printf '%s\n' "$1" >&2

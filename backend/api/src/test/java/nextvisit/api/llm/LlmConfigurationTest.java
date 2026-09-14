@@ -25,11 +25,11 @@ class LlmConfigurationTest {
             LlmProperties properties = context.getBean(LlmProperties.class);
             assertThat(properties.enabled()).isFalse();
             assertThat(properties.baseUrl()).isEqualTo(URI.create("http://localhost:11434/v1"));
-            assertThat(properties.model()).isEqualTo("qwen3:4b-q8_0");
+            assertThat(properties.model()).isEqualTo("qwen3:4b-q4_K_M");
             assertThat(properties.connectTimeout()).isEqualTo(Duration.ofSeconds(3));
             assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(45));
             assertThat(properties.maxAttempts()).isEqualTo(3);
-            assertThat(properties.maxOutputTokens()).isEqualTo(512);
+            assertThat(properties.maxOutputTokens()).isEqualTo(3000);
             assertThat(context.containsBean("llmTaskExecutor")).isFalse();
             assertThat(context).doesNotHaveBean(LlmClient.class);
             assertThat(context).doesNotHaveBean(RestClient.class);

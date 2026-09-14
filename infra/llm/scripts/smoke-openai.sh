@@ -2,7 +2,7 @@
 set -eu
 
 base_url="${1:-http://127.0.0.1:11434/v1}"
-model="${OLLAMA_MODEL:-qwen3:4b-q8_0}"
+model="${OLLAMA_MODEL:-qwen3:4b-q4_K_M}"
 payload_file="$(mktemp)"
 response_file="$(mktemp)"
 trap 'rm -f "$payload_file" "$response_file"' EXIT HUP INT TERM
