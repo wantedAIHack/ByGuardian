@@ -39,7 +39,7 @@
       고정 CUDA 컨테이너(`nvidia/cuda@sha256:c87e78933f4c16e3272123bf2f75537306596d0fbaa395a29696a22786e5ee0e`)에서
       GPU 가시성 확인, base+GPU Compose 기동, 모델 초기화(99초),
       loopback smoke 3회(**9초 / 5초 / 6초**, 모두 45초 기준 미만),
-      `ollama ps`가 **`100% GPU`**·컨텍스트 2048 보고,
+      `ollama ps`가 **`100% GPU`** 보고(컨텍스트는 아래 2026-09-15 항목대로 8192),
       `down`(`--volumes` 미사용) 후 재기동 시 모델 재다운로드 없음(6초),
       포트 11434는 `127.0.0.1` 전용이며 외부 리스너 없음.
       **재부팅 복구는 아직 검증하지 않았다**(6절).
@@ -322,6 +322,31 @@ token을 만들고 4절에서 이미지·모델·Tunnel·Access를 모두 검증
 만들고 `current`를 그쪽으로 옮긴다. 이 유닛은 그 `current`만 바라보므로,
 배포와 재부팅 복구가 항상 같은 release를 가리킨다.
 
+### 2026-09-15 LLM 실기 검증과 고정값 변경
+
+노트북에서 API·PostgreSQL·Ollama를 함께 띄우고 `NEXTVISIT_LLM_ENABLED=true`로
+질문 생성 경로를 처음 끝까지 돌렸다. 결과: `code=SUCCESS`, `attempts=2`,
+`elapsedMs=42962`, 준비 카드의 세 질문이 모두 `source=LLM`이며 허용된 표면
+변환(`"습니다. "`→`"는데 "`, `"입니다. "`→`"인데 "`)만 적용됐다.
+
+그 과정에서 원래 고정값으로는 **이 기능이 전혀 동작하지 않는다**는 것이
+드러나 세 값을 바꿨다.
+
+| 값 | 이전 | 이후 | 근거 |
+| --- | --- | --- | --- |
+| `OLLAMA_CONTEXT_LENGTH` | 2048 | 8192 | qwen3는 하이브리드 추론 모델이라 이 프롬프트에 ~2500 토큰을 생각에 쓴다. 2048에서는 생각을 끝내지 못한 채 잘려 `finish_reason=length`, `content` 빈 문자열, 즉 항상 `EMPTY_CONTENT`였다. |
+| 모델 양자화 | `q8_0` | `q4_K_M` | q8로 컨텍스트를 8192로 키우면 KV 캐시가 6 GiB VRAM을 넘쳐 `10%/90% CPU/GPU`로 유출되고 57초가 걸렸다. q4는 4.0 GB로 **`100% GPU`를 유지하며 26~28초**. |
+| `NEXTVISIT_LLM_MAX_OUTPUT_TOKENS` | 512 | 3000 | 추론 토큰까지 담아야 답이 나온다. |
+
+`/no_think`는 효과가 없었다(system·user 어느 쪽에 두어도 추론이 계속됐고,
+user 쪽에서는 오히려 늘었다). Ollama의 OpenAI 호환 엔드포인트는 `think:false`
+파라미터를 무시한다. 두 경우 모두 실측으로 확인했다.
+
+검증기 규칙(`QuestionOutputGuard`)을 그대로 계산해 만든 기대값과 모델 출력을
+3회 대조해 세 문장 모두 정확히 일치함을 확인했다. 이 호출은 비동기이므로
+26~45초 지연은 보호자 대기 시간이 아니다 — 저장 즉시 템플릿 질문이 나오고
+LLM 결과는 뒤에 반영된다.
+
 ### 2026-09-14 실기 설치 기록 (비밀값 없음)
 
 호스트: Ubuntu 24.04, x86_64, 커널 6.8.0-139, Intel i7-7700HQ, RAM 23.2 GiB,
@@ -411,7 +436,7 @@ cloudflared 컨테이너의 non-root 실행 사용자 번호이며, 2절에서 �
 ```dotenv
 NEXTVISIT_LLM_ENABLED=false
 NEXTVISIT_LLM_BASE_URL=https://llm.example.com/v1
-NEXTVISIT_LLM_MODEL=qwen3:4b-q8_0
+NEXTVISIT_LLM_MODEL=qwen3:4b-q4_K_M
 NEXTVISIT_LLM_API_KEY=ollama
 NEXTVISIT_LLM_CF_ACCESS_CLIENT_ID=<ACCESS_CLIENT_ID>
 NEXTVISIT_LLM_CF_ACCESS_CLIENT_SECRET=<ACCESS_CLIENT_SECRET>
@@ -439,14 +464,14 @@ while [ "$attempt" -le 3 ]; do
   attempt="$((attempt + 1))"
 done
 ollama_id="$(docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml ps -q ollama)"
-docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$ollama_id" | grep -Fx 'OLLAMA_CONTEXT_LENGTH=2048'
-docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml exec ollama ollama list | grep -F 'qwen3:4b-q8_0'
+docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$ollama_id" | grep -Fx 'OLLAMA_CONTEXT_LENGTH=8192'
+docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml exec ollama ollama list | grep -F 'qwen3:4b-q4_K_M'
 docker compose --project-name nextvisit-llm -f compose.yml -f compose.gpu.yml exec ollama ollama ps
 RUNNER
 ```
 
 - [ ] smoke의 마지막 줄이 `OpenAI-compatible smoke passed`인지 확인한다.
-- [ ] 환경 검사와 모델 목록이 `qwen3:4b-q8_0`, context `2048`을 확인하는지 본다.
+- [ ] 환경 검사와 모델 목록이 `qwen3:4b-q4_K_M`, context `8192`를 확인하는지 본다.
 - [ ] `ollama ps`에서 모델이 `100% GPU`인지 확인한다.
 - [ ] 위 loop가 3회 모두 성공하고 각 요청이 백엔드 기본 read timeout인
       45초보다 짧은지 기록한다.

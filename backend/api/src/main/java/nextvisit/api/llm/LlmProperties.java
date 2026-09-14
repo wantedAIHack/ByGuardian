@@ -14,12 +14,12 @@ import org.springframework.validation.annotation.Validated;
 public record LlmProperties(
     @DefaultValue("false") boolean enabled,
     @DefaultValue("http://localhost:11434/v1") URI baseUrl,
-    @NotBlank @DefaultValue("qwen3:4b-q8_0") String model,
+    @NotBlank @DefaultValue("qwen3:4b-q4_K_M") String model,
     @DefaultValue("ollama") String apiKey,
     @DefaultValue("") String cfAccessClientId,
     @DefaultValue("") String cfAccessClientSecret,
     @DefaultValue("3s") Duration connectTimeout,
     @DefaultValue("45s") Duration readTimeout,
     @Min(1) @Max(3) @DefaultValue("3") int maxAttempts,
-    @Min(1) @DefaultValue("512") int maxOutputTokens
+    @Min(1) @DefaultValue("3000") int maxOutputTokens
 ) {}

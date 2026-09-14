@@ -1,7 +1,7 @@
 # NextVisit LLM operations
 
 The required image is Ollama `0.33.3`; Docker Compose v2.24.4 or later is
-required. The default model is `qwen3:4b-q8_0`
+required. The default model is `qwen3:4b-q4_K_M`
 with a 2,048-token context. The named volume `nextvisit-llm-ollama-data`
 survives container replacement.
 

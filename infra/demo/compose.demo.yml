@@ -1,0 +1,67 @@
+# Hackathon demo stack: PostgreSQL + the Spring API, on the same host as Ollama.
+#
+# Why this exists: the reviewed production design puts the API on EC2 and the
+# LLM on this laptop, which is why it needs a Cloudflare Access service token --
+# that hop crosses the internet. Running the API on the laptop collapses that
+# hop into a Docker network call, so no Access token, no Elastic IP, and no AWS
+# spend are required to demo the product end to end.
+#
+# The API joins the already-running `nextvisit-llm` project's network and
+# reaches Ollama at its service alias. Start Ollama first:
+#   docker compose --project-name nextvisit-llm -f ../llm/compose.yml -f ../llm/compose.gpu.yml up -d ollama
+name: nextvisit-demo
+
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    environment:
+      POSTGRES_DB: nextvisit
+      POSTGRES_USER: nextvisit
+      POSTGRES_PASSWORD: "${NEXTVISIT_DB_PASSWORD:?Set NEXTVISIT_DB_PASSWORD}"
+    volumes:
+      - demo-pg:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nextvisit -d nextvisit"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nextvisit-api:demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NEXTVISIT_DB_URL: jdbc:postgresql://postgres:5432/nextvisit
+      NEXTVISIT_DB_USER: nextvisit
+      NEXTVISIT_DB_PASSWORD: "${NEXTVISIT_DB_PASSWORD:?Set NEXTVISIT_DB_PASSWORD}"
+      NEXTVISIT_CORS_ORIGINS: "${NEXTVISIT_CORS_ORIGINS:?Set NEXTVISIT_CORS_ORIGINS to the exact frontend origin}"
+      NEXTVISIT_DEMO_ENABLED: "true"
+      # The whole point of running here: Ollama is one Docker hop away, so the
+      # Access client id/secret stay empty and the client omits those headers.
+      NEXTVISIT_LLM_ENABLED: "true"
+      NEXTVISIT_LLM_BASE_URL: http://ollama:11434/v1
+      NEXTVISIT_LLM_MODEL: qwen3:4b-q8_0
+      NEXTVISIT_LLM_API_KEY: ollama
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: "8080"
+    # Loopback only. cloudflared runs on the host and reaches it here; nothing
+    # is published to the LAN and no inbound router port is opened.
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    networks:
+      - default
+      - llm
+
+volumes:
+  demo-pg:
+
+networks:
+  llm:
+    external: true
+    name: nextvisit-llm_default
