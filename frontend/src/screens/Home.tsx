@@ -55,9 +55,14 @@ export function Home({ catalog }: { catalog: Catalog }) {
 
   return (
     <main className="mx-auto flex min-h-full max-w-lg flex-col px-gutter py-10">
+      {/* 데이터가 생긴 뒤의 홈에는 서비스 이름이 어디에도 없었다. 처음 들어온
+          사람은 무슨 화면인지 답할 단서가 없고, 화면에 h1도 없었다. 행동을
+          가리지 않도록 작게 두되, 이름과 문서 제목 역할은 하게 한다. */}
+      <h1 className="pb-8 text-small font-normal text-ink-faint">{APP_NAME}</h1>
+
       {/* 상태 E — 외래가 사흘 안쪽이면 준비 카드가 맨 위로 온다 */}
       {visitSoon && me.nextVisitDate ? (
-        <section className="pb-10">
+        <section className="border-b border-line pb-10">
           <p className="font-semibold">{dDayPhrase(me.nextVisitDate, me.today)}</p>
           {prepPhrase ? <p className="pt-3">{prepPhrase}</p> : null}
           <div className="pt-5">
@@ -81,7 +86,7 @@ export function Home({ catalog }: { catalog: Catalog }) {
       <section className="flex-1" data-testid="home-main">
         {state === 'NOT_RECORDED' ? (
           <>
-            <h1 className="text-title font-semibold">이번 주 관찰을 남겨주세요</h1>
+            <h2 className="text-title font-semibold">이번 주 관찰을 남겨주세요</h2>
             <p className="pt-3 text-ink-soft">
               {me.fullRecheck
                 ? `이번 주는 ${catalog.items.length}가지를 모두 여쭤봅니다`
@@ -119,16 +124,20 @@ export function Home({ catalog }: { catalog: Catalog }) {
             {progress.changes.length > 0 ? (
               <>
                 <h2 className="pt-8 text-title font-semibold">지켜보고 있는 변화</h2>
-                <ul className="flex flex-col gap-8 pt-6">
+                {/* 항목 일곱 개가 비슷한 길이의 글이라 여백만으로는 경계가 사라졌다.
+                    구분선으로 나눈다. 카드로 감싸지 않는 이유는 이 항목들이 누를 수
+                    있는 것이 아니기 때문이다 — 누르지 못하는 카드는 장식이다. */}
+                <ul className="mt-4 divide-y divide-line border-t border-line">
                   {progress.changes.map((c) => (
-                    <li key={`${c.item}-${c.axis}`}>
+                    <li key={`${c.item}-${c.axis}`} className="py-5">
                       <p className="font-semibold">
                         {c.label}
                         {c.axis === 'LEVEL' ? null : <span className="font-normal"> · {c.axisLabel}</span>}
                       </p>
                       <p className="pt-1">{c.from} → {c.to}</p>
-                      {/* 서버가 만든 문장이다. 자르지도 덧붙이지도 않는다. */}
-                      <p className="pt-1 text-ink-soft">{c.message}</p>
+                      {/* 서버가 만든 문장이다. 자르지도 덧붙이지도 않는다.
+                          기간은 항목 안에서 가장 덜 중요하므로 한 단계 작게 둔다. */}
+                      <p className="pt-1 text-small text-ink-soft">{c.message}</p>
                     </li>
                   ))}
                 </ul>
