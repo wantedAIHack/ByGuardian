@@ -47,7 +47,13 @@ nvidia_list=/etc/apt/sources.list.d/nvidia-container-toolkit.list
 
 # Docker Engine/CLI/containerd/Compose plus the NVIDIA container runtime.
 # The NVIDIA *driver* is deliberately absent from this list.
+# docker-buildx-plugin is not optional here: infra/llm/Dockerfile uses
+# `COPY --chmod=`, which only the BuildKit builder understands. Without buildx
+# the CLI silently falls back to the legacy builder and every `docker compose
+# build` on this host fails with "the --chmod option requires BuildKit" --
+# which is exactly what happened on the first real GPU host.
 packages='containerd.io
+docker-buildx-plugin
 docker-ce
 docker-ce-cli
 docker-compose-plugin
