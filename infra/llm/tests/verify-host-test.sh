@@ -130,6 +130,19 @@ chmod +x "$test_root/bin/nvidia-smi" "$test_root/bin/nvidia-ctk" \
   "$test_root/bin/passwd" "$test_root/bin/stat" "$test_root/bin/systemctl" \
   "$test_root/ssbin/ss"
 
+# The real utilities verify-host.sh shells out to that this fixture does NOT
+# fake. They live in their own directory so the "missing ss" case below can
+# build a PATH with no real system bin on it at all: dropping $test_root/ssbin
+# only hides `ss` if the real /usr/bin is not still reachable behind it. That
+# is exactly how this fixture passed on macOS (which ships no `ss`) while
+# silently asserting nothing on Ubuntu (which does).
+mkdir -p "$test_root/sysbin"
+for real_tool in awk sed grep uname dirname; do
+  real_path="$(command -v "$real_tool")" ||
+    { printf '%s\n' "verify-host-test requires $real_tool on PATH" >&2; exit 1; }
+  ln -sf "$real_path" "$test_root/sysbin/$real_tool"
+done
+
 # Nested the way the real host lays it out (llm_dir is releases_dir's parent)
 # so verify-host.sh's own `dirname -- "$releases_path"` lands on a directory
 # this fixture controls independently of releases_dir.
@@ -192,7 +205,7 @@ expect_gpu_fail() {
 run_gpu
 expect_gpu_pass "bootstrapped host"
 
-GPU_PATH_OVERRIDE="$test_root/bin:$PATH" run_gpu
+GPU_PATH_OVERRIDE="$test_root/bin:$test_root/sysbin" run_gpu
 expect_gpu_fail "missing ss" "ss is required for gpu mode"
 
 FAKE_DOCKER_RUNTIMES='{"runc":{}}' run_gpu

@@ -13,13 +13,16 @@ test -f "$repo_root/README.md"
 test -f "$repo_root/backend/README.md"
 test -z "$(git -C "$repo_root" ls-files '.context/*')"
 
-if rg -n 'frontend.*별도.*branch|프론트엔드.*미구현|LLM.*미착수|systemd로 Ollama' \
+# grep -E, not ripgrep: GitHub's ubuntu-latest image ships no `rg`, so this
+# check exited 127 ("rg: not found") on every hosted run while passing on any
+# developer machine that happened to have ripgrep installed.
+if grep -nE 'frontend.*별도.*branch|프론트엔드.*미구현|LLM.*미착수|systemd로 Ollama' \
   "$repo_root/README.md" "$repo_root/backend/README.md"; then
   exit 1
 else
-  rg_status=$?
+  grep_status=$?
 fi
 
-test "$rg_status" -eq 1 || exit "$rg_status"
+test "$grep_status" -eq 1 || exit "$grep_status"
 
 echo "repository contract tests passed"

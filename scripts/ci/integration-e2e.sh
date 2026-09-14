@@ -66,6 +66,21 @@ cleanup() {
   fi
   if [ "$result" -ne 0 ]; then
     printf 'integration: %s failed (status %s); response bodies withheld\n' "$component" "$result"
+    # Hosted CI keeps no copy of $logs, so without this a remote failure is
+    # undiagnosable: the first real GitHub-hosted run reported only "api failed
+    # (status 1)" with no way to learn why. Dumping the log wholesale would
+    # defeat the privacy property this script exists to hold, so print only
+    # lines matching known failure markers -- never arbitrary log content,
+    # never a response body, prompt, or guardian note.
+    if [ -f "$logs/$component.log" ]; then
+      diagnostic="$(grep -aE '^(FAILURE|ERROR|Caused by:|Exception|\* What went wrong:|\* Try:|APPLICATION FAILED TO START|Description:|Action:)|Dependency verification failed|Web server failed to start|Port [0-9]+ was already in use|Connection (refused|to .* refused)|artifacts failed verification' "$logs/$component.log" 2>/dev/null | head -20 || true)"
+      if [ -n "$diagnostic" ]; then
+        printf 'integration: %s diagnostic markers (allowlisted lines only)\n' "$component"
+        printf '%s\n' "$diagnostic"
+      else
+        printf 'integration: no allowlisted failure marker found in %s.log\n' "$component"
+      fi
+    fi
   else
     printf '%s\n' 'integration: browser journey passed; scoped cleanup complete'
   fi
