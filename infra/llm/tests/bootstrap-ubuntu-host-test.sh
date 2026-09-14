@@ -25,6 +25,7 @@ token_sentinel="do-not-print-this-fake-bootstrap-tunnel-token-sentinel"
 candidates="$test_root/candidates"
 cat >"$candidates" <<'CANDIDATES'
 containerd.io 1.7.27-1
+docker-buildx-plugin 0.26.1-1~ubuntu.24.04~noble
 docker-ce 5:28.3.2-1~ubuntu.24.04~noble
 docker-ce-cli 5:28.3.2-1~ubuntu.24.04~noble
 docker-compose-plugin 2.39.1-1~ubuntu.24.04~noble
@@ -704,7 +705,15 @@ while read -r pkg version; do
     exit 1
   }
 done <"$candidates"
-test "$(grep -c '^package ' "$lock")" -eq 6
+# Derived from the fixture, not hardcoded: a literal count silently broke this
+# suite with NO diagnostic when docker-buildx-plugin was added to the package
+# list, because a bare `test` under `set -e` exits 1 and prints nothing.
+expected_packages="$(grep -c . "$candidates")"
+actual_packages="$(grep -c '^package ' "$lock")"
+if [ "$actual_packages" -ne "$expected_packages" ]; then
+  printf 'lock records %s packages, expected %s\n' "$actual_packages" "$expected_packages" >&2
+  exit 1
+fi
 test "$(grep -c '^source ' "$lock")" -eq 4
 for signed in /etc/apt/keyrings/docker.asc \
   /etc/apt/sources.list.d/docker.list \
