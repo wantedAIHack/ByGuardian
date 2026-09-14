@@ -18,6 +18,7 @@ export interface Catalog {
   timeTags: CodeLabel[];
   sleepLevels: CodeLabel[];
   axisLabels: CodeLabel[];
+  axisQuestions: CodeLabel[];
 }
 
 export interface ItemInput {

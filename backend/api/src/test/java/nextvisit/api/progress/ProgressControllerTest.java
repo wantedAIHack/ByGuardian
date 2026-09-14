@@ -95,12 +95,12 @@ class ProgressControllerTest {
 
         Map<String, JsonNode> byKey = new LinkedHashMap<>();
         p.get("changes").forEach(c -> byKey.put(c.get("item").asText() + "/" + c.get("axis").asText(), c));
-        assertEquals("화장실 이용은 지켜보면 됨에서 혼자 하심으로 바뀌었습니다. 이 변화가 4주째 유지되고 있습니다.",
+        assertEquals("이 변화가 4주째 유지되고 있습니다.",
             byKey.get("toilet/LEVEL").get("message").asText());
         assertEquals("SUSTAINED", byKey.get("toilet/LEVEL").get("status").asText());
-        assertEquals("집 안에서 걷기의 보조 도구는 워커에서 지팡이로 바뀌었습니다. 이 변화가 2주째 유지되고 있습니다.",
+        assertEquals("이 변화가 2주째 유지되고 있습니다.",
             byKey.get("ambulation/AID").get("message").asText());
-        assertEquals("식사의 마비 쪽 손은 거들기만에서 안 씀으로 바뀌었습니다. 이 변화가 3주째 유지되고 있습니다.",
+        assertEquals("이 변화가 3주째 유지되고 있습니다.",
             byKey.get("feeding/HAND").get("message").asText());
         assertFalse(byKey.containsKey("grooming/LEVEL"), "흔들림은 층 2에서 숨긴다");
         assertFalse(byKey.containsKey("bathing/LEVEL"), "변화 없음은 표시하지 않는다");
@@ -122,7 +122,7 @@ class ProgressControllerTest {
         mvc.perform(putJson(o.token(), "/me/weeks/3", mapper, weekly(false, toilet(3)))).andExpect(status().isOk());
         JsonNode w3 = json(mapper, mvc.perform(getMe(o.token(), "/me/progress")).andReturn());
         assertEquals("OBSERVED_ONCE", w3.get("changes").get(0).get("status").asText());
-        assertEquals("화장실 이용은 한 번 달라진 것으로 관찰됐습니다. 아직 변화라고 보기 어렵습니다.", w3.get("changes").get(0).get("message").asText());
+        assertEquals("한 번 달라진 것으로 관찰됐습니다. 아직 변화라고 보기 어렵습니다.", w3.get("changes").get(0).get("message").asText());
 
         clock.advanceDays(7);                                  // week 4 = full recheck
         mvc.perform(putJson(o.token(), "/me/weeks/4", mapper, weekly(false, fullItemsWithToilet(3)))).andExpect(status().isOk());

@@ -55,7 +55,7 @@ describe('온보딩 기준선', () => {
     expect(screen.queryByText('보조 도구')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '지켜보면 됨' }));
     expect(screen.getByText('보조 도구')).toBeInTheDocument();
-    expect(screen.getByText('한 주 일관성')).toBeInTheDocument();
+    expect(screen.getByText('이번 주에 얼마나 자주 그러셨나요?')).toBeInTheDocument();
   });
 
   it('마비 쪽을 모르면 마비 쪽 손을 묻지 않는다', async () => {

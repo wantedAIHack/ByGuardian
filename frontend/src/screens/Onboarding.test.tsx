@@ -251,7 +251,7 @@ describe('판정 문구 화이트리스트', () => {
         ...catalogFixture.axes.LEVEL!.map((v) => v.label),
         '보조 도구',
         ...catalogFixture.axes.AID!.map((v) => v.label),
-        '한 주 일관성',
+        '이번 주에 얼마나 자주 그러셨나요?',
         ...catalogFixture.axes.CONSISTENCY!.map((v) => v.label),
         '다음',
       ].join(''),

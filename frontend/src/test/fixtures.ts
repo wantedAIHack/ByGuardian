@@ -46,7 +46,11 @@ export const catalogFixture: Catalog = {
   ],
   axisLabels: [
     { code: 'LEVEL', label: '도움 수준' }, { code: 'AID', label: '보조 도구' },
-    { code: 'CONSISTENCY', label: '한 주 일관성' }, { code: 'HAND', label: '마비 쪽 손' },
+    { code: 'CONSISTENCY', label: '이번 주 빈도' }, { code: 'HAND', label: '마비 쪽 손' },
+  ],
+  axisQuestions: [
+    { code: 'LEVEL', label: '도움 수준' }, { code: 'AID', label: '보조 도구' },
+    { code: 'CONSISTENCY', label: '이번 주에 얼마나 자주 그러셨나요?' }, { code: 'HAND', label: '마비 쪽 손' },
   ],
 };
 
