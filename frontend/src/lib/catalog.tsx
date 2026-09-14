@@ -21,6 +21,17 @@ export function axisName(c: Catalog, axis: string): string {
   return codeLabel(c.axisLabels, axis);
 }
 
+/**
+ * 선택지 위 h3 헤더용. 인라인 라벨(axisName)과 다른 문자열인 이유는 자리가 다르기
+ * 때문이다. "문턱·계단 · 이번 주 빈도"에는 명사구가 맞고, 선택지 위에 홀로 서는
+ * 헤더에는 질문이 맞다. 서버가 질문을 안 준 축은 라벨로 폴백한다.
+ */
+export function axisQuestion(c: Catalog | undefined, axis: string): string {
+  if (!c) return '';
+  const q = c.axisQuestions?.find((x) => x.code === axis);
+  return q ? q.label : axisName(c, axis);
+}
+
 export function codeLabel(list: CodeLabel[], code: string): string {
   return list.find((x) => x.code === code)?.label ?? '';
 }

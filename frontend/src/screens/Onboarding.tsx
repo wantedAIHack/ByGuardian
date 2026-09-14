@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { ApiError, api, getToken, setToken } from '../lib/api';
-import { axisName, axisValues } from '../lib/catalog';
+import { axisQuestion, axisValues } from '../lib/catalog';
 import {
   APP_NAME, DIAGNOSIS_CHOICES, PARETIC_SIDE_CHOICES, RELATIONS, VERBAL_DIFFICULTY_CHOICES,
   WEEKLY_ICS_FILENAME,
@@ -270,7 +270,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
         {value.level !== null
           ? axes.filter((a) => a !== 'LEVEL').map((axis) => (
               <div key={axis} className="pt-8">
-                <h3 className="font-semibold">{axisName(catalog, axis)}</h3>
+                <h3 className="font-semibold">{axisQuestion(catalog, axis)}</h3>
                 <div className="flex flex-col gap-3 pt-3">
                   {axisValues(catalog, axis).map((v) => (
                     <Choice

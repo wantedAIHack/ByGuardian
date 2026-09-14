@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { axisName, axisValueLabel, axisValues, codeLabel, itemByCode } from './catalog';
+import { axisName, axisQuestion, axisValueLabel, axisValues, codeLabel, itemByCode } from './catalog';
 import { catalogFixture } from '../test/fixtures';
 
 const c = catalogFixture;
@@ -23,7 +23,11 @@ describe('catalog', () => {
 
   it('축 이름을 카탈로그에서 읽는다', () => {
     expect(axisName(c, 'LEVEL')).toBe('도움 수준');
-    expect(axisName(c, 'CONSISTENCY')).toBe('한 주 일관성');
+    expect(axisName(c, 'CONSISTENCY')).toBe('이번 주 빈도');
+    // 인라인 라벨과 헤더 질문은 다른 문자열이어야 한다. 같아지면
+    // "문턱·계단 · 이번 주에 얼마나 자주 그러셨나요?"가 다시 나온다.
+    expect(axisQuestion(c, 'CONSISTENCY')).toBe('이번 주에 얼마나 자주 그러셨나요?');
+    expect(axisQuestion(c, 'HAND')).toBe(axisName(c, 'HAND'));
     expect(axisName(c, 'NOPE')).toBe('');
   });
 

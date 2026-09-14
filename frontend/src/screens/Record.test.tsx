@@ -255,7 +255,7 @@ describe('주간 기록', () => {
         '화장실 이용',
         '요즘 어떠신가요?',
         ...catalogFixture.axes.LEVEL!.map((v) => v.label),
-        '한 주 일관성',
+        '이번 주에 얼마나 자주 그러셨나요?',
         ...catalogFixture.axes.CONSISTENCY!.map((v) => v.label),
         '한 줄 적어두실 것이 있나요? (안 적으셔도 됩니다)',
         '다음',

@@ -118,7 +118,12 @@ class DemoFlowTest {
             "0", "자주 깨심", "1", "가끔 깨심", "2", "잘 주무심");
         assertCodeLabels(c, "axisLabels",
             "LEVEL", "도움 수준", "AID", "보조 도구",
-            "CONSISTENCY", "한 주 일관성", "HAND", "마비 쪽 손");
+            "CONSISTENCY", "이번 주 빈도", "HAND", "마비 쪽 손");
+        // 헤더 질문은 인라인 라벨과 다른 문자열이어야 한다. 같아지면 홈·준비 카드·
+        // 치료사 표에 "문턱·계단 · 이번 주에 얼마나 자주 그러셨나요?"가 다시 나온다.
+        assertCodeLabels(c, "axisQuestions",
+            "LEVEL", "도움 수준", "AID", "보조 도구",
+            "CONSISTENCY", "이번 주에 얼마나 자주 그러셨나요?", "HAND", "마비 쪽 손");
     }
 
     private static void assertAxis(JsonNode c, String axis, String... labels) {
