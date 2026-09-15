@@ -195,8 +195,12 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
       >
         <h2 className="text-title font-semibold">다음 진료일이 정해져 있나요?</h2>
         <Notice>모르시면 건너뛰셔도 됩니다. 나중에 설정에서 넣으실 수 있습니다.</Notice>
+        {/* 화면에는 위 h2가 질문을 말하지만, 화면 읽기 도구에는 이름 없는
+            textbox로만 들렸다. 날짜 입력은 값이 비어 있을 때 placeholder도
+            없어서 무엇을 넣는 칸인지 들을 방법이 아예 없다. */}
         <input
           type="date"
+          aria-label="다음 진료일"
           className="mt-6 min-h-[56px] w-full rounded-lg border border-line px-4 text-btn"
           value={s.nextVisitDate ?? ''}
           onChange={(e) => set({ nextVisitDate: e.target.value || null })}

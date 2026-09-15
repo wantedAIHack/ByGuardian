@@ -3,6 +3,7 @@ import { App } from './App';
 import { useCatalog } from './lib/catalog';
 import { Demo } from './screens/Demo';
 import { Home } from './screens/Home';
+import { NotFound } from './screens/NotFound';
 import { Onboarding } from './screens/Onboarding';
 import { PrepCard } from './screens/PrepCard';
 import { Recover } from './screens/Recover';
@@ -43,4 +44,6 @@ export const router = createBrowserRouter([
   },
   // 치료사 화면은 App 밖이다. 보호자용 껍데기도 카탈로그도 쓰지 않는다.
   { path: '/t', element: <Therapist /> },
+  // catch-all이 없으면 React Router의 영어 개발자 오류 화면이 그대로 나온다.
+  { path: '*', element: <NotFound /> },
 ]);
