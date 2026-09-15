@@ -1,3 +1,4 @@
+import { PageHeader } from '../ui/PageHeader';
 import { Link } from 'react-router';
 
 /**
@@ -10,13 +11,15 @@ import { Link } from 'react-router';
  */
 export function NotFound() {
   return (
-    <main className="mx-auto max-w-lg px-gutter py-12">
-      <h1 className="text-title font-semibold">이 주소에는 아무것도 없습니다</h1>
+    <main className="app-page">
+      <div className="note-surface">
+      <PageHeader title="이 주소에는 아무것도 없습니다" focusKey="not-found" />
       <p className="pt-4 text-ink-soft">
         주소가 바뀌었거나 잘못 복사된 것 같습니다.
       </p>
       <div className="pt-8">
         <Link className="btn" to="/">홈으로</Link>
+      </div>
       </div>
     </main>
   );

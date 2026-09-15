@@ -1,5 +1,6 @@
+import { PageHeader } from '../ui/PageHeader';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
 import { saveRecoveryCode } from '../lib/recoveryCode';
 import { ApiError, api, setToken } from '../lib/api';
@@ -43,7 +44,7 @@ export function Recover() {
   if (done) {
     return (
       <Screen footer={<Button onClick={() => navigate('/', { replace: true })}>홈으로</Button>}>
-        <p className="text-title font-semibold">기록을 되찾았습니다.</p>
+        <PageHeader title="기록을 되찾았습니다." focusKey="recovered" />
       </Screen>
     );
   }
@@ -52,27 +53,22 @@ export function Recover() {
     <Screen
       footer={
         <div className="flex flex-col gap-3">
-          {error ? <p>{error}</p> : null}
+          {error ? <p role="alert">{error}</p> : null}
           <Button
             disabled={code.trim().length === 0 || resolved.length === 0 || recover.isPending}
             onClick={() => { setError(null); recover.mutate(); }}
           >
             {recover.isPending ? '찾는 중입니다…' : '이어받기'}
           </Button>
-          <p className="text-center text-small">
-            <Link className="inline-flex min-h-[48px] items-center text-ink-soft underline" to="/">
-              ← 홈
-            </Link>
-          </p>
         </div>
       }
     >
-      <h1 className="text-title font-semibold">이어받기</h1>
+      <PageHeader title="이어받기" backTo="/" focusKey="recover" />
       <label className="block pt-8">
         <span className="text-small text-ink-soft">이어받기 코드</span>
         <input
           aria-label="이어받기 코드"
-          className="mt-2 min-h-[56px] w-full rounded-lg border border-line px-4 text-[24px] tracking-[0.15em] uppercase"
+          className="mt-2 min-h-[56px] w-full rounded-lg border border-control bg-paper px-4 text-[24px] tracking-[0.15em] uppercase"
           value={code}
           maxLength={8}
           autoCapitalize="characters"
@@ -92,7 +88,7 @@ export function Recover() {
           <label className="block pt-4">
             <span className="text-small text-ink-soft">어떤 관계이신가요?</span>
             <input
-              className="mt-2 min-h-[56px] w-full rounded-lg border border-line px-4"
+              className="mt-2 min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
               value={other}
               onChange={(e) => setOther(e.target.value)}
             />

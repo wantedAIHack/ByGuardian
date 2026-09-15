@@ -81,7 +81,7 @@ describe('TherapistLinkPanel', () => {
     await user.click(screen.getByRole('button', { name: '주소 복사하기' }));
 
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t#${TOKEN_A}`);
-    expect(await screen.findByRole('button', { name: '복사했습니다' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('복사했습니다');
   });
 
   it('발급에 실패하면 안내 문구를 보여준다', async () => {
@@ -114,7 +114,7 @@ describe('TherapistLinkPanel', () => {
 
     await user.click(screen.getByRole('button', { name: '주소 복사하기' }));
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/t#${TOKEN_A}`);
-    expect(await screen.findByRole('button', { name: '복사했습니다' })).toBeInTheDocument();
+    expect(await screen.findByRole('status')).toHaveTextContent('복사했습니다');
 
     await user.click(screen.getByRole('button', { name: '새 주소 만들기' }));
 

@@ -28,6 +28,34 @@ function renderIt() {
 }
 
 describe('설정', () => {
+  it('수정 없이 저장해도 기존 진료일을 지우지 않는다', async () => {
+    let sent: unknown;
+    server.use(http.patch(`${BASE}/me`, async ({ request }) => {
+      sent = await request.json();
+      return HttpResponse.json(me({ nextVisitDate: '2026-09-20' }));
+    }));
+    renderIt();
+    await userEvent.setup().click(await screen.findByRole('button', { name: '진료일 저장' }));
+    expect(sent).toEqual({ nextVisitDate: '2026-09-20' });
+    expect(await screen.findByRole('status')).toHaveTextContent('진료일을 저장했습니다.');
+  });
+  it('진료일 저장 실패 후 입력을 보존하고 재시도한다', async () => {
+    renderIt();
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText('다음 진료일');
+    await user.clear(input);
+    await user.type(input, '2026-08-01');
+    server.use(http.patch(`${BASE}/me`, () => HttpResponse.json({ code: 'INVALID', message: '지난 날짜는 저장할 수 없습니다.' }, { status: 400 })));
+    await user.click(screen.getByRole('button', { name: '진료일 저장' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('지난 날짜는 저장할 수 없습니다.');
+    expect(input).toHaveValue('2026-08-01');
+    await user.clear(input);
+    await user.type(input, '2026-10-01');
+    server.use(http.patch(`${BASE}/me`, () => HttpResponse.json(me({ nextVisitDate: '2026-10-01' }))));
+    await user.click(screen.getByRole('button', { name: '진료일 저장' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('진료일을 저장했습니다.');
+    expect(input).toHaveValue('2026-10-01');
+  });
   it('초대 구역과 재발급 구역이 갈라져 있다', async () => {
     renderIt();
     const invite = (await screen.findByText('다른 가족 초대하기')).closest('section')!;
@@ -106,8 +134,9 @@ describe('설정', () => {
     // 두 문장을 각각 정규식으로 고정한 '재발급은 확인을 거치고...' 테스트가 있다.
     expect(container.textContent).toBe(
       [
-        '← 홈',
+        '← 뒤로',
         '설정',
+        '다음 진료일', '다음 진료일', '진료일 저장',
         '다른 가족 초대하기',
         '지금 갖고 계신 이어받기 코드를 알려주시면 됩니다. 받으신 분이 ‘이어받기’에서 그 코드와 자신의 관계를 넣으면 같은 기록에 함께 남기실 수 있습니다.',
         '새 코드를 만들 필요가 없습니다. 누가 남긴 기록인지는 치료사용 요약에 함께 나갑니다.',
@@ -116,9 +145,6 @@ describe('설정', () => {
         '복구 코드 다시 만들기',
         '적어두신 코드를 잃으셨을 때만 쓰세요.',
         '코드 새로 만들기',
-        '다음 진료일',
-        '다음 진료일',
-        '진료일 저장',
         '주간 알림',
         '쓰시는 달력에 매주 반복 일정을 넣어드립니다.',
         '캘린더 파일 다시 받기',
@@ -146,8 +172,9 @@ describe('설정', () => {
     // 나오는 것은 실수가 아니다(보이는 h2 제목 + 입력칸의 sr-only 라벨).
     expect(container.textContent).toBe(
       [
-        '← 홈',
+        '← 뒤로',
         '설정',
+        '다음 진료일', '다음 진료일', '진료일 저장',
         '다른 가족 초대하기',
         '지금 갖고 계신 이어받기 코드를 알려주시면 됩니다. 받으신 분이 ‘이어받기’에서 그 코드와 자신의 관계를 넣으면 같은 기록에 함께 남기실 수 있습니다.',
         '새 코드를 만들 필요가 없습니다. 누가 남긴 기록인지는 치료사용 요약에 함께 나갑니다.',
@@ -158,9 +185,6 @@ describe('설정', () => {
         '적어두신 코드를 잃으셨을 때만 쓰세요.',
         'AB23CD45',
         '지금 적어두시거나 사진을 찍어두세요. 다시 보여드릴 수 없습니다.',
-        '다음 진료일',
-        '다음 진료일',
-        '진료일 저장',
         '주간 알림',
         '쓰시는 달력에 매주 반복 일정을 넣어드립니다.',
         '캘린더 파일 다시 받기',
@@ -183,8 +207,9 @@ describe('설정', () => {
 
     expect(container.textContent).toBe(
       [
-        '← 홈',
+        '← 뒤로',
         '설정',
+        '다음 진료일', '다음 진료일', '진료일 저장',
         '다른 가족 초대하기',
         '지금 갖고 계신 이어받기 코드를 알려주시면 됩니다. 받으신 분이 ‘이어받기’에서 그 코드와 자신의 관계를 넣으면 같은 기록에 함께 남기실 수 있습니다.',
         '새 코드를 만들 필요가 없습니다. 누가 남긴 기록인지는 치료사용 요약에 함께 나갑니다.',
@@ -196,9 +221,6 @@ describe('설정', () => {
         '그 코드로 초대하신 분도 새로 이어받으셔야 합니다.',
         '네, 새로 만들겠습니다',
         '그만두기',
-        '다음 진료일',
-        '다음 진료일',
-        '진료일 저장',
         '주간 알림',
         '쓰시는 달력에 매주 반복 일정을 넣어드립니다.',
         '캘린더 파일 다시 받기',
