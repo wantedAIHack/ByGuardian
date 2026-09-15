@@ -66,14 +66,14 @@ describe('전체 궤적', () => {
     expect(screen.getByText('대부분 도움')).toBeInTheDocument();
   });
 
-  it('이어진 주를 옅게 표시하고 범례를 둔다', async () => {
+  it('이어진 주를 글자와 범례로 알린다', async () => {
     renderIt();
     await screen.findByText('화장실 이용');
     // 컴포넌트는 &lsquo;/&rsquo;로 곡선 따옴표를 렌더한다 — 직선 따옴표(')로 적으면
     // 실제 DOM 문자와 달라 절대 매치되지 않는다. ‘/’가 그 곡선 따옴표다.
-    expect(screen.getByText('옅은 값은 ‘달라진 것 없음’으로 이어진 주입니다'))
+    expect(screen.getByText('지난 값 유지: 달라진 것 없음으로 이어간 기록'))
       .toBeInTheDocument();
-    expect(screen.getByText('지켜보면 됨')).toHaveAttribute('data-carried', 'true');
+    expect(screen.getByText('지켜보면 됨').parentElement).toHaveAttribute('data-carried', 'true');
   });
 
   it('판정 문구를 만들지 않는다', async () => {
@@ -88,12 +88,13 @@ describe('전체 궤적', () => {
     const bathing = data[1]!;
     const toiletAxis = toilet.axes[0]!;
     const expected = [
-      '← 홈',
+      '← 뒤로',
       '전체 기록',
-      '옅은 값은 ‘달라진 것 없음’으로 이어진 주입니다',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
       toilet.label,
       toiletAxis.axisLabel,
-      ...toiletAxis.values.map((p) => `${p.week}주${p.label}`),
+      '좌우로 밀어 주차별 기록을 볼 수 있어요',
+      ...toiletAxis.values.map((p, i) => `${p.week}주${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `${bathing.label} — 바뀐 것 없음`, // —는 컴포넌트가 쓰는 em dash(—)다.
     ].join('');
 

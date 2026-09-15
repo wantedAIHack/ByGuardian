@@ -35,6 +35,16 @@ function renderRecord(m: Me, traj: Trajectory[] = []) {
 }
 
 describe('주간 기록', () => {
+  it('연결 실패를 무한 로딩으로 숨기지 않고 다시 불러온다', async () => {
+    setToken('t');
+    server.use(http.get(`${BASE}/me`, () => new HttpResponse(null, { status: 503 })));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={qc}><MemoryRouter><Record catalog={catalogFixture} /></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('기록 정보를 불러오지 못했습니다.');
+    server.use(http.get(`${BASE}/me`, () => HttpResponse.json(me())));
+    await userEvent.setup().click(screen.getByRole('button', { name: '다시 시도하기' }));
+    expect(await screen.findByRole('heading', { name: '지난주와 달라진 게 있나요?' })).toBeInTheDocument();
+  });
   it('달라진 게 있는지부터 묻는다', async () => {
     renderRecord(me());
     expect(await screen.findByText('지난주와 달라진 게 있나요?')).toBeInTheDocument();
@@ -207,7 +217,7 @@ describe('주간 기록', () => {
     const { container } = renderRecord(me());
     await screen.findByText('지난주와 달라진 게 있나요?');
     expect(container.textContent).toBe(
-      ['지난주와 달라진 게 있나요?', '네, 달라진 게 있어요', '없어요'].join(''),
+      ['이번 주 관찰', '1 / 3', '지난주와 달라진 게 있나요?', '네, 달라진 게 있어요', '없어요'].join(''),
     );
   });
 
@@ -216,6 +226,7 @@ describe('주간 기록', () => {
     await screen.findByText('이번 주는 8가지를 모두 여쭤봅니다');
     expect(container.textContent).toBe(
       [
+        '이번 주 관찰', '1 / 11',
         '이번 주는 8가지를 모두 여쭤봅니다',
         '네 주에 한 번, 놓친 것이 없는지 처음부터 확인합니다. 지난번 답도 함께 보여드립니다.',
         '시작',
@@ -230,7 +241,7 @@ describe('주간 기록', () => {
     await screen.findByText('어떤 것이 달라졌나요?');
     expect(container.textContent).toBe(
       [
-        '← 뒤로',
+        '← 뒤로', '이번 주 관찰', '2 / 4',
         '어떤 것이 달라졌나요?',
         '여러 개를 고르셔도 됩니다.',
         ...catalogFixture.items.map((i) => i.label),
@@ -251,7 +262,7 @@ describe('주간 기록', () => {
     // 이름 h3을 안 낸다(단일 축일 때 반복해 말하지 않는다는 Record.tsx의 규칙).
     expect(container.textContent).toBe(
       [
-        '← 뒤로',
+        '← 뒤로', '이번 주 관찰', '3 / 5',
         '화장실 이용',
         '요즘 어떠신가요?',
         ...catalogFixture.axes.LEVEL!.map((v) => v.label),
@@ -271,7 +282,7 @@ describe('주간 기록', () => {
 
     expect(container.textContent).toBe(
       [
-        '← 뒤로',
+        '← 뒤로', '이번 주 관찰', '2 / 4',
         '이번 주에 불편해 보이신 적이 있나요?',
         '말씀으로 표현이 어려우실 때, 표정이나 몸짓에서 보이는 것들입니다.',
         '없었어요',
@@ -292,7 +303,7 @@ describe('주간 기록', () => {
 
     expect(container.textContent).toBe(
       [
-        '← 뒤로',
+        '← 뒤로', '이번 주 관찰', '2 / 3',
         '밤에 어떻게 주무셨나요?',
         '이번 주 대체로 어떠셨는지로 골라주세요.',
         ...catalogFixture.sleepLevels.map((l) => l.label),
@@ -311,7 +322,7 @@ describe('주간 기록', () => {
 
     expect(container.textContent).toBe(
       [
-        '← 뒤로',
+        '← 뒤로', '이번 주 관찰', '3 / 3',
         '그 밖에 남기고 싶으신 것',
         '말씀하시듯 편하게 적어주세요',
         '키보드의 마이크를 누르면 말로 적을 수 있어요.',

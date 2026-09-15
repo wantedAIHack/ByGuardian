@@ -1,5 +1,8 @@
+import { PageHeader } from '../ui/PageHeader';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { AsyncState } from '../ui/AsyncState';
+import { CopyButton } from '../ui/CopyButton';
+import { ApiError } from '../lib/api';
 import { APP_NAME, WEEKLY_ICS_FILENAME } from '../lib/constants';
 import { downloadIcs, weeklyReminderIcs } from '../lib/ics';
 import { useMe, useReissueRecoveryCode, useUpdateVisitDate } from '../lib/queries';
@@ -9,7 +12,8 @@ import { Notice } from '../ui/Notice';
 import { TherapistLinkPanel } from '../ui/TherapistLinkPanel';
 
 export function Settings() {
-  const { data: me } = useMe();
+  const meQ = useMe();
+  const me = meQ.data;
   const updateVisit = useUpdateVisitDate();
   const reissue = useReissueRecoveryCode();
   const [visitDate, setVisitDate] = useState<string | null>(null);
@@ -17,19 +21,45 @@ export function Settings() {
   const [codeShown, setCodeShown] = useState(false);
   // 서버는 해시만 갖고 있어 현재 코드를 되물을 수 없다. 이 기기에
   // 적어둔 것이 있을 때만 보여줄 수 있고, 없는 기기도 정상이다.
-  const storedCode = loadRecoveryCode();
+  const storedCode = reissue.data?.recoveryCode ?? loadRecoveryCode();
 
-  if (!me) return <main className="mx-auto max-w-lg px-gutter py-10"><p>불러오는 중입니다…</p></main>;
+  if (!me) return <main className="app-page"><PageHeader title="설정" backTo="/" />
+    <AsyncState kind={meQ.isError ? 'error' : 'loading'} message={meQ.isError ? '설정을 불러오지 못했습니다.' : '불러오는 중입니다…'}
+      onRetry={meQ.isError ? () => { void meQ.refetch(); } : undefined} /></main>;
   const dateValue = visitDate ?? me.nextVisitDate ?? '';
 
   return (
-    <main className="mx-auto max-w-lg px-gutter py-10">
-      <Link className="inline-flex min-h-[48px] items-center text-small text-ink-soft underline" to="/">
-        ← 홈
-      </Link>
-      <h1 className="pt-6 text-title font-semibold">설정</h1>
+    <main className="app-page space-y-6">
+      <PageHeader title="설정" backTo="/" focusKey="settings" />
 
-      <section className="pt-12">
+      <section className="note-surface">
+        <h2 className="font-semibold">다음 진료일</h2>
+        <label className="block pt-3">
+          <span className="sr-only">다음 진료일</span>
+          <input
+            type="date"
+            min={me.today}
+            aria-label="다음 진료일"
+            className="min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
+            value={dateValue}
+            disabled={updateVisit.isPending}
+            onChange={(e) => { setVisitDate(e.target.value); updateVisit.reset(); }}
+          />
+        </label>
+        <div className="pt-4">
+          <Button
+            variant="plain"
+            disabled={updateVisit.isPending}
+            onClick={() => updateVisit.mutate(dateValue || null)}
+          >
+            {updateVisit.isPending ? '저장하는 중입니다…' : '진료일 저장'}
+          </Button>
+        </div>
+        {updateVisit.isError ? <Notice role="alert">{updateVisit.error instanceof ApiError ? updateVisit.error.message : '진료일을 저장하지 못했습니다. 다시 저장해 주세요.'}</Notice> : null}
+        {updateVisit.isSuccess ? <Notice role="status">진료일을 저장했습니다.</Notice> : null}
+      </section>
+
+      <section className="note-surface">
         <h2 className="font-semibold">다른 가족 초대하기</h2>
         {/*
           초대는 재발급이 아니다. POST /guardians/recover가 지금 있는 코드를 받는다.
@@ -50,6 +80,7 @@ export function Settings() {
             {codeShown ? (
               <>
                 <p className="py-4 text-center text-[34px] font-bold tracking-[0.2em]">{storedCode}</p>
+                <CopyButton value={storedCode} label="코드 복사하기" />
                 <button
                   type="button"
                   className="inline-flex min-h-[48px] items-center text-small text-ink-soft underline"
@@ -72,7 +103,7 @@ export function Settings() {
         )}
       </section>
 
-      <section className="pt-12">
+      <section className="note-surface">
         <h2 className="font-semibold">복구 코드 다시 만들기</h2>
         <p className="pt-3">적어두신 코드를 잃으셨을 때만 쓰세요.</p>
 
@@ -95,7 +126,7 @@ export function Settings() {
               </Button>
               <Button variant="plain" onClick={() => setConfirming(false)}>그만두기</Button>
             </div>
-            {reissue.isError ? <Notice>만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
+            {reissue.isError ? <Notice role="alert">만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
           </div>
         ) : (
           <div className="pt-4">
@@ -103,31 +134,7 @@ export function Settings() {
           </div>
         )}
       </section>
-
-      <section className="pt-12">
-        <h2 className="font-semibold">다음 진료일</h2>
-        <label className="block pt-3">
-          <span className="sr-only">다음 진료일</span>
-          <input
-            type="date"
-            aria-label="다음 진료일"
-            className="min-h-[56px] w-full rounded-lg border border-line px-4"
-            value={dateValue}
-            onChange={(e) => setVisitDate(e.target.value)}
-          />
-        </label>
-        <div className="pt-4">
-          <Button
-            variant="plain"
-            disabled={updateVisit.isPending}
-            onClick={() => updateVisit.mutate(visitDate && visitDate.length > 0 ? visitDate : null)}
-          >
-            {updateVisit.isPending ? '저장하는 중입니다…' : '진료일 저장'}
-          </Button>
-        </div>
-      </section>
-
-      <section className="pt-12">
+      <section className="note-surface">
         <h2 className="font-semibold">주간 알림</h2>
         <p className="pt-3">쓰시는 달력에 매주 반복 일정을 넣어드립니다.</p>
         <div className="pt-4">
@@ -142,7 +149,7 @@ export function Settings() {
         </div>
       </section>
 
-      <section className="pt-12">
+      <section className="note-surface">
         <h2 className="font-semibold">치료사 링크</h2>
         <div className="pt-4">
           <TherapistLinkPanel />

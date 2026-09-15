@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { CopyButton } from './CopyButton';
 import { useIssueLink } from '../lib/queries';
 import { therapistShareUrl } from '../lib/therapistToken';
 import { Button } from './Button';
@@ -10,7 +10,6 @@ import { Notice } from './Notice';
  */
 export function TherapistLinkPanel() {
   const issue = useIssueLink();
-  const [copied, setCopied] = useState(false);
 
   const url = issue.data ? therapistShareUrl(issue.data.token) : null;
 
@@ -20,24 +19,17 @@ export function TherapistLinkPanel() {
         <Button variant="plain" disabled={issue.isPending} onClick={() => issue.mutate()}>
           {issue.isPending ? '만드는 중입니다…' : '치료사에게 보여드리기'}
         </Button>
-        {issue.isError ? <Notice>링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
+        {issue.isError ? <Notice role="alert">링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-line p-4">
+    <div className="note-surface">
       <p className="text-small text-ink-soft">치료사에게 이 주소를 보여드리세요.</p>
       <p className="break-all pt-2">{url}</p>
       <div className="flex flex-col gap-3 pt-4">
-        <Button
-          variant="plain"
-          onClick={() => {
-            void navigator.clipboard?.writeText(url).then(() => setCopied(true));
-          }}
-        >
-          {copied ? '복사했습니다' : '주소 복사하기'}
-        </Button>
+        <CopyButton value={url} label="주소 복사하기" />
         <a className="btn btn-quiet" href={url} target="_blank" rel="noreferrer">
           어떻게 보이는지 확인하기
         </a>
@@ -50,13 +42,12 @@ export function TherapistLinkPanel() {
         disabled={issue.isPending}
         className="inline-flex min-h-[48px] items-center pt-1 text-small text-ink-soft underline"
         onClick={() => {
-          setCopied(false);
           issue.mutate();
         }}
       >
         {issue.isPending ? '만드는 중입니다…' : '새 주소 만들기'}
       </button>
-      {issue.isError ? <Notice>링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
+      {issue.isError ? <Notice role="alert">링크를 만들지 못했습니다. 잠시 후 다시 눌러주세요.</Notice> : null}
     </div>
   );
 }

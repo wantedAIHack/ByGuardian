@@ -1,31 +1,28 @@
-import { Link } from 'react-router';
+import { ScrollRegion } from '../ui/ScrollRegion';
+import { ObservationValue } from '../ui/ObservationValue';
+import { PageHeader } from '../ui/PageHeader';
+import { AsyncState } from '../ui/AsyncState';
 import { useTrajectory } from '../lib/queries';
 import { Collapse } from '../ui/Collapse';
 import { Notice } from '../ui/Notice';
 import type { AxisSeries } from '../lib/types';
 
-function Series({ axes }: { axes: AxisSeries[] }) {
+function Series({ label, axes }: { label: string; axes: AxisSeries[] }) {
   return (
     <div className="flex flex-col gap-5">
       {axes.map((a) => (
         <div key={a.axis}>
           <p className="text-small text-ink-soft">{a.axisLabel}</p>
-          <div className="scroll-hint overflow-x-auto">
+          <ScrollRegion label={`${label} ${a.axisLabel} 주차별 기록`}>
             <div className="flex min-w-max gap-5 pt-2">
               {a.values.map((p) => (
                 <div key={p.week} className="min-w-[92px]">
                   <p className="text-small text-ink-faint">{p.week}주</p>
-                  {/* CARRIED는 '달라진 것 없음'으로 이어진 주다. 옅게 두되 숨기지 않는다. */}
-                  <p
-                    data-carried={p.source === 'CARRIED' ? 'true' : 'false'}
-                    className={p.source === 'CARRIED' ? 'text-ink-faint' : ''}
-                  >
-                    {p.label}
-                  </p>
+                  <ObservationValue point={p} />
                 </div>
               ))}
             </div>
-          </div>
+          </ScrollRegion>
         </div>
       ))}
     </div>
@@ -33,32 +30,28 @@ function Series({ axes }: { axes: AxisSeries[] }) {
 }
 
 export function Trajectory() {
-  const { data, isPending } = useTrajectory();
+  const query = useTrajectory();
+  const { data, isPending } = query;
 
   return (
-    <main className="mx-auto max-w-lg px-gutter py-10">
-      <Link
-        className="inline-flex min-h-[48px] items-center text-small text-ink-soft underline"
-        to="/"
-      >
-        ← 홈
-      </Link>
-      <h1 className="pt-6 text-title font-semibold">전체 기록</h1>
-      <Notice>옅은 값은 &lsquo;달라진 것 없음&rsquo;으로 이어진 주입니다</Notice>
+    <main className="app-page">
+      <PageHeader title="전체 기록" backTo="/" focusKey="trajectory" />
+      <Notice>지난 값 유지: 달라진 것 없음으로 이어간 기록</Notice>
 
-      {isPending ? <p className="pt-8">불러오는 중입니다…</p> : null}
+      {isPending ? <AsyncState kind="loading" message="불러오는 중입니다…" /> : null}
+      {query.isError ? <AsyncState kind="error" message="전체 기록을 불러오지 못했습니다." onRetry={() => { void query.refetch(); }} /> : null}
 
       <div className="flex flex-col gap-10 pt-10">
         {(data ?? []).map((t) =>
           t.changed ? (
-            <section key={t.code}>
+            <section key={t.code} className="note-surface min-w-0">
               <h2 className="pb-3 font-semibold">{t.label}</h2>
-              <Series axes={t.axes} />
+              <Series label={t.label} axes={t.axes} />
             </section>
           ) : (
-            <section key={t.code}>
+            <section key={t.code} className="note-surface min-w-0">
               <Collapse label={`${t.label} — 바뀐 것 없음`}>
-                <Series axes={t.axes} />
+                <Series label={t.label} axes={t.axes} />
               </Collapse>
             </section>
           ),

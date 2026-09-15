@@ -1,12 +1,16 @@
+import { ScrollRegion } from '../ui/ScrollRegion';
+import { ObservationValue } from '../ui/ObservationValue';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { AsyncState } from '../ui/AsyncState';
+import { PageHeader } from '../ui/PageHeader';
 import { ApiError, api } from '../lib/api';
 import { captureTherapistToken, clearTherapistToken } from '../lib/therapistToken';
 import type { TherapistSummary } from '../lib/types';
 
 export function Therapist() {
   const [token] = useState(captureTherapistToken);
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['therapist', token],
     queryFn: async () => {
       try {
@@ -20,7 +24,10 @@ export function Therapist() {
     retry: false,
   });
 
-  if (token !== null && isPending) return <main className="p-8"><p>불러오는 중입니다…</p></main>;
+  if (token !== null && isPending) return <main className="app-page">
+    <PageHeader title="가정 관찰 기록" />
+    <AsyncState kind="loading" message="불러오는 중입니다…" />
+  </main>;
   if (token === null || isError || !data) {
     // 404(링크가 실제로 폐기됨)와 그 밖의 실패(네트워크 끊김 등 일시적 통신 장애)는 다른
     // 이야기다. 전자만 "새 주소를 받아주세요"가 맞다 — 후자에 같은 말을 하면, 한 번의
@@ -30,12 +37,12 @@ export function Therapist() {
     // 어조) — 링크의 생사에 대해서는 아무 말도 하지 않는다.
     const isDead = token === null || (error instanceof ApiError && error.status === 404);
     return (
-      <main className="p-8">
-        {isDead ? (
-          <p>이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.</p>
-        ) : (
-          <p>연결이 되지 않습니다. 잠시 후 다시 열어주세요.</p>
-        )}
+      <main className="app-page">
+        <PageHeader title="가정 관찰 기록" focusKey={isDead ? 'invalid-link' : 'connection-error'} />
+        <AsyncState kind="error" message={isDead
+          ? '이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.'
+          : '연결이 되지 않습니다. 잠시 후 다시 열어주세요.'}
+          onRetry={isDead ? undefined : () => { void refetch(); }} />
       </main>
     );
   }
@@ -44,44 +51,42 @@ export function Therapist() {
   const unchanged = data.items.filter((i) => !i.changed);
 
   return (
-    <main className="mx-auto max-w-4xl p-8 text-[15px] leading-relaxed">
-      <header className="border-b border-line pb-4">
-        <h1 className="text-[22px] font-semibold">가정 관찰 기록</h1>
+    <main className="therapist-page mx-auto max-w-6xl p-gutter text-body leading-relaxed">
+      <header className="note-surface mb-8 border-t-4 border-t-accent">
+        <h1 className="text-title font-semibold">가정 관찰 기록</h1>
         <p className="text-ink-soft">
           {data.weeks[0]}주차 ~ {data.weeks[data.weeks.length - 1]}주차 · {data.generatedAt.slice(0, 10)} 생성
         </p>
       </header>
 
-      <section className="pt-8">
+      <section className="note-surface mt-6 min-w-0">
         <h2 className="font-semibold">주차별 관찰</h2>
-        <div className="scroll-hint overflow-x-auto pt-3">
+        <ScrollRegion label="주차별 관찰 표">
           <table className="sticky-col min-w-max border-collapse">
             <thead>
               <tr>
-                <th className="border-b border-line px-3 py-2 text-left">항목</th>
+                <th scope="col" className="border-b border-line px-3 py-2 text-left">항목</th>
                 {data.weeks.map((w) => (
-                  <th key={w} className="border-b border-line px-3 py-2 text-left">{w}주</th>
+                  <th scope="col" key={w} className="border-b border-line px-3 py-2 text-left">{w}주</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {changed.map((item) =>
-                item.axes.map((a, ai) => (
+                item.axes.map((a) => (
                   <tr key={`${item.code}-${a.axis}`}>
-                    <td className="border-b border-line px-3 py-2">
-                      {ai === 0 ? <span className="font-semibold">{item.label}</span> : null}
-                      <span className={ai === 0 ? 'text-ink-soft' : ''}>
-                        {ai === 0 ? ' · ' : ''}{a.axisLabel}
-                      </span>
-                    </td>
+                    <th scope="row" className="border-b border-line px-3 py-4 text-left font-normal align-top">
+                      <span className="block font-semibold">{item.label}</span>
+                      <span className="text-small text-ink-soft">{a.axisLabel}</span>
+                    </th>
                     {data.weeks.map((w) => {
                       const p = a.values.find((v) => v.week === w);
                       return (
                         <td
                           key={w}
-                          className={`border-b border-line px-3 py-2 ${p?.source === 'CARRIED' ? 'text-ink-faint' : ''}`}
+                          className="border-b border-line px-3 py-4 align-top"
                         >
-                          {p?.label ?? '·'}
+                          <ObservationValue point={p} />
                         </td>
                       );
                     })}
@@ -98,12 +103,12 @@ export function Therapist() {
               ) : null}
             </tbody>
           </table>
-        </div>
-        <p className="pt-2 text-ink-faint">옅은 값은 보호자가 &lsquo;달라진 것 없음&rsquo;으로 이어간 주입니다.</p>
+        </ScrollRegion>
+        <p className="pt-4 text-small text-ink-soft">지난 값 유지: 달라진 것 없음으로 이어간 기록</p>
       </section>
 
       {data.signalsEnabled ? (
-        <section className="pt-8">
+        <section className="note-surface mt-6 min-w-0">
           <h2 className="font-semibold">비언어 신호</h2>
           <ul className="pt-3">
             {data.signals.length === 0 ? (
@@ -123,9 +128,9 @@ export function Therapist() {
       ) : null}
 
       {data.sleep.length > 0 ? (
-        <section className="pt-8">
+        <section className="note-surface mt-6 min-w-0">
           <h2 className="font-semibold">야간 수면</h2>
-          <div className="scroll-hint overflow-x-auto pt-3">
+          <ScrollRegion label="야간 수면 주차별 기록">
             <div className="flex min-w-max gap-6">
               {data.sleep.map((s) => (
                 <div key={s.week}>
@@ -134,12 +139,12 @@ export function Therapist() {
                 </div>
               ))}
             </div>
-          </div>
+          </ScrollRegion>
         </section>
       ) : null}
 
       {data.freeNotes.length > 0 ? (
-        <section className="pt-8">
+        <section className="note-surface print-flow mt-6 min-w-0">
           <h2 className="font-semibold">보호자 기록 (원문)</h2>
           <ul className="flex flex-col gap-3 pt-3">
             {data.freeNotes.map((n) => (
@@ -156,7 +161,7 @@ export function Therapist() {
       ) : null}
 
       {data.questions.length + data.extraQuestions.length > 0 ? (
-        <section className="pt-8">
+        <section className="note-surface mt-6 min-w-0">
           <h2 className="font-semibold">보호자가 여쭤보고 싶은 것</h2>
           <ul className="list-disc pt-3 pl-5">
             {data.questions.map((q) => <li key={q}>{q}</li>)}
@@ -165,7 +170,7 @@ export function Therapist() {
         </section>
       ) : null}
 
-      <section className="pt-8">
+      <section className="note-surface mt-6 min-w-0">
         <h2 className="font-semibold">기록 밀도</h2>
         <p className="pt-2">
           {data.density.totalWeeks}주 중 {data.density.recordedWeeks}주 기록

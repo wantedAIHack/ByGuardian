@@ -13,6 +13,7 @@ import { Button } from '../ui/Button';
 import { Choice } from '../ui/Choice';
 import { Notice } from '../ui/Notice';
 import { Screen } from '../ui/Screen';
+import { AsyncState } from '../ui/AsyncState';
 
 export function Record({ catalog }: { catalog: Catalog }) {
   const navigate = useNavigate();
@@ -90,11 +91,13 @@ export function Record({ catalog }: { catalog: Catalog }) {
     }
   }, [step?.kind, hintAlreadySeen]);
 
-  if (!me) return <Screen><p>불러오는 중입니다…</p></Screen>;
+  if (!me) return <Screen><AsyncState kind={meQ.isError ? 'error' : 'loading'}
+    message={meQ.isError ? '기록 정보를 불러오지 못했습니다.' : '불러오는 중입니다…'}
+    onRetry={meQ.isError ? () => { void meQ.refetch(); } : undefined} /></Screen>;
   if (saved) {
     return (
-      <Screen footer={<Button onClick={() => navigate('/', { replace: true })}>홈으로</Button>}>
-        <p className="text-title font-semibold">기록을 남겼습니다.</p>
+      <Screen stageLabel="기록 완료" focusKey="saved" footer={<Button onClick={() => navigate('/', { replace: true })}>홈으로</Button>}>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">기록을 남겼습니다.</h1>
       </Screen>
     );
   }
@@ -132,7 +135,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   if (weekMismatch) {
     return (
       <Screen>
-        <h2 className="text-title font-semibold">날짜가 바뀌었습니다</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">날짜가 바뀌었습니다</h1>
         <p className="pt-4">{weekMismatch}</p>
         <p className="pt-4">방금 적으신 내용은 어느 주의 것인가요?</p>
         <div className="flex flex-col gap-3 pt-8">
@@ -171,7 +174,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
     );
   }
 
-  const common = { step: s.index + 1, total: flow.length, onBack: s.index > 0 ? () => go(-1) : undefined };
+  const common = { stageLabel: '이번 주 관찰', focusKey: s.index, step: s.index + 1, total: flow.length, onBack: s.index > 0 ? () => go(-1) : undefined };
   const nextOrSave = (enabled: boolean) =>
     isLast
       ? <Button disabled={!enabled || save.isPending} onClick={submit}>
@@ -181,7 +184,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
 
   const footer = (enabled: boolean) => (
     <div className="flex flex-col gap-3">
-      {error ? <p>{error}</p> : null}
+      {error ? <p role="alert">{error}</p> : null}
       {nextOrSave(enabled)}
     </div>
   );
@@ -189,7 +192,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   if (step.kind === 'ask') {
     return (
       <Screen {...common}>
-        <h2 className="text-title font-semibold">지난주와 달라진 게 있나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">지난주와 달라진 게 있나요?</h1>
         <div className="flex flex-col gap-4 pt-10">
           <Button onClick={() => setS((p) => ({ ...p, noChange: false, index: p.index + 1 }))}>
             네, 달라진 게 있어요
@@ -209,9 +212,9 @@ export function Record({ catalog }: { catalog: Catalog }) {
     return (
       <Screen {...common} footer={<Button onClick={() => go(1)}>시작</Button>}>
         {/* 개수를 상수로 박지 않는다. README §11이 8항목을 5개로 줄이는 것을 검토 중이다. */}
-        <h2 className="text-title font-semibold">
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">
           이번 주는 {catalog.items.length}가지를 모두 여쭤봅니다
-        </h2>
+        </h1>
         <p className="pt-4 text-ink-soft">
           네 주에 한 번, 놓친 것이 없는지 처음부터 확인합니다. 지난번 답도 함께 보여드립니다.
         </p>
@@ -222,7 +225,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   if (step.kind === 'pick') {
     return (
       <Screen {...common} footer={footer(s.selected.length > 0)}>
-        <h2 className="text-title font-semibold">어떤 것이 달라졌나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">어떤 것이 달라졌나요?</h1>
         <Notice>여러 개를 고르셔도 됩니다.</Notice>
         <div className="flex flex-col gap-3 pt-6">
           {catalog.items.map((item) => (
@@ -256,7 +259,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
 
     return (
       <Screen {...common} footer={footer(itemComplete(me, catalog, s, code))}>
-        <h2 className="text-title font-semibold">{item.label}</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">{item.label}</h1>
         <p className="pt-4 text-ink-soft">요즘 어떠신가요?</p>
 
         {axes.map((axis) => {
@@ -266,7 +269,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
           return (
             <div key={axis} className="pt-8">
               {axis === 'LEVEL' ? null : (
-                <h3 className="font-semibold">{axisQuestion(catalog, axis)}</h3>
+                <h2 className="font-semibold">{axisQuestion(catalog, axis)}</h2>
               )}
               {prev ? <Notice>지난번에는 {prev.label}</Notice> : null}
               <div className="flex flex-col gap-3 pt-3">
@@ -291,7 +294,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
         <label className="block pt-8">
           <span className="text-small text-ink-soft">한 줄 적어두실 것이 있나요? (안 적으셔도 됩니다)</span>
           <input
-            className="mt-2 min-h-[56px] w-full rounded-lg border border-line px-4"
+            className="mt-2 min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
             value={v.note ?? ''}
             onChange={(e) => set({ items: { ...s.items, [code]: { ...v, note: e.target.value } } })}
           />
@@ -313,7 +316,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
 
     return (
       <Screen {...common} footer={footer(true)}>
-        <h2 className="text-title font-semibold">이번 주에 불편해 보이신 적이 있나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">이번 주에 불편해 보이신 적이 있나요?</h1>
         <Notice>말씀으로 표현이 어려우실 때, 표정이나 몸짓에서 보이는 것들입니다.</Notice>
         <div className="pt-6">
           <Button
@@ -326,7 +329,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
         <div className="pt-10">
           {catalog.signalActions.map((a) => (
             <div key={a.code} className="pt-6">
-              <h3 className="font-semibold">{a.label}</h3>
+              <h2 className="font-semibold">{a.label}</h2>
               <div className="flex flex-col gap-3 pt-3">
                 {catalog.signalKinds.map((k) => (
                   <Choice
@@ -347,7 +350,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   if (step.kind === 'sleep') {
     return (
       <Screen {...common} footer={footer(s.sleep !== null)}>
-        <h2 className="text-title font-semibold">밤에 어떻게 주무셨나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">밤에 어떻게 주무셨나요?</h1>
         <Notice>이번 주 대체로 어떠셨는지로 골라주세요.</Notice>
         <div className="flex flex-col gap-3 pt-6">
           {catalog.sleepLevels.map((l) => (
@@ -365,12 +368,12 @@ export function Record({ catalog }: { catalog: Catalog }) {
 
   return (
     <Screen {...common} footer={footer(true)}>
-      <h2 className="text-title font-semibold">그 밖에 남기고 싶으신 것</h2>
+      <h1 data-step-title tabIndex={-1} className="text-title font-semibold">그 밖에 남기고 싶으신 것</h1>
       <label className="block pt-6">
         <span className="text-small text-ink-soft">말씀하시듯 편하게 적어주세요</span>
         <textarea
           rows={6}
-          className="mt-2 w-full rounded-lg border border-line p-4"
+          className="mt-2 w-full rounded-lg border border-control bg-paper p-4"
           value={s.freeNote.text}
           onChange={(e) => set({ freeNote: { ...s.freeNote, text: e.target.value } })}
         />
@@ -380,7 +383,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
         <Notice>키보드의 마이크를 누르면 말로 적을 수 있어요.</Notice>
       )}
       <div className="pt-8">
-        <h3 className="font-semibold">주로 언제였나요? (안 고르셔도 됩니다)</h3>
+        <h2 className="font-semibold">주로 언제였나요? (안 고르셔도 됩니다)</h2>
         <div className="flex flex-col gap-3 pt-3">
           {catalog.timeTags.map((t) => (
             <Choice

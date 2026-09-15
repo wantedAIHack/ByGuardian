@@ -2,6 +2,9 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from './api';
 import type { Catalog, CodeLabel } from './types';
+import { APP_NAME } from './constants';
+import { AsyncState } from '../ui/AsyncState';
+import { PageHeader } from '../ui/PageHeader';
 
 // --- 순수 조회 함수. React 없이 테스트한다 ---
 
@@ -42,19 +45,23 @@ const Ctx = createContext<Catalog | null>(null);
 
 /** 앱 시작 시 한 번 받고 오래 캐시한다. 카탈로그는 배포 사이에 바뀌지 않는다. */
 export function CatalogProvider({ children }: { children: ReactNode }) {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, refetch } = useQuery({
     queryKey: ['catalog'],
     queryFn: () => api.get<Catalog>('/catalog'),
     staleTime: Infinity,
     gcTime: Infinity,
   });
 
-  if (isPending) return <p className="p-gutter text-ink-soft">불러오는 중입니다…</p>;
-  if (isError || !data) {
+  if (isPending || isError || !data) {
     return (
-      <div className="p-gutter">
-        <p>연결이 되지 않습니다. 잠시 후 다시 열어주세요.</p>
-      </div>
+      <main className="mx-auto min-h-full max-w-lg px-gutter py-8">
+        <PageHeader title={APP_NAME} />
+        <AsyncState
+          kind={isPending ? 'loading' : 'error'}
+          message={isPending ? '불러오는 중입니다…' : '연결이 되지 않습니다. 잠시 후 다시 시도해 주세요.'}
+          onRetry={() => { void refetch(); }}
+        />
+      </main>
     );
   }
   return <Ctx.Provider value={data}>{children}</Ctx.Provider>;
