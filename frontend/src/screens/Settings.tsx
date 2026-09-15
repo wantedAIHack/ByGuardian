@@ -42,6 +42,7 @@ export function Settings() {
             aria-label="다음 진료일"
             className="min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
             value={dateValue}
+            disabled={updateVisit.isPending}
             onChange={(e) => { setVisitDate(e.target.value); updateVisit.reset(); }}
           />
         </label>
@@ -133,9 +134,6 @@ export function Settings() {
           </div>
         )}
       </section>
-
-
-
       <section className="note-surface">
         <h2 className="font-semibold">주간 알림</h2>
         <p className="pt-3">쓰시는 달력에 매주 반복 일정을 넣어드립니다.</p>

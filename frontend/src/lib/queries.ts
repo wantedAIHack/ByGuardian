@@ -49,7 +49,10 @@ export function useSaveExtra() {
     // API 전체에서 유일하게 객체가 아니라 배열을 돌려준다
     mutationFn: (questions: string[]) =>
       api.put<string[]>('/me/prep-card/extra', { questions }),
-    onSuccess: () => {
+    onSuccess: (extraQuestions) => {
+      // 재조회가 느리거나 실패해도 이미 저장한 질문을 옛 캐시로 되돌리지 않는다.
+      qc.setQueryData<PrepCard>(QK.prepCard, (previous) =>
+        previous ? { ...previous, extraQuestions } : previous);
       void qc.invalidateQueries({ queryKey: QK.prepCard });
     },
   });

@@ -2,13 +2,15 @@ import { ScrollRegion } from '../ui/ScrollRegion';
 import { ObservationValue } from '../ui/ObservationValue';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { AsyncState } from '../ui/AsyncState';
+import { PageHeader } from '../ui/PageHeader';
 import { ApiError, api } from '../lib/api';
 import { captureTherapistToken, clearTherapistToken } from '../lib/therapistToken';
 import type { TherapistSummary } from '../lib/types';
 
 export function Therapist() {
   const [token] = useState(captureTherapistToken);
-  const { data, isPending, isError, error } = useQuery({
+  const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['therapist', token],
     queryFn: async () => {
       try {
@@ -22,7 +24,10 @@ export function Therapist() {
     retry: false,
   });
 
-  if (token !== null && isPending) return <main className="p-8"><p>불러오는 중입니다…</p></main>;
+  if (token !== null && isPending) return <main className="app-page">
+    <PageHeader title="가정 관찰 기록" />
+    <AsyncState kind="loading" message="불러오는 중입니다…" />
+  </main>;
   if (token === null || isError || !data) {
     // 404(링크가 실제로 폐기됨)와 그 밖의 실패(네트워크 끊김 등 일시적 통신 장애)는 다른
     // 이야기다. 전자만 "새 주소를 받아주세요"가 맞다 — 후자에 같은 말을 하면, 한 번의
@@ -32,12 +37,12 @@ export function Therapist() {
     // 어조) — 링크의 생사에 대해서는 아무 말도 하지 않는다.
     const isDead = token === null || (error instanceof ApiError && error.status === 404);
     return (
-      <main className="p-8">
-        {isDead ? (
-          <p>이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.</p>
-        ) : (
-          <p>연결이 되지 않습니다. 잠시 후 다시 열어주세요.</p>
-        )}
+      <main className="app-page">
+        <PageHeader title="가정 관찰 기록" focusKey={isDead ? 'invalid-link' : 'connection-error'} />
+        <AsyncState kind="error" message={isDead
+          ? '이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.'
+          : '연결이 되지 않습니다. 잠시 후 다시 열어주세요.'}
+          onRetry={isDead ? undefined : () => { void refetch(); }} />
       </main>
     );
   }

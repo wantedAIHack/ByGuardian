@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -28,6 +28,26 @@ function renderIt() {
 }
 
 describe('설정', () => {
+  it('진료일을 저장하는 동안 다른 날짜가 중복 제출되지 않는다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let calls = 0;
+    server.use(http.patch(`${BASE}/me`, async () => {
+      calls++;
+      await gate;
+      return HttpResponse.json(me({ nextVisitDate: '2026-09-20' }));
+    }));
+    renderIt();
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText('다음 진료일');
+    await user.click(screen.getByRole('button', { name: '진료일 저장' }));
+    await waitFor(() => expect(calls).toBe(1));
+    expect(input).toBeDisabled();
+    expect(screen.getByRole('button', { name: '저장하는 중입니다…' })).toBeDisabled();
+    release();
+    expect(await screen.findByRole('status')).toHaveTextContent('진료일을 저장했습니다.');
+    expect(input).toBeEnabled();
+  });
   it('수정 없이 저장해도 기존 진료일을 지우지 않는다', async () => {
     let sent: unknown;
     server.use(http.patch(`${BASE}/me`, async ({ request }) => {

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -112,6 +113,14 @@ function renderIt(data: TherapistSummary | null = summary, status = 200) {
 }
 
 describe('치료사용 요약', () => {
+  it('일시적인 연결 실패는 안내 후 같은 주소로 다시 시도한다', async () => {
+    renderIt(null, 503);
+    expect(await screen.findByRole('alert')).toHaveTextContent('연결이 되지 않습니다.');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('가정 관찰 기록');
+    server.use(http.get(`${BASE}/t/${TOKEN}`, () => HttpResponse.json(summary)));
+    await userEvent.setup().click(screen.getByRole('button', { name: '다시 시도하기' }));
+    expect(await screen.findByText('화장실 이용')).toBeInTheDocument();
+  });
   it('API 응답 전에 fragment를 지우고 캡처한 UUID로 요청한다', async () => {
     let requestedPath: string | null = null;
     let locationAtRequest: string | null = null;
@@ -300,7 +309,7 @@ describe('치료사용 요약', () => {
       </QueryClientProvider>,
     );
     const main = await screen.findByRole('main');
-    expect(main.textContent).toBe('불러오는 중입니다…');
+    expect(main.textContent).toBe('가정 관찰 기록불러오는 중입니다…');
   });
 
   it('판정 문구를 만들지 않는다 — 링크가 죽은 상태', async () => {
@@ -308,7 +317,7 @@ describe('치료사용 요약', () => {
     const main = await screen.findByRole('main');
     await screen.findByText(/이 주소는 더 이상 열리지 않습니다/);
     expect(main.textContent).toBe(
-      '이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.',
+      '가정 관찰 기록이 주소는 더 이상 열리지 않습니다. 보호자분께 새 주소를 받아주세요.',
     );
   });
 
@@ -327,7 +336,7 @@ describe('치료사용 요약', () => {
     await screen.findByText('연결이 되지 않습니다. 잠시 후 다시 열어주세요.');
     // 404 상태와 다른 문구여야 한다 — 이 화이트리스트가 걸리면 둘이 같은 문구를 쓰기
     // 시작했다는 뜻이다.
-    expect(main.textContent).toBe('연결이 되지 않습니다. 잠시 후 다시 열어주세요.');
+    expect(main.textContent).toBe('가정 관찰 기록연결이 되지 않습니다. 잠시 후 다시 열어주세요.다시 시도하기');
   });
 
   it('판정 문구를 만들지 않는다 — 채워진 상태', async () => {

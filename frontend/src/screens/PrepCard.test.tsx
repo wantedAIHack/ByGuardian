@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -79,6 +79,51 @@ function renderIt(card: Card) {
 }
 
 describe('진료 준비 카드', () => {
+  it('저장 성공 뒤 재조회가 실패해도 방금 저장한 질문을 유지한다', async () => {
+    renderIt(full);
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
+    await user.clear(input);
+    await user.type(input, '새 질문');
+    server.use(
+      http.put(`${BASE}/me/prep-card/extra`, () => HttpResponse.json(['새 질문'])),
+      http.get(`${BASE}/me/prep-card`, () => new HttpResponse(null, { status: 503 })),
+    );
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
+    expect(input).toHaveValue('새 질문');
+  });
+  it('저장 응답이 늦어도 그동안 새로 쓴 질문은 덮어쓰지 않는다', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let questions = full.extraQuestions;
+    server.use(http.put(`${BASE}/me/prep-card/extra`, async ({ request }) => {
+      questions = (await request.json() as { questions: string[] }).questions;
+      await gate;
+      return HttpResponse.json(questions);
+    }));
+    renderIt(full);
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
+    await user.clear(input);
+    await user.type(input, '첫 질문');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await user.clear(input);
+    await user.type(input, '저장 중 새로 쓴 질문');
+    let reads = 0;
+    server.use(http.get(`${BASE}/me/prep-card`, () => {
+      reads++;
+      return HttpResponse.json({ ...full, extraQuestions: questions });
+    }));
+    release();
+    await waitFor(() => expect(reads).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toBeEnabled());
+    expect(input).toHaveValue('저장 중 새로 쓴 질문');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
+    expect(questions).toEqual(['저장 중 새로 쓴 질문']);
+  });
   it('질문 안에서 해당 근거를 펼친다', async () => {
     renderIt(full);
     const article = await screen.findByRole('article', { name: full.questions[0]!.sentence });

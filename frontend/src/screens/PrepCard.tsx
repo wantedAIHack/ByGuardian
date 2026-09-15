@@ -1,6 +1,6 @@
 import { ScrollRegion } from '../ui/ScrollRegion';
 import { ObservationValue } from '../ui/ObservationValue';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '../ui/PageHeader';
 import { AsyncState } from '../ui/AsyncState';
 import { formatDate } from '../lib/format';
@@ -19,6 +19,7 @@ export function PrepCard() {
   const saveExtra = useSaveExtra();
   const [extra, setExtra] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+  const editVersion = useRef(0);
 
   useEffect(() => {
     if (data && !dirty) setExtra(data.extraQuestions);
@@ -29,6 +30,7 @@ export function PrepCard() {
       onRetry={query.isError ? () => { void query.refetch(); } : undefined} /></main>;
 
   const edit = (i: number, v: string) => {
+    editVersion.current++;
     setDirty(true);
     setExtra((prev) => prev.map((x, j) => (j === i ? v.slice(0, MAX_LEN) : x)));
   };
@@ -106,7 +108,7 @@ export function PrepCard() {
           {extra.length < MAX_EXTRA ? (
             <Button
               variant="plain"
-              onClick={() => { setDirty(true); setExtra((p) => [...p, '']); }}
+              onClick={() => { editVersion.current++; setDirty(true); setExtra((p) => [...p, '']); }}
             >
               + 추가
             </Button>
@@ -116,12 +118,15 @@ export function PrepCard() {
           {dirty ? (
             <Button
               disabled={saveExtra.isPending}
-              onClick={() =>
+              onClick={() => {
+                const submittedVersion = editVersion.current;
                 saveExtra.mutate(
                   extra.map((x) => x.trim()).filter((x) => x.length > 0),
-                  { onSuccess: () => setDirty(false) },
-                )
-              }
+                  { onSuccess: () => {
+                    if (submittedVersion === editVersion.current) setDirty(false);
+                  } },
+                );
+              }}
             >
               {saveExtra.isPending ? '저장하는 중입니다…' : '저장'}
             </Button>
