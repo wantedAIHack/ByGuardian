@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { PageHeader } from '../ui/PageHeader';
+import { AsyncState } from '../ui/AsyncState';
 import { formatDate } from '../lib/format';
 import { usePrepCard, useSaveExtra } from '../lib/queries';
 import { Button } from '../ui/Button';
@@ -11,7 +12,8 @@ const MAX_EXTRA = 5;
 const MAX_LEN = 200;
 
 export function PrepCard() {
-  const { data, isPending } = usePrepCard();
+  const query = usePrepCard();
+  const { data } = query;
   const saveExtra = useSaveExtra();
   const [extra, setExtra] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -20,9 +22,9 @@ export function PrepCard() {
     if (data && !dirty) setExtra(data.extraQuestions);
   }, [data, dirty]);
 
-  if (isPending || !data) {
-    return <main className="mx-auto max-w-lg px-gutter py-10"><p>불러오는 중입니다…</p></main>;
-  }
+  if (!data) return <main className="app-page"><PageHeader title="진료 준비" backTo="/" />
+    <AsyncState kind={query.isError ? 'error' : 'loading'} message={query.isError ? '진료 질문을 불러오지 못했습니다.' : '불러오는 중입니다…'}
+      onRetry={query.isError ? () => { void query.refetch(); } : undefined} /></main>;
 
   const edit = (i: number, v: string) => {
     setDirty(true);
@@ -30,16 +32,8 @@ export function PrepCard() {
   };
 
   return (
-    <main className="mx-auto max-w-lg px-gutter py-10">
-      <Link
-        className="inline-flex min-h-[48px] items-center text-small text-ink-soft underline"
-        to="/"
-      >
-        ← 홈
-      </Link>
-      <h1 className="pt-6 text-title font-semibold">
-        {data.nextVisitDate ? `${formatDate(data.nextVisitDate)} 진료` : '진료 준비'}
-      </h1>
+    <main className="app-page space-y-8">
+      <PageHeader backTo="/" title={data.nextVisitDate ? `${formatDate(data.nextVisitDate)} 진료` : '진료 준비'} focusKey="prep" />
 
       {/* 질문은 최대 3개이고 0개일 수 있다. 빈 칸을 만들지 않는다.
           질문과 그 '근거 보기' 사이 간격이 질문끼리의 간격과 거의 같아서 근거가
@@ -48,14 +42,16 @@ export function PrepCard() {
       {data.questions.length === 0 ? (
         data.emptyMessage ? <p className="pt-8">{data.emptyMessage}</p> : null
       ) : (
-        <ol className="mt-8 divide-y divide-line border-t border-line">
+        <ol className="space-y-5">
           {data.questions.map((q) => (
-            <li key={q.rank} className="py-5">
+            <li key={q.rank} className="min-w-0">
               {/* rank 접두사를 별도 노드로 둔다: q.sentence가 p 자신의 유일한 텍스트 노드로
                   남아야 '서버 문장을 그대로 낸다'가 정확히 그 문장만으로 검증된다. */}
-              <p className="font-semibold"><span>{q.rank}. </span>{q.sentence}</p>
+              <article className="note-surface" aria-labelledby={`question-${q.rank}`}>
+              <p className="mb-2 text-small text-ink-soft">질문 {q.rank}</p>
+              <h2 id={`question-${q.rank}`} className="text-[22px] font-semibold leading-snug">{q.sentence}</h2>
               <div className="pt-1">
-                <Collapse label="근거 보기">
+                <Collapse label="이 질문의 관찰 근거">
                   <div className="flex flex-col gap-4">
                     {q.evidence.items.map((it) => (
                       <div key={`${it.code}-${it.axis}`}>
@@ -83,12 +79,13 @@ export function PrepCard() {
                   </div>
                 </Collapse>
               </div>
+              </article>
             </li>
           ))}
         </ol>
       )}
 
-      <section className="pt-14">
+      <section className="note-surface">
         <h2 className="font-semibold">내가 더 여쭤보고 싶은 것</h2>
         <div className="flex flex-col gap-3 pt-4">
           {extra.map((q, i) => (
@@ -97,7 +94,7 @@ export function PrepCard() {
               <span className="sr-only">여쭤보고 싶은 것 {i + 1}</span>
               <input
                 aria-label={`여쭤보고 싶은 것 ${i + 1}`}
-                className="min-h-[56px] w-full rounded-lg border border-line px-4"
+                className="min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
                 value={q}
                 maxLength={MAX_LEN}
                 onChange={(e) => edit(i, e.target.value)}
@@ -130,10 +127,12 @@ export function PrepCard() {
             </Button>
           ) : null}
         </div>
+        {saveExtra.isError ? <Notice role="alert">질문을 저장하지 못했습니다. 입력한 내용은 그대로 있습니다. 다시 저장해 주세요.</Notice> : null}
+        {saveExtra.isSuccess && !dirty ? <Notice role="status">질문을 저장했습니다.</Notice> : null}
       </section>
 
       {data.therapistGlance.length > 0 ? (
-        <section className="pt-14">
+        <section className="note-surface">
           <h2 className="font-semibold">진료실에서 보여드릴 요약</h2>
           <ul className="flex flex-col gap-2 pt-3">
             {data.therapistGlance.map((g) => (

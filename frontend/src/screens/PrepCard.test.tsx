@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -79,6 +79,31 @@ function renderIt(card: Card) {
 }
 
 describe('진료 준비 카드', () => {
+  it('질문 안에서 해당 근거를 펼친다', async () => {
+    renderIt(full);
+    const article = await screen.findByRole('article', { name: full.questions[0]!.sentence });
+    await userEvent.setup().click(within(article).getByRole('button', { name: '이 질문의 관찰 근거' }));
+    expect(within(article).getByText('손 잡아드림')).toBeInTheDocument();
+  });
+
+  it('저장 실패 후 입력을 보존하고 재시도 성공을 알린다', async () => {
+    renderIt(full);
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
+    await user.clear(input);
+    await user.type(input, '걸을 때 어떤 도움을 드릴까요?');
+    server.use(http.put(`${BASE}/me/prep-card/extra`, () => new HttpResponse(null, { status: 503 })));
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('입력한 내용은 그대로 있습니다.');
+    expect(input).toHaveValue('걸을 때 어떤 도움을 드릴까요?');
+    server.use(
+      http.put(`${BASE}/me/prep-card/extra`, () => HttpResponse.json(['걸을 때 어떤 도움을 드릴까요?'])),
+      http.get(`${BASE}/me/prep-card`, () => HttpResponse.json({ ...full, extraQuestions: ['걸을 때 어떤 도움을 드릴까요?'] })),
+    );
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
+    expect(input).toHaveValue('걸을 때 어떤 도움을 드릴까요?');
+  });
   it('질문 문장을 서버 그대로 낸다', async () => {
     renderIt(full);
     expect(await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?')).toBeInTheDocument();
@@ -91,14 +116,14 @@ describe('진료 준비 카드', () => {
     await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
 
     expect(screen.queryByText('손 잡아드림')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '근거 보기' }));
+    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
     expect(screen.getByText('손 잡아드림')).toBeInTheDocument();
   });
 
   it('질문이 없으면 빈 칸을 만들지 않고 서버 문구만 낸다', async () => {
     renderIt({ ...full, questions: [], emptyMessage: '이번에는 특별히 여쭤볼 것이 없습니다.' });
     expect(await screen.findByText('이번에는 특별히 여쭤볼 것이 없습니다.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '근거 보기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '이 질문의 관찰 근거' })).not.toBeInTheDocument();
   });
 
   it('추가 질문을 더하고 저장한다', async () => {
@@ -145,7 +170,7 @@ describe('진료 준비 카드', () => {
     // 실제로 찍히는 자리)를 아예 타지 않는다 — 판정 문구가 가장 위험한 자리를 비켜간다.
     // 질문이 있는 상태는 아래의 '질문이 있는 상태' 테스트가 별도로 건다.
     expect(main.textContent).toBe(
-      '← 홈진료 준비내가 더 여쭤보고 싶은 것+ 추가치료사에게 보여드리기',
+      '← 뒤로진료 준비내가 더 여쭤보고 싶은 것+ 추가치료사에게 보여드리기',
     );
   });
 
@@ -169,10 +194,10 @@ describe('진료 준비 카드', () => {
     // <input value=...>뿐이라 textContent에 안 잡힌다(입력 요소는 자식 텍스트 노드를
     // 가질 수 없다) — sr-only 라벨("여쭤보고 싶은 것 1")만 잡힌다.
     const collapsed = [
-      '← 홈',
+      '← 뒤로',
       '9월 8일 진료',
-      `${q.rank}. ${q.sentence}`,
-      '근거 보기',
+      `질문 ${q.rank}${q.sentence}`,
+      '이 질문의 관찰 근거',
       '내가 더 여쭤보고 싶은 것',
       '여쭤보고 싶은 것 1',
       '+ 추가',
@@ -184,12 +209,12 @@ describe('진료 준비 카드', () => {
 
     // 펼친 상태: 근거(값들)도 실제 렌더 경로를 탄다 — 캐어기버가 진료실에서 실제로
     // 펼쳐 보일 상태이기도 하다. Collapse는 열리면 버튼 문구가 "라벨 접기"로 바뀐다.
-    await user.click(screen.getByRole('button', { name: '근거 보기' }));
+    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
     const expanded = [
-      '← 홈',
+      '← 뒤로',
       '9월 8일 진료',
-      `${q.rank}. ${q.sentence}`,
-      '근거 보기 접기',
+      `질문 ${q.rank}${q.sentence}`,
+      '이 질문의 관찰 근거 접기',
       `${evItem.label} · ${evItem.axisLabel}`,
       `${evValue.week}주${evValue.label}`,
       '내가 더 여쭤보고 싶은 것',
@@ -208,7 +233,7 @@ describe('진료 준비 카드', () => {
     await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
 
     expect(screen.queryByText('일어설 때 · 찡그림 — 5주, 6주')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '근거 보기' }));
+    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
     expect(screen.getByText('일어설 때 · 찡그림 — 5주, 6주')).toBeInTheDocument();
   });
 });
