@@ -94,9 +94,10 @@ export function PrepCard() {
             <label key={i} className="block">
               {/* 칸마다 같은 이름이면 스크린 리더가 여러 칸을 구분하지 못한다. 순번을 붙인다. */}
               <span className="sr-only">여쭤보고 싶은 것 {i + 1}</span>
-              <input
+              <textarea
+                rows={4}
                 aria-label={`여쭤보고 싶은 것 ${i + 1}`}
-                className="min-h-[56px] w-full rounded-lg border border-control bg-paper px-4"
+                className="min-h-[112px] w-full resize-y rounded-xl border border-control bg-paper p-4 [field-sizing:content]"
                 value={q}
                 maxLength={MAX_LEN}
                 onChange={(e) => edit(i, e.target.value)}

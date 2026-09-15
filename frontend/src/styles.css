@@ -237,6 +237,9 @@ body {
   .therapist-page .note-surface { border: none; padding: 0; border-radius: 0; }
   .therapist-page [role="region"] > .flex { min-width: 0; flex-wrap: wrap; }
   section { break-inside: avoid; }
+  .print-flow { break-inside: auto; }
+  .therapist-page h2 { break-after: avoid; }
+  .therapist-page p { orphans: 3; widows: 3; }
   a[href]::after { content: none !important; }
 }
 

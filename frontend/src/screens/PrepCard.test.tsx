@@ -236,15 +236,14 @@ describe('진료 준비 카드', () => {
     //
     // 접힌 상태: data.questions.map(...) 분기가 실제로 실행된다 — 여기가 재검토가
     // 조작된 문구를 심어 통과시켰던 바로 그 자리다. extraQuestions의 실제 텍스트는
-    // <input value=...>뿐이라 textContent에 안 잡힌다(입력 요소는 자식 텍스트 노드를
-    // 가질 수 없다) — sr-only 라벨("여쭤보고 싶은 것 1")만 잡힌다.
+    // textarea의 내용과 접근성 라벨도 함께 검증한다.
     const collapsed = [
       '← 뒤로',
       '9월 8일 진료',
       `질문 ${q.rank}${q.sentence}`,
       '이 질문의 관찰 근거',
       '내가 더 여쭤보고 싶은 것',
-      '여쭤보고 싶은 것 1',
+      '여쭤보고 싶은 것 1', full.extraQuestions[0]!,
       '+ 추가',
       '진료실에서 보여드릴 요약',
       glance,
@@ -264,7 +263,7 @@ describe('진료 준비 카드', () => {
       '좌우로 밀어 주차별 기록을 볼 수 있어요',
       `${evValue.week}주${evValue.label}직접 확인`,
       '내가 더 여쭤보고 싶은 것',
-      '여쭤보고 싶은 것 1',
+      '여쭤보고 싶은 것 1', full.extraQuestions[0]!,
       '+ 추가',
       '진료실에서 보여드릴 요약',
       glance,

@@ -144,7 +144,7 @@ export function Therapist() {
       ) : null}
 
       {data.freeNotes.length > 0 ? (
-        <section className="note-surface mt-6 min-w-0">
+        <section className="note-surface print-flow mt-6 min-w-0">
           <h2 className="font-semibold">보호자 기록 (원문)</h2>
           <ul className="flex flex-col gap-3 pt-3">
             {data.freeNotes.map((n) => (
