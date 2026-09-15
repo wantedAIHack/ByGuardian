@@ -15,6 +15,7 @@ import {
   axesForStep, canAdvance, initialState, itemForStep, toOnboardingRequest, type OnboardingState,
 } from '../lib/onboarding';
 import type { Catalog, OnboardingResponse } from '../lib/types';
+import { onboardingProgress } from '../lib/flowProgress';
 import { Button } from '../ui/Button';
 import { Choice } from '../ui/Choice';
 import { Notice } from '../ui/Notice';
@@ -85,8 +86,8 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
 
   if (s.step === 0) {
     return (
-      <Screen>
-        <h1 className="text-title font-semibold">잠깐만 여쭤보겠습니다</h1>
+      <Screen stageLabel="시작 안내" focusKey={s.step}>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">잠깐만 여쭤보겠습니다</h1>
         {/* "8가지"만 말하면 실제 흐름과 다르다. 그 앞에 관계·진단·마비 방향·
             의사소통·진료일 다섯 가지를 먼저 묻고, 8항목 각각에도 조건부 하위
             질문이 붙는다. 처음 만나는 화면이 약속을 작게 말하면 중간에
@@ -106,12 +107,13 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
     );
   }
 
-  const common = { step: s.step, total: LAST_STEP, onBack: () => go(-1) };
+  const progress = onboardingProgress(s.step, Math.min(BASELINE_COUNT, catalog.items.length));
+  const common = { step: progress.current, total: progress.total, stageLabel: progress.label, focusKey: s.step, onBack: () => go(-1) };
 
   if (s.step === 1) {
     return (
       <Screen {...common} footer={nextButton}>
-        <h2 className="text-title font-semibold">어떤 분이신가요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">어떤 분이신가요?</h1>
         <div className="flex flex-col gap-3 pt-6">
           {RELATIONS.map((r) => (
             <Choice
@@ -126,7 +128,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
           <label className="block pt-4">
             <span className="text-small text-ink-soft">어떤 관계이신가요?</span>
             <input
-              className="mt-2 min-h-[56px] w-full rounded-lg border border-line px-4 text-btn"
+              className="mt-2 min-h-[56px] w-full rounded-lg border border-control bg-paper px-4 text-btn"
               value={s.relationOther}
               onChange={(e) => set({ relationOther: e.target.value })}
             />
@@ -139,7 +141,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   if (s.step === 2) {
     return (
       <Screen {...common} footer={nextButton}>
-        <h2 className="text-title font-semibold">어떤 진단을 받으셨나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">어떤 진단을 받으셨나요?</h1>
         <Notice>모르셔도 괜찮습니다. 나중에 바꿀 수 있습니다.</Notice>
         <div className="flex flex-col gap-3 pt-6">
           {DIAGNOSIS_CHOICES.map((c) => (
@@ -158,7 +160,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   if (s.step === 3) {
     return (
       <Screen {...common} footer={nextButton}>
-        <h2 className="text-title font-semibold">마비되신 쪽이 어디인가요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">마비되신 쪽이 어디인가요?</h1>
         <div className="flex flex-col gap-3 pt-6">
           {PARETIC_SIDE_CHOICES.map((c) => (
             <Choice
@@ -176,7 +178,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   if (s.step === 4) {
     return (
       <Screen {...common} footer={nextButton}>
-        <h2 className="text-title font-semibold">말씀으로 불편한 곳을 알려주시나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">말씀으로 불편한 곳을 알려주시나요?</h1>
         <div className="flex flex-col gap-3 pt-6">
           {VERBAL_DIFFICULTY_CHOICES.map((c) => (
             <Choice
@@ -204,7 +206,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
           </div>
         }
       >
-        <h2 className="text-title font-semibold">다음 진료일이 정해져 있나요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">다음 진료일이 정해져 있나요?</h1>
         <Notice>모르시면 건너뛰셔도 됩니다. 나중에 설정에서 넣으실 수 있습니다.</Notice>
         {/* 화면에는 위 h2가 질문을 말하지만, 화면 읽기 도구에는 이름 없는
             textbox로만 들렸다. 날짜 입력은 값이 비어 있을 때 placeholder도
@@ -212,7 +214,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
         <input
           type="date"
           aria-label="다음 진료일"
-          className="mt-6 min-h-[56px] w-full rounded-lg border border-line px-4 text-btn"
+          className="mt-6 min-h-[56px] w-full rounded-lg border border-control bg-paper px-4 text-btn"
           value={s.nextVisitDate ?? ''}
           onChange={(e) => set({ nextVisitDate: e.target.value || null })}
         />
@@ -223,9 +225,9 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   if (s.step === 6) {
     return (
       <Screen {...common} footer={<Button onClick={() => go(1)}>시작</Button>}>
-        <h2 className="text-title font-semibold">
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">
           지금 상태를 {catalog.items.length}가지로 한 번 여쭤보겠습니다.
-        </h2>
+        </h1>
         <p className="pt-4 text-ink-soft">
           지금 어떠신지가 기준이 됩니다. 정답이 없으니 보이시는 대로 고르시면 됩니다.
         </p>
@@ -248,7 +250,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
         {...common}
         footer={
           <div className="flex flex-col gap-3">
-            {saveError ? <p className="text-ink">{saveError}</p> : null}
+            {saveError ? <p role="alert" className="text-ink">{saveError}</p> : null}
             <Button
               disabled={!canAdvance(catalog, s) || create.isPending}
               onClick={() => {
@@ -269,7 +271,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
           </div>
         }
       >
-        <h2 className="text-title font-semibold">{item.label}</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">{item.label}</h1>
         <p className="pt-4 text-ink-soft">요즘 어떠신가요?</p>
 
         <div className="flex flex-col gap-3 pt-4">
@@ -287,7 +289,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
         {value.level !== null
           ? axes.filter((a) => a !== 'LEVEL').map((axis) => (
               <div key={axis} className="pt-8">
-                <h3 className="font-semibold">{axisQuestion(catalog, axis)}</h3>
+                <h2 className="font-semibold">{axisQuestion(catalog, axis)}</h2>
                 <div className="flex flex-col gap-3 pt-3">
                   {axisValues(catalog, axis).map((v) => (
                     <Choice
@@ -311,8 +313,8 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
 
   if (s.step === RECOVERY_STEP && recoveryCode) {
     return (
-      <Screen footer={<Button onClick={() => go(1)}>적어뒀습니다</Button>}>
-        <h2 className="text-title font-semibold">이어받기 코드</h2>
+      <Screen stageLabel="마무리" focusKey={s.step} footer={<Button onClick={() => go(1)}>적어뒀습니다</Button>}>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">이어받기 코드</h1>
         <p className="py-8 text-center text-[34px] font-bold tracking-[0.2em]">{recoveryCode}</p>
         <p>폰을 바꾸거나 앱을 지우면 이 코드로 기록을 되찾습니다.</p>
         <p className="pt-4 font-semibold">
@@ -325,14 +327,14 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
 
   if (s.step === SECOND_GUARDIAN_STEP) {
     return (
-      <Screen
+      <Screen stageLabel="마무리" focusKey={s.step}
         footer={
           <div className="flex flex-col gap-3">
             <Button onClick={() => go(1)}>알겠습니다</Button>
           </div>
         }
       >
-        <h2 className="text-title font-semibold">다른 가족도 함께 기록하시겠어요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">다른 가족도 함께 기록하시겠어요?</h1>
         <p className="pt-4">
           방금 그 코드를 알려주시면 됩니다. 받으신 분이 &lsquo;이어받기&rsquo;에서 코드를 넣으면
           같은 기록에 함께 남기실 수 있습니다.
@@ -346,7 +348,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
 
   if (s.step === LAST_STEP) {
     return (
-      <Screen
+      <Screen stageLabel="마무리" focusKey={s.step}
         footer={
           <div className="flex flex-col gap-3">
             <Button
@@ -366,7 +368,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
           </div>
         }
       >
-        <h2 className="text-title font-semibold">매주 알림을 받으시겠어요?</h2>
+        <h1 data-step-title tabIndex={-1} className="text-title font-semibold">매주 알림을 받으시겠어요?</h1>
         <p className="pt-4">
           쓰시는 달력에 매주 같은 요일로 반복 일정을 넣어드립니다. 알림은 달력이 울립니다.
         </p>
@@ -377,7 +379,7 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
 
   // 새로고침 등으로 복구 코드를 잃은 채 15단계에 온 경우. 이미 토큰은 있으므로 홈으로 보낸다.
   return (
-    <Screen footer={<Button onClick={() => navigate('/', { replace: true })}>홈으로</Button>}>
+    <Screen stageLabel="마무리" focusKey={s.step} footer={<Button onClick={() => navigate('/', { replace: true })}>홈으로</Button>}>
       <p>준비가 끝났습니다.</p>
     </Screen>
   );
