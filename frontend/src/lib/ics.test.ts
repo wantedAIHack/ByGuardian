@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { APP_NAME } from './constants';
 import { weeklyReminderIcs } from './ics';
 
-const ics = weeklyReminderIcs({ startDate: '2026-09-06', appName: '집에서 본 것' });
+const ics = weeklyReminderIcs({ startDate: '2026-09-06', appName: APP_NAME });
 
 describe('weeklyReminderIcs', () => {
   it('캘린더 파일의 뼈대를 갖춘다', () => {
@@ -22,7 +23,8 @@ describe('weeklyReminderIcs', () => {
   });
 
   it('앱 이름을 제목에 넣는다', () => {
-    expect(ics).toContain('집에서 본 것');
+    // 이름을 문자열로 박지 않는다. APP_NAME은 바뀌라고 만든 상수다.
+    expect(ics).toContain(APP_NAME);
   });
 
   it('모든 줄이 75옥텟 이하다', () => {

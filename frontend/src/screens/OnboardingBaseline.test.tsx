@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_NAME } from '../lib/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -273,7 +274,7 @@ describe('온보딩 마무리 화면', () => {
     expect(downloadSpy).toHaveBeenCalledTimes(1);
     const [filename, content] = downloadSpy.mock.calls[0] as [string, string];
     expect(filename).toBe('주간기록.ics');
-    expect(content).toContain('집에서 본 것');
+    expect(content).toContain(APP_NAME);
     expect(content).toContain('RRULE:FREQ=WEEKLY');
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
   });

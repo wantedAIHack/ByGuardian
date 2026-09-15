@@ -318,6 +318,7 @@ describe('홈', () => {
     // '다음 진료' 줄만 하단에서 빠진다(배너가 이미 그 날짜를 말했다).
     expect(main.textContent).toBe(
       [
+        APP_NAME,
         '9월 8일 진료가 있습니다 (모레)',
         '여쭤볼 것 2가지를 준비했습니다.',
         '진료 준비 카드 보기',
@@ -348,6 +349,7 @@ describe('홈', () => {
     await screen.findByText('다음 진료 · 10월 1일');
     expect(main.textContent).toBe(
       [
+        APP_NAME,
         '이번 주 기록을 남기셨어요 ✓',
         '이번 기간에는 바뀐 항목이 없습니다.',
         '다음 진료 · 10월 1일',
