@@ -1,20 +1,22 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #1a1a1a;
-  --color-ink-soft: #5c5c5c;
-  --color-ink-faint: #949494;
-  --color-line: #dcdcd8;
-  --color-paper: #ffffff;
-  --color-paper-soft: #f6f6f3;
-  /* 강조는 딱 하나. 의미색(초록·빨강)은 쓰지 않는다 — 좋고 나쁨을 색으로 말하는 것이 곧 판정이다. */
-  --color-accent: #2f5d8c;
-  --color-accent-soft: #e9eff6;
+  --color-ink: #243247;
+  --color-ink-soft: #586476;
+  --color-ink-faint: #586476;
+  --color-line: #DDD7CB;
+  --color-control: #7C8794;
+  --color-canvas: #F7F5F0;
+  --color-paper: #FFFFFF;
+  --color-paper-soft: #EEE9DF;
+  /* 브랜드·조작·선택의 색. 환자의 호전·악화나 답의 좋고 나쁨을 표현하지 않는다. */
+  --color-accent: #365D83;
+  --color-accent-soft: #E8EFF5;
 
-  --text-small: 15px;
-  --text-body: 17px;
+  --text-small: 16px;
+  --text-body: 18px;
   --text-btn: 18px;
-  --text-title: 26px;
+  --text-title: 28px;
 
   --spacing-gutter: 20px;
 }
@@ -29,16 +31,31 @@ html, body, #root {
 
 body {
   margin: 0;
-  background: var(--color-paper);
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-size: var(--text-body);
-  line-height: 1.65;
+  line-height: 1.6;
   font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", sans-serif;
   word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 @layer components {
+  /* 읽기 전용 노트도 정보를 묶는 면이다. 조작 요소에만 눌림 효과를 준다. */
+  .note-surface {
+    background: var(--color-paper);
+    border: 1px solid var(--color-line);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: 0 3px 12px rgb(36 50 71 / 4%);
+  }
+
   /* 터치 영역 최소 48px. 대상 사용자가 한 손으로 누른다. */
   .btn {
     display: flex;
@@ -48,12 +65,13 @@ body {
     min-height: 56px;
     padding: 12px 20px;
     border: 1px solid var(--color-accent);
-    border-radius: 10px;
+    border-radius: 12px;
     background: var(--color-accent);
     color: var(--color-paper);
     font-size: var(--text-btn);
     font-weight: 600;
     cursor: pointer;
+    transition: background-color 150ms, box-shadow 150ms;
   }
 
   .btn-quiet {
@@ -62,7 +80,7 @@ body {
   }
 
   .btn-plain {
-    border-color: var(--color-line);
+    border-color: var(--color-control);
     background: var(--color-paper);
     color: var(--color-ink);
     font-weight: 500;
@@ -73,7 +91,11 @@ body {
     cursor: default;
   }
 
-  /* 큰 선택 카드. 글자가 먼저이고 그림은 얹는 것이다. */
+  .btn:active:not(:disabled) {
+    box-shadow: inset 0 0 0 2px currentColor;
+  }
+
+  /* 모든 답은 같은 표식과 테두리로 선택을 표현한다. */
   .choice {
     display: flex;
     align-items: center;
@@ -81,20 +103,51 @@ body {
     width: 100%;
     min-height: 64px;
     padding: 16px 20px;
-    border: 1px solid var(--color-line);
-    border-radius: 10px;
+    border: 2px solid var(--color-control);
+    border-radius: 12px;
     background: var(--color-paper);
     color: var(--color-ink);
     font-size: var(--text-btn);
     text-align: left;
     cursor: pointer;
+    transition: background-color 150ms;
   }
 
   .choice[aria-pressed="true"], .choice[aria-checked="true"] {
     border-color: var(--color-accent);
-    border-width: 2px;
     background: var(--color-accent-soft);
     font-weight: 600;
+  }
+
+  .choice-mark {
+    display: flex;
+    flex: 0 0 24px;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--color-accent);
+    font-weight: 700;
+  }
+}
+
+@media (hover: hover) {
+  .btn:not(:disabled):hover {
+    box-shadow: 0 3px 10px rgb(36 50 71 / 12%);
+  }
+}
+
+@media (max-width: 359px) {
+  :root { --spacing-gutter: 16px; }
+  .note-surface { padding: 16px; }
+  .choice { padding-inline: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -125,6 +178,8 @@ body {
 
 @media print {
   .no-print { display: none !important; }
+  body { background: #FFFFFF; }
+  .note-surface { box-shadow: none; }
 
   /* 화면에서는 가로 스크롤, 인쇄에서는 다 보이게 */
   main { max-width: none !important; padding: 0 !important; }

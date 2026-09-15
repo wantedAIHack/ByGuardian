@@ -4,7 +4,8 @@ export function Choice(
 ) {
   return (
     <button type="button" className="choice" aria-pressed={selected} onClick={onSelect}>
-      <span>
+      <span className="choice-mark" aria-hidden="true">{selected ? '✓' : null}</span>
+      <span className="min-w-0">
         {label}
         {hint ? <span className="block text-small text-ink-soft">{hint}</span> : null}
       </span>

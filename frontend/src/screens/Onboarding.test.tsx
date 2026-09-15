@@ -250,6 +250,7 @@ describe('판정 문구 화이트리스트', () => {
         '← 뒤로',
         '침대·의자에서 옮겨 앉기',
         '요즘 어떠신가요?',
+        '✓',
         ...catalogFixture.axes.LEVEL!.map((v) => v.label),
         '보조 도구',
         ...catalogFixture.axes.AID!.map((v) => v.label),
