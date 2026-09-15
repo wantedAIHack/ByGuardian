@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { saveRecoveryCode } from '../lib/recoveryCode';
 import { ApiError, api, getToken, setToken } from '../lib/api';
 import { axisQuestion, axisValues } from '../lib/catalog';
 import {
@@ -56,6 +57,8 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
     mutationFn: () => api.post<OnboardingResponse>('/cases', toOnboardingRequest(s)),
     onSuccess: (res) => {
       setToken(res.guardianToken);
+      // 서버는 해시만 들고 있다. 여기서 안 적어두면 이 코드는 다시는 못 본다.
+      saveRecoveryCode(res.recoveryCode);
       setRecoveryCode(res.recoveryCode);
       // 케이스가 생겼다. 초안은 이제 의미가 없다.
       clearDraft(ONBOARDING_DRAFT);
@@ -84,7 +87,15 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
     return (
       <Screen>
         <h1 className="text-title font-semibold">잠깐만 여쭤보겠습니다</h1>
-        <p className="pt-4">5분 정도 걸립니다. 8가지를 여쭤봅니다.</p>
+        {/* "8가지"만 말하면 실제 흐름과 다르다. 그 앞에 관계·진단·마비 방향·
+            의사소통·진료일 다섯 가지를 먼저 묻고, 8항목 각각에도 조건부 하위
+            질문이 붙는다. 처음 만나는 화면이 약속을 작게 말하면 중간에
+            "아직도 남았나" 하고 그만두게 된다. 개수는 카탈로그에서 읽는다 —
+            상수로 박으면 항목이 늘 때 화면이 조용히 거짓말한다. */}
+        <p className="pt-4">
+          5분 정도 걸립니다. 먼저 몇 가지를 여쭤본 뒤, 지금 상태를{' '}
+          {catalog.items.length}가지 항목으로 확인합니다.
+        </p>
         <p className="pt-2 text-ink-soft">
           한 번만 하시면 됩니다. 그 뒤로는 매주 3분이면 충분합니다.
         </p>
@@ -212,7 +223,9 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   if (s.step === 6) {
     return (
       <Screen {...common} footer={<Button onClick={() => go(1)}>시작</Button>}>
-        <h2 className="text-title font-semibold">지금 상태를 8가지로 한 번 여쭤보겠습니다.</h2>
+        <h2 className="text-title font-semibold">
+          지금 상태를 {catalog.items.length}가지로 한 번 여쭤보겠습니다.
+        </h2>
         <p className="pt-4 text-ink-soft">
           지금 어떠신지가 기준이 됩니다. 정답이 없으니 보이시는 대로 고르시면 됩니다.
         </p>

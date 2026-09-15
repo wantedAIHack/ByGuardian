@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
+import { saveRecoveryCode } from '../lib/recoveryCode';
 import { ApiError, api, setToken } from '../lib/api';
 import { RELATIONS } from '../lib/constants';
 import type { RecoverResponse } from '../lib/types';
@@ -27,6 +28,9 @@ export function Recover() {
       }),
     onSuccess: (res) => {
       setToken(res.guardianToken);
+      // 방금 사용자가 입력해 서버가 맞다고 확인해 준 코드다. 이 기기에도
+      // 적어둬야 설정에서 "현재 코드"를 보여줄 수 있다.
+      saveRecoveryCode(code.trim().toUpperCase());
       setDone(true);
     },
     onError: (e) => {
