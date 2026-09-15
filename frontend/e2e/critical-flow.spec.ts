@@ -34,7 +34,7 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
   await expect(page.getByText('여섯 주치 관찰이 들어 있습니다.', { exact: true })).toBeVisible();
   const initialPrepResponse = page.waitForResponse((r) => r.url() === `${API}/me/prep-card`);
   await page.getByRole('link', { name: '보호자 화면 보기' }).click();
-  await expect(page.getByText('이번 주 기록을 남기셨어요 ✓', { exact: true })).toBeVisible();
+  await expect(page.getByText('이번 주 기록을 남겼습니다', { exact: true })).toBeVisible();
   const initialPrep = await (await initialPrepResponse).json() as PrepCard;
   const initialToilet = initialPrep.questions.flatMap((q) => q.evidence.items)
     .find((item) => item.code === 'toilet' && item.axis === 'LEVEL');
@@ -76,7 +76,7 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
   await page.goBack();
   await page.getByRole('link', { name: '진료 준비 카드 보기' }).click();
   for (const question of prep.questions) await expect(page.getByText(question.sentence, { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: '근거 보기' }).first().click();
+  await page.getByRole('button', { name: '이 질문의 관찰 근거' }).first().click();
   await expect(page.getByText('6주', { exact: true }).first()).toBeVisible();
 
   await page.getByRole('button', { name: '치료사에게 보여드리기', exact: true }).click();

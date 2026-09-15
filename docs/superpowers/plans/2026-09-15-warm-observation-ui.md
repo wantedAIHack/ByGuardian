@@ -1,6 +1,6 @@
 # Warm Observation UI Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 보호자가 색으로 건강 상태를 오해하지 않으면서 기록·진료 준비·공유를 쉽게 사용하는 '따뜻한 관찰 노트' UI를 완성한다.
 
@@ -73,7 +73,7 @@
 - 기존 Button·Choice·Notice·Collapse props는 유지한다. Notice에는 `role?: 'status' | 'alert'`만 선택적으로 추가한다.
 - `PageHeader`는 h1을 렌더한다. focusKey가 있을 때 그 값이 바뀔 때만 h1에 포커스한다. query 재렌더로 포커스를 옮기지 않는다.
 
-- [ ] 작업 공간에서 remote/main 통합 상태, 기존 QA 보고서와 spec, 사용자 변경 보존을 확인한다. Node 22.22.2를 선택하고 다음 기준선 명령을 실행한다.
+- [x] 작업 공간에서 remote/main 통합 상태, 기존 QA 보고서와 spec, 사용자 변경 보존을 확인한다. Node 22.22.2를 선택하고 다음 기준선 명령을 실행한다.
 
 ```bash
 npm --prefix frontend ci
@@ -84,7 +84,7 @@ npm --prefix frontend run build
 
 기존 실패는 이름과 출력으로 기록한다. 새 변경의 성공으로 덮어쓰지 않는다. 이전 렌더를 랜딩·홈·입력·준비 카드별로 375px와 1280px에서 저장한다.
 
-- [ ] 색 없이 선택 상태가 보이는 테스트를 추가하고 실패를 확인한다.
+- [x] 색 없이 선택 상태가 보이는 테스트를 추가하고 실패를 확인한다.
 
 ```tsx
 import { expect, it, vi } from 'vitest';
@@ -107,7 +107,7 @@ it('선택을 표식과 aria 상태로 표시하고 선택만으로 이동하지
 Run: `npm --prefix frontend test -- src/ui/Choice.test.tsx`.
 Expected before implementation: 체크 표식이 없어 실패. 기존 접근성 이름과 버튼 의미는 유지한다.
 
-- [ ] 토큰을 명세 값으로 교체하고 종이 면·주 버튼·선택 표시의 공통 클래스를 구현한다.
+- [x] 토큰을 명세 값으로 교체하고 종이 면·주 버튼·선택 표시의 공통 클래스를 구현한다.
 
 ```css
 @theme {
@@ -165,7 +165,7 @@ export function Icon({ name }: { name: keyof typeof paths }) {
 }
 ```
 
-- [ ] PageHeader와 AsyncState를 구현한다. 로딩은 `role="status"`, 오류는 `role="alert"`; 재시도 버튼은 오류 상태에만 보인다.
+- [x] PageHeader와 AsyncState를 구현한다. 로딩은 `role="status"`, 오류는 `role="alert"`; 재시도 버튼은 오류 상태에만 보인다.
 
 ```tsx
 export function AsyncState({ kind, message, onRetry }: {
@@ -182,10 +182,10 @@ AsyncState.tsx는 `Button`을 `./Button`에서 import한다. 테스트는 onRetr
 PageHeader 테스트는 최초/키 변경에 제목 포커스, 같은 키 재렌더에서 입력 포커스 유지 여부를 확인한다.
 Collapse는 useId로 버튼 aria-controls와 열린 패널 id를 연결하고 접힘/열림을 테스트한다.
 
-- [ ] CatalogProvider의 useQuery에서 refetch를 받아 로딩·오류에 서비스 이름과 AsyncState를 적용한다.
+- [x] CatalogProvider의 useQuery에서 refetch를 받아 로딩·오류에 서비스 이름과 AsyncState를 적용한다.
 catalogProvider는 App 안에서만 사용하므로 치료사 별도 라우트에 종속성을 추가하지 않는다.
 기존 설계 문서에 승인 명세 링크를 추가하고 색·노트 면·빈 상태 규칙 개정을 명시한다.
-- [ ] Run: `npm --prefix frontend test -- src/ui src/lib/catalog.test.ts` 및 `npm --prefix frontend run typecheck`.
+- [x] Run: `npm --prefix frontend test -- src/ui src/lib/catalog.test.ts` 및 `npm --prefix frontend run typecheck`.
 브라우저에서 320px·375px 선택지와 포커스 경계를 확인한 뒤 관련 파일만 커밋한다.
 Commit: `style: establish warm observation design system`.
 
@@ -194,7 +194,7 @@ Commit: `style: establish warm observation design system`.
 **Files:** Create `frontend/src/screens/Landing.tsx`; Modify `Home.tsx`, `styles.css`; Test `Home.test.tsx`, `lib/home.test.ts`.
 **Interfaces:** Landing은 props 없이 APP_NAME과 기존 경로를 사용한다. Home은 기존 `catalog: Catalog` prop을 유지한다. Home의 query 객체를 유지해 pending/error/data를 구분하고 기존 homeState에는 성공 응답만 전달한다.
 
-- [ ] Home.test.tsx의 기존 `serve`, `renderHome`, `silent`와 fixtures `me`를 재사용해 다음 회귀 테스트를 추가한다.
+- [x] Home.test.tsx의 기존 `serve`, `renderHome`, `silent`와 fixtures `me`를 재사용해 다음 회귀 테스트를 추가한다.
 
 ```tsx
 it('경과 요청 실패를 변화 없음이라고 말하지 않는다', async () => {
@@ -210,7 +210,7 @@ it('경과 요청 실패를 변화 없음이라고 말하지 않는다', async (
 Run: `npm --prefix frontend test -- src/screens/Home.test.tsx`. Expected before: 실패 안내가 없어 실패.
 추가로 progress 응답을 지연시켜 완료 전 '변화 없음' 부재를 확인한다.
 
-- [ ] 랜딩은 서비스 소개와 예시 노트의 두 영역으로 만든다. 다음 고정 문구를 화이트리스트에 명시한다.
+- [x] 랜딩은 서비스 소개와 예시 노트의 두 영역으로 만든다. 다음 고정 문구를 화이트리스트에 명시한다.
 
 ```tsx
 <h1>집에서의 관찰을, 다음 진료의 질문으로</h1>
@@ -230,7 +230,7 @@ Run: `npm --prefix frontend test -- src/screens/Home.test.tsx`. Expected before:
 APP_NAME은 상단에 별도 표시한다. 넓은 화면은 최대 1040px 두 열, 768px 미만은 한 열로 놓는다.
 하나의 주 버튼만 사용하며 예시에는 데모 환자의 건강 변화 문구도 삽입하지 않는다.
 
-- [ ] Home은 다음 순서로 query 상태를 처리한다. hooks는 모든 조건부 return보다 위에 둔다.
+- [x] Home은 다음 순서로 query 상태를 처리한다. hooks는 모든 조건부 return보다 위에 둔다.
 
 ```tsx
 const hasToken = getToken() !== null;
@@ -245,12 +245,12 @@ const prepQ = usePrepCard(visitSoon);
 해당 영역의 AsyncState를 표시한다. 성공 데이터가 있을 때만 homeState의 SILENT/CHANGES를 사용한다.
 준비 카드 query 실패는 날짜와 기록을 지우지 않고 준비 영역에서 재시도한다. 실패 메시지는 고정 문구로 화이트리스트에 추가한다.
 
-- [ ] 최상단 브랜드 헤더와 설정 링크, 핵심 노트, 진료 정보, 관찰 노트, 보조 동선을 배치한다.
+- [x] 최상단 브랜드 헤더와 설정 링크, 핵심 노트, 진료 정보, 관찰 노트, 보조 동선을 배치한다.
 미기록이면 주 버튼은 기존 '3분 기록하기' 또는 카탈로그 개수+'가지 확인하기'. 기록 완료·가까운 진료면
 '진료 준비 카드 보기'. 관찰 변화는 한 노트 안의 구분선 있는 목록이며 서버 from/to/message를 유지한다.
 기록 완료 문구는 '이번 주 기록을 남겼습니다'와 체크 아이콘으로 정리하고 현재 주차를 별도 표시한다.
 API가 제공하지 않는 다음 기록 날짜는 표시하지 않는다. 기존 densityPhrase를 그대로 사용한다.
-- [ ] 기존 테스트의 승인된 정적 문구·버튼 이름만 갱신한다. 원문, 전환만 있는 상태, 0개 질문, 동적 카탈로그 개수 검사를 보존한다.
+- [x] 기존 테스트의 승인된 정적 문구·버튼 이름만 갱신한다. 원문, 전환만 있는 상태, 0개 질문, 동적 카탈로그 개수 검사를 보존한다.
 Run: `npm --prefix frontend test -- src/screens/Home.test.tsx src/lib/home.test.ts`.
 375px/1280px에서 첫 방문·미기록·기록 완료·가까운 진료 네 상태를 렌더링해 캡처한다.
 Commit: `feat: redesign landing and guardian home hierarchy`.
@@ -264,7 +264,7 @@ Commit: `feat: redesign landing and guardian home hierarchy`.
 - Screen의 기존 props에 `stageLabel?: string`, `focusKey?: string | number`를 추가한다. step/total은 진행 수치, focusKey는 화면 변경만 식별한다.
 - Screen은 제목을 새로 중복 생성하지 않고 자식의 실제 주 질문 제목 `[data-step-title]`로 포커스를 옮긴다. 각 단계의 주 질문은 h1, 하위 축 제목은 h2로 정돈한다.
 
-- [ ] 진행 문구의 구간 경계를 검증하는 테스트를 추가한다.
+- [x] 진행 문구의 구간 경계를 검증하는 테스트를 추가한다.
 
 ```ts
 import { expect, it } from 'vitest';
@@ -278,7 +278,7 @@ it('생활 관찰의 위치와 마무리 구간을 구별한다', () => {
 ```
 
 Run: `npm --prefix frontend test -- src/lib/flowProgress.test.ts`. Expected: 새 모듈이 없어 실패.
-- [ ] existing FIRST_BASELINE_STEP/RECOVERY_STEP을 import해 다음 표시 함수를 구현한다. 저장 단계 상수나 persisted draft 형식은 변경하지 않는다.
+- [x] existing FIRST_BASELINE_STEP/RECOVERY_STEP을 import해 다음 표시 함수를 구현한다. 저장 단계 상수나 persisted draft 형식은 변경하지 않는다.
 
 ```ts
 import { FIRST_BASELINE_STEP, RECOVERY_STEP } from './onboarding';
@@ -297,7 +297,7 @@ export function onboardingProgress(step: number, itemCount: number): {
 이번 MVP 저장 모델은 8개 항목으로 고정되어 있다. 함수가 다른 항목 수를 표시할 수 있다는 테스트는
 온보딩 저장이 임의 카탈로그 길이를 지원한다는 뜻이 아니다. 실제 표시 수는 기존 itemForStep이 접근 가능한 항목 수로 제한한다.
 
-- [ ] Screen에 `role="progressbar"`와 aria-valuemin/max/now/text, 가시적인 구간·단계를 제공한다.
+- [x] Screen에 `role="progressbar"`와 aria-valuemin/max/now/text, 가시적인 구간·단계를 제공한다.
 선택 하위 질문이 열려도 focusKey는 유지한다. 다음/뒤로로 단계가 바뀔 때만 다음 효과를 실행한다.
 
 ```tsx
@@ -310,7 +310,7 @@ useEffect(() => {
 
 useRef/useEffect를 React에서 import한다. 제목은 `tabIndex={-1}`을 갖는다. Screen.test는 키 변경으로 제목 포커스,
 같은 키에서 선택/입력 포커스 유지, progressbar 값과 가시적인 단계 문구를 검사한다.
-- [ ] 하단을 `.flow-footer`로 표시하고 아래 내용을 적용한다.
+- [x] 하단을 `.flow-footer`로 표시하고 아래 내용을 적용한다.
 
 ```css
 .flow-shell { min-height: 100dvh; display: flex; flex-direction: column; }
@@ -326,7 +326,7 @@ useRef/useEffect를 React에서 import한다. 제목은 `tabIndex={-1}`을 갖�
 
 주간 Record의 현재 `flow.length`와 `s.index + 1`로 표시한다. noChange, fullRecheck, signalsEnabled 분기를 유지한다.
 Onboarding 완료/복구/알림에도 실제 단계 제목과 stageLabel을 적용한다. 저장·연결 오류는 입력 근처에서 명확히 표시한다.
-- [ ] Run: `npm --prefix frontend test -- src/ui/Screen.test.tsx src/lib/flowProgress.test.ts src/screens/Onboarding.test.tsx src/screens/OnboardingBaseline.test.tsx src/screens/Record.test.tsx`.
+- [x] Run: `npm --prefix frontend test -- src/ui/Screen.test.tsx src/lib/flowProgress.test.ts src/screens/Onboarding.test.tsx src/screens/OnboardingBaseline.test.tsx src/screens/Record.test.tsx`.
 초안 새로고침 복원, 뒤로, 조건부 손 질문, 전체 재확인 이전 값, 중복 저장, 주차 변경 테스트를 유지한다.
 모바일 키보드를 연 상태 또는 작은 높이로 마지막 항목·오류·버튼이 가려지지 않는지 실제 확인한다.
 Commit: `feat: clarify observation flow progress and focus`.
@@ -336,7 +336,7 @@ Commit: `feat: clarify observation flow progress and focus`.
 **Files:** Modify `screens/PrepCard.tsx`, `PrepCard.test.tsx`, `ui/Collapse.tsx`, `styles.css`.
 **Interfaces:** 기존 usePrepCard/useSaveExtra, PrepQuestion.sentence/evidence 그대로 사용한다. 질문 하나의 부모는 `article aria-labelledby`로 이름을 갖는다.
 
-- [ ] 기존 full fixture와 renderIt를 사용하고 within을 import해 질문·근거 소속을 테스트한다.
+- [x] 기존 full fixture와 renderIt를 사용하고 within을 import해 질문·근거 소속을 테스트한다.
 
 ```tsx
 it('질문 안에서 해당 근거를 펼친다', async () => {
@@ -348,7 +348,7 @@ it('질문 안에서 해당 근거를 펼친다', async () => {
 ```
 
 Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx`. Expected before: 이름 있는 article이 없어 실패.
-- [ ] PageHeader 아래 ol/li 구조를 유지하며 각각 다음과 같이 묶는다.
+- [x] PageHeader 아래 ol/li 구조를 유지하며 각각 다음과 같이 묶는다.
 
 ```tsx
 <article className="note-surface" aria-labelledby={`question-${q.rank}`}>
@@ -360,7 +360,7 @@ Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx`. Expected bef
 
 `evidenceContent`는 기존 q.evidence.items와 signal JSX를 해당 map 안에서 지역 변수로 분리한 것이다.
 문장에는 순번을 이어 붙이지 않는다. signal weeks, 원문, source 의미를 유지한다.
-- [ ] dirty 입력은 재요청으로 덮어쓰지 않는다. 저장 성공은 라이브 영역, 실패는 내용 보존과 재시도로 표시한다.
+- [x] dirty 입력은 재요청으로 덮어쓰지 않는다. 저장 성공은 라이브 영역, 실패는 내용 보존과 재시도로 표시한다.
 
 ```tsx
 {saveExtra.isError ? <Notice role="alert">질문을 저장하지 못했습니다. 입력한 내용은 그대로 있습니다. 다시 저장해 주세요.</Notice> : null}
@@ -369,7 +369,7 @@ Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx`. Expected bef
 
 기존 API가 반환한 오류를 건강 관련 안내로 바꾸지 않는다. 503→200 MSW 응답 두 번으로 입력 보존·재시도 성공을 테스트한다.
 5개·200자 제한, trim된 payload, 빈 문구와 질문 0개 테스트를 유지한다.
-- [ ] Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx src/ui/Collapse.test.tsx`.
+- [x] Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx src/ui/Collapse.test.tsx`.
 375px에서 긴 질문 3개, 추가 질문 5개, signal 근거, 편집 중 저장 버튼의 위계를 확인한다.
 Commit: `feat: group appointment questions with their evidence`.
 
@@ -381,7 +381,7 @@ Commit: `feat: group appointment questions with their evidence`.
 - `ScrollRegion({ label, children }: { label: string; children: ReactNode })`
 - `ObservationValue({ point }: { point?: Point })` — Point는 기존 lib/types.ts의 타입.
 
-- [ ] 색에 의존하지 않는 출처 테스트를 추가한다.
+- [x] 색에 의존하지 않는 출처 테스트를 추가한다.
 
 ```tsx
 import { expect, it } from 'vitest';
@@ -395,7 +395,7 @@ it('지난 값을 유지한 기록은 글자로 알린다', () => {
 ```
 
 Run: `npm --prefix frontend test -- src/ui/ObservationValue.test.tsx`. Expected before: 파일 부재.
-- [ ] Point의 실제 source 값 CONFIRMED/CARRIED를 다음과 같이 표시한다. 모르는 값은 추정해 '직접 확인'으로 바꾸지 않는다.
+- [x] Point의 실제 source 값 CONFIRMED/CARRIED를 다음과 같이 표시한다. 모르는 값은 추정해 '직접 확인'으로 바꾸지 않는다.
 
 ```tsx
 export function ObservationValue({ point }: { point?: Point }) {
@@ -410,7 +410,7 @@ export function ObservationValue({ point }: { point?: Point }) {
 ```
 
 `Point`를 import한다. 출처를 색으로만 구분하는 기존 범례를 '지난 값 유지: 달라진 것 없음으로 이어간 기록'으로 갱신한다.
-- [ ] ScrollRegion은 useId로 안내를 연결한다. region과 내부 모두 min-width:0을 확인한다.
+- [x] ScrollRegion은 useId로 안내를 연결한다. region과 내부 모두 min-width:0을 확인한다.
 
 ```tsx
 const hintId = useId();
@@ -425,7 +425,7 @@ return <div className="min-w-0">
 Trajectory의 각 Series, PrepCard의 항목 근거, Therapist의 표·수면 기록에 적용한다.
 Therapist 수면은 Point 출처가 없으므로 ObservationValue로 강제 변환하지 않는다.
 동일 기간 변화 없음 목록, 작성자 변경, 신호·자유 기록·disclaimer는 그대로 유지한다.
-- [ ] 치료사 페이지에는 읽기용 별도 넓이와 헤더를 적용하고 인쇄에서 배경·그림자·고정 열·스크롤을 해제한다.
+- [x] 치료사 페이지에는 읽기용 별도 넓이와 헤더를 적용하고 인쇄에서 배경·그림자·고정 열·스크롤을 해제한다.
 PageHeader의 보호자 설정 링크나 CatalogProvider를 치료사 화면에 추가하지 않는다.
 Run: `npm --prefix frontend test -- src/ui/ScrollRegion.test.tsx src/ui/ObservationValue.test.tsx src/screens/Trajectory.test.tsx src/screens/Therapist.test.tsx src/screens/PrepCard.test.tsx`.
 375px 표를 키보드로 마지막 주까지 이동하고 인쇄 미리보기에서 같은 값을 확인한다.
@@ -437,7 +437,7 @@ Commit: `feat: improve accessible history and therapist reading`.
 **Tests:** Create `ui/CopyButton.test.tsx`, `screens/NotFound.test.tsx`.
 **Interfaces:** `CopyButton({ value, label }: { value: string; label: string })`.
 
-- [ ] CopyButton 실패 시 수동 복사 안내를 확인한다.
+- [x] CopyButton 실패 시 수동 복사 안내를 확인한다.
 
 ```tsx
 import { expect, it, vi } from 'vitest';
@@ -454,7 +454,7 @@ it('복사 거부를 성공으로 표시하지 않는다', async () => {
 ```
 
 테스트 후 vi.restoreAllMocks를 실행한다. 성공, clipboard 미지원, value가 바뀐 뒤 성공 안내 초기화도 확인한다.
-- [ ] useState/useEffect로 복사 결과를 관리하고 value 변경 시 초기화한다.
+- [x] useState/useEffect로 복사 결과를 관리하고 value 변경 시 초기화한다.
 
 ```tsx
 const [result, setResult] = useState<'idle' | 'done' | 'error'>('idle');
@@ -470,18 +470,18 @@ async function copy() {
 
 실제 버튼 라벨은 label을 유지한다. 성공은 role=status '복사했습니다', 실패는 role=alert
 '복사하지 못했습니다. 표시된 내용을 직접 선택해 복사해 주세요.'로 표시한다. value를 로그로 남기지 않는다.
-- [ ] 설정은 다음 진료 → 가족과 기록 이어가기 → 기록 알림 → 치료사 링크 순으로 묶는다.
+- [x] 설정은 다음 진료 → 가족과 기록 이어가기 → 기록 알림 → 치료사 링크 순으로 묶는다.
 현재 코드가 있고 '지금 코드 보기'를 누른 경우에만 CopyButton을 노출한다. 코드 없음 안내와
 재발급 확인/취소 절차를 유지한다. 재발급 뒤 표시 코드는 새 응답으로 즉시 갱신한다.
 진료일 input의 min은 me.today, 저장 후 성공 안내, 실패 시 서버 오류와 재시도를 제공한다.
 빈 날짜는 기존 null로 저장하되, 수정하지 않은 날짜를 실수로 null로 보내지 않도록 dateValue를 사용한다.
-- [ ] Settings.test에 기존 handler를 사용해 수정 없이 저장하면 원래 날짜가 전달되는지 검사한다.
+- [x] Settings.test에 기존 handler를 사용해 수정 없이 저장하면 원래 날짜가 전달되는지 검사한다.
 과거 날짜 실패는 입력을 보존하고, 성공한 새 날짜는 reload 후 표시되는지 검사한다.
 서버 과거 날짜 검증은 frontend min만으로 대체하지 않는다.
-- [ ] Recover·Demo·NotFound에 PageHeader와 노트 표현을 적용하고 각 실패 동선을 유지한다.
+- [x] Recover·Demo·NotFound에 PageHeader와 노트 표현을 적용하고 각 실패 동선을 유지한다.
 TherapistLinkPanel은 CopyButton으로 복사 피드백을 통일하며 useIssueLink 공유 캐시·재발급 경계를 유지한다.
 공유 주소는 fragment 방식이며 기존 preview의 rel=noreferrer를 유지한다.
-- [ ] Run: `npm --prefix frontend test -- src/ui/CopyButton.test.tsx src/screens/Settings.test.tsx src/screens/Recover.test.tsx src/screens/Demo.test.tsx src/screens/NotFound.test.tsx src/ui/TherapistLinkPanel.test.tsx`.
+- [x] Run: `npm --prefix frontend test -- src/ui/CopyButton.test.tsx src/screens/Settings.test.tsx src/screens/Recover.test.tsx src/screens/Demo.test.tsx src/screens/NotFound.test.tsx src/ui/TherapistLinkPanel.test.tsx`.
 한 화면에서 발급한 링크가 다른 화면에서 새로 발급되지 않는 기존 검사를 유지한다.
 Commit: `feat: clarify settings recovery and share feedback`.
 
@@ -491,7 +491,7 @@ Commit: `feat: clarify settings recovery and share feedback`.
 Modify `frontend/e2e/critical-flow.spec.ts`의 승인된 문구 locator만 변경한다. API·토큰·캐시 assertion은 유지한다.
 필요한 수정은 해당 원인 파일에만 적용한다.
 
-- [ ] 기존 통합 환경 실행 방법 `scripts/ci/integration-e2e.sh`를 읽고 사용한다. 먼저 Node·Java·Docker 및 점유 포트를 확인한다.
+- [x] 기존 통합 환경 실행 방법 `scripts/ci/integration-e2e.sh`를 읽고 사용한다. 먼저 Node·Java·Docker 및 점유 포트를 확인한다.
 새 외부 서비스나 운영 데이터를 검증용으로 사용하지 않는다.
 
 ```bash
@@ -504,7 +504,7 @@ bash scripts/ci/integration-e2e.sh
 통합 스크립트가 실행한 기존 critical-flow와 새 spec의 결과를 구분해 기록한다. 환경 미비로 실행하지 못하면
 fixture 테스트 성공만으로 실서비스 통합 성공을 주장하지 않는다.
 
-- [ ] 새 spec은 기존 fixture를 import해 API를 로컬에서 차단/응답하며 임의 실제 저장을 피한다.
+- [x] 새 spec은 기존 fixture를 import해 API를 로컬에서 차단/응답하며 임의 실제 저장을 피한다.
 랜딩과 읽기 화면의 가로 overflow, 지역 스크롤, 키보드 포커스를 검증한다. fixture 요청 패턴은 실제 API 경로에 한정한다.
 
 ```ts
@@ -560,16 +560,16 @@ test('모바일에서 마지막 주차까지 키보드로 읽고 인쇄에서 �
 이 검사는 실제 A4 페이지 분할까지 보증하지 않는다. 별도로 인쇄 미리보기 또는 PDF에서
 첫 주·마지막 주·긴 메모·다음 페이지의 제목이 잘리지 않는지 확인하고 결과에 기록한다.
 
-- [ ] 스크린샷은 375px·768px·1280px에서 랜딩/미기록 홈/가까운 진료 홈/변화 없음 홈/입력/준비 카드/전체 기록/설정/치료사 보기로 남긴다.
+- [x] 스크린샷은 375px·768px·1280px에서 랜딩/미기록 홈/가까운 진료 홈/변화 없음 홈/입력/준비 카드/전체 기록/설정/치료사 보기로 남긴다.
 파일명에 화면·상태·너비를 포함하고 코드·토큰은 노출하지 않는다. 비교 기준은 구현 전 캡처와 같은 상태·너비다.
-- [ ] 200% 확대는 실제 브라우저 확대 또는 글자 확대 설정에서 검사한다. viewport만 줄인 검사는 확대 검증으로 기록하지 않는다.
+- [x] 200% 확대는 실제 브라우저 확대 또는 글자 확대 설정에서 검사한다. viewport만 줄인 검사는 확대 검증으로 기록하지 않는다.
 키보드만으로 선택·다음·뒤로·근거 펼치기·표 스크롤·재시도를 수행한다. 입력 키보드 상태는 실제 모바일 또는
 가능한 에뮬레이션 범위를 명시하고 확인하지 못한 실기 조건을 보고서에 남긴다.
-- [ ] 흑백에서도 선택·기록 출처를 구별하는지, 토큰 대비 계산과 실제 배경이 일치하는지 확인한다.
+- [x] 흑백에서도 선택·기록 출처를 구별하는지, 토큰 대비 계산과 실제 배경이 일치하는지 확인한다.
 반드시 본문뿐 아니라 보조 글자·입력 경계·focus ring도 측정한다. 줄임표로 서버 원문이 잘리지 않는지 확인한다.
-- [ ] 결과 보고서에 검증 명령·성공/실패·대표 변경 전후 이미지·남은 한계·수정 파일을 기록한다.
+- [x] 결과 보고서에 검증 명령·성공/실패·대표 변경 전후 이미지·남은 한계·수정 파일을 기록한다.
 실제 사용자 연구를 하지 않았다면 '40~70대 사용자 검증 완료'라고 쓰지 않는다.
-- [ ] 마지막 변경 이후 관련 테스트를 재실행하고 전체 타입·테스트·빌드와 통합 결과를 확인한다.
+- [x] 마지막 변경 이후 관련 테스트를 재실행하고 전체 타입·테스트·빌드와 통합 결과를 확인한다.
 `git diff --check` 후 작업 파일만 커밋하고 실행 결과와 검토 가능한 브랜치/화면을 전달한다.
 Commit: `test: verify warm observation user journeys and layouts`.
 
@@ -591,6 +591,11 @@ Commit: `test: verify warm observation user journeys and layouts`.
 
 ## 인계
 
-이 문서는 구현 계획이다. 앱 UI 변경·테스트 실행·배포가 완료됐다는 보고가 아니다.
-실행 방식은 작업별 에이전트와 중간 리뷰 또는 현재 대화의 순차 실행 중 선택한다.
-실행자는 계획과 승인 명세를 함께 읽고 완료한 checkbox만 체크한다.
+2026-09-16: Task 1~7 구현·회귀 검증·보고서 작성을 완료했다. 작업별 구현 에이전트가 사용량 제한으로 중단되어 현재 대화의 순차 실행으로 전환했고, 별도 코드 리뷰를 거쳤다.
+Task 1~6은 4aa9495, 8e58dd5, d51d507, 995d9f8, 99c1e9d, bd923aa에 커밋했다. 추가 리뷰·시각 수정은 3330589, 4116f52다.
+
+실제 파일명에 맞춰 CatalogProvider.test.tsx를 검증했다. 진료일 새로고침 복원은 Settings 단위 검사에 더해 브라우저 검사로 확인했다.
+200% 확대는 사용자 스타일 방식으로 검사했고, 모바일 키보드는 375×400px 작은 높이 시험으로 범위를 한정했다. 실기기 검증 완료를 의미하지 않는다.
+
+[QA 결과와 대표 변경 전후 화면](../../qa/2026-09-15-warm-observation-ui.md)에 실행 결과와 미검증 조건을 기록했다.
+main 병합·원격 푸시·PR 생성·운영 배포는 수행하지 않았다.
