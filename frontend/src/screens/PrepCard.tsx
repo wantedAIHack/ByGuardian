@@ -57,7 +57,7 @@ export function PrepCard() {
                     {q.evidence.items.map((it) => (
                       <div key={`${it.code}-${it.axis}`}>
                         <p className="text-small text-ink-soft">{it.label} · {it.axisLabel}</p>
-                        <div className="overflow-x-auto">
+                        <div className="scroll-hint overflow-x-auto">
                           <div className="flex min-w-max gap-5 pt-1">
                             {it.values.map((p) => (
                               <div key={p.week} className="min-w-[92px]">
