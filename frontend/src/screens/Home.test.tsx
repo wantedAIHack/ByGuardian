@@ -38,12 +38,20 @@ function renderHome() {
 const silent: Progress = { week: 6, silent: true, changes: [], transitions: [], questions: [] };
 
 describe('홈', () => {
+  it('경과 요청 실패를 변화 없음으로 표시하지 않는다', async () => {
+    setToken('t');
+    serve({ me: me({ recordedThisWeek: true }) });
+    server.use(http.get(`${BASE}/me/progress`, () => HttpResponse.json({}, { status: 503 })));
+    renderHome();
+    expect(await screen.findByRole('alert')).toHaveTextContent('관찰 내용을 불러오지 못했습니다.');
+    expect(screen.queryByText('이번 기간에는 바뀐 항목이 없습니다.')).not.toBeInTheDocument();
+  });
   it('토큰이 없으면 시작하기·이어받기·둘러보기를 보여준다', () => {
     renderHome();
-    expect(screen.getByRole('link', { name: '시작하기' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '관찰 기록 시작하기' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /이어받기/ })).toBeInTheDocument();
     // 심사위원이 온보딩 열여덟 화면을 거치지 않고 데이터 있는 화면을 볼 수 있는 유일한 통로.
-    expect(screen.getByRole('link', { name: '둘러보기' })).toHaveAttribute('href', '/demo');
+    expect(screen.getByRole('link', { name: '먼저 둘러보기' })).toHaveAttribute('href', '/demo');
   });
 
   it('판정 문구를 만들지 않는다 — 토큰 없음', () => {
@@ -54,17 +62,21 @@ describe('홈', () => {
     expect(container.textContent).toBe(
       [
         APP_NAME,
+        '기존 기록 이어받기 ↗',
+        '보호자의 일상 관찰 노트',
+        '집에서의 관찰을,다음 진료의 질문으로',
         '집에서 보신 것을 남겨두시면, 다음에 병원 가실 때 여쭤볼 것을 만들어 드립니다.',
-        '시작하기',
-        '이미 쓰고 계신가요? 이어받기',
-        ' · ',
-        '둘러보기',
+        '관찰 기록 시작하기 →', '먼저 둘러보기 ↗',
+        '나의 관찰 노트예시집에서 본 장면을남겨요',
+        '관찰한 내용을 모아 진료실에서 여쭤볼 질문을 준비합니다.',
+        '기록에서 질문으로,질문에서 대화로.',
+        '01관찰 남기기02질문 준비하기03진료실에서 함께 보기',
       ].join(''),
     );
     // 눈에 띄는 행동은 하나뿐이어야 한다 — 둘러보기가 조용히 두 번째 .btn을 만들지 않았는지 확인한다.
     const btns = container.querySelectorAll('.btn');
     expect(btns).toHaveLength(1);
-    expect(btns[0]?.textContent).toBe('시작하기');
+    expect(btns[0]?.textContent).toBe('관찰 기록 시작하기 →');
   });
 
   it('다시 온 보호자에게 시작 화면을 번쩍이지 않는다', async () => {
@@ -74,7 +86,7 @@ describe('홈', () => {
     renderHome();
 
     expect(screen.getByText('불러오는 중입니다…')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '시작하기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: '관찰 기록 시작하기' })).not.toBeInTheDocument();
   });
 
   it('이번 주 기록이 없으면 기록 버튼 하나만 크게 둔다', async () => {
@@ -119,7 +131,8 @@ describe('홈', () => {
     const main = await screen.findByTestId('home-main');
     // 금지어 나열이 아니라 전체를 화이트리스트로 건다. 침묵 상태에 스트릭 문구든
     // 뭐든 한 글자라도 더 넣으면 이 assertion이 걸린다 — 그 여백이 이 제품의 주장이다.
-    expect(main.textContent).toBe('이번 주 기록을 남기셨어요 ✓이번 기간에는 바뀐 항목이 없습니다.');
+    await screen.findByText('이번 기간에는 바뀐 항목이 없습니다.');
+    expect(main.textContent).toBe('✓이번 주 기록을 남겼습니다6주차이번 기간에는 바뀐 항목이 없습니다.');
   });
 
   it('변화는 서버 문장을 그대로 보여준다', async () => {
@@ -254,7 +267,7 @@ describe('홈', () => {
 
     const main = await screen.findByTestId('home-main');
     expect(main.textContent).toBe(
-      ['이번 주 관찰을 남겨주세요', '6주차 · 3분이면 됩니다', '3분 기록하기'].join(''),
+      ['이번 주 관찰', '이번 주 관찰을 남겨주세요', '6주차 · 3분이면 됩니다', '3분 기록하기'].join(''),
     );
   });
 
@@ -283,7 +296,7 @@ describe('홈', () => {
     await screen.findByText('지켜보고 있는 변화');
     expect(main.textContent).toBe(
       [
-        '이번 주 기록을 남기셨어요 ✓',
+        '✓이번 주 기록을 남겼습니다6주차',
         '2주 유지되던 변화가 이번 주에는 다르게 관찰됐습니다. 아직 어느 쪽인지 알기 어렵습니다.',
         '지켜보고 있는 변화',
         '화장실 이용',
@@ -318,16 +331,15 @@ describe('홈', () => {
     // '다음 진료' 줄만 하단에서 빠진다(배너가 이미 그 날짜를 말했다).
     expect(main.textContent).toBe(
       [
-        APP_NAME,
+        APP_NAME, '설정', '다음 진료',
         '9월 8일 진료가 있습니다 (모레)',
         '여쭤볼 것 2가지를 준비했습니다.',
         '진료 준비 카드 보기',
-        '이번 주 기록을 남기셨어요 ✓',
+        '✓이번 주 기록을 남겼습니다6주차',
         '이번 기간에는 바뀐 항목이 없습니다.',
         '지금까지 6주 중 5주 기록',
-        '전체 기록 보기',
+        '전체 기록 보기→',
         '치료사에게 보여드리기',
-        '설정',
       ].join(''),
     );
   });
@@ -346,17 +358,17 @@ describe('홈', () => {
     renderHome();
 
     const main = await screen.findByRole('main');
-    await screen.findByText('다음 진료 · 10월 1일');
+    await screen.findByText('10월 1일');
+    await screen.findByText('이번 기간에는 바뀐 항목이 없습니다.');
     expect(main.textContent).toBe(
       [
-        APP_NAME,
-        '이번 주 기록을 남기셨어요 ✓',
+        APP_NAME, '설정',
+        '✓이번 주 기록을 남겼습니다6주차',
         '이번 기간에는 바뀐 항목이 없습니다.',
-        '다음 진료 · 10월 1일',
+        '다음 진료10월 1일',
         '지금까지 6주 중 5주 기록',
-        '전체 기록 보기',
+        '전체 기록 보기→',
         '치료사에게 보여드리기',
-        '설정',
       ].join(''),
     );
   });
