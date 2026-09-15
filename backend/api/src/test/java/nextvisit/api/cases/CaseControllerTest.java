@@ -10,6 +10,7 @@ import static nextvisit.api.ApiTestSupport.onboardingBody;
 import static nextvisit.api.ApiTestSupport.patchJson;
 import static nextvisit.api.ApiTestSupport.postJson;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -142,6 +143,18 @@ class CaseControllerTest {
         assertTrue(cleared.get("nextVisitDate").isNull());
         JsonNode meAfterClear = json(mapper, mvc.perform(getMe(o.token(), "/me")).andExpect(status().isOk()).andReturn());
         assertTrue(meAfterClear.get("nextVisitDate").isNull());
+    }
+
+    @Test
+    void pastDateIsRejectedAsNextVisit() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        // 지난 날짜가 저장되면 홈이 그것을 앞으로 올 진료처럼 보여주고, 사흘
+        // 안쪽이 아니라서 준비 카드 배너가 사라진다. 오타 하나로 보호자가
+        // 이 제품의 결과물에 닿는 길을 잃으므로 서버가 막는다.
+        mvc.perform(patchJson(o.token(), "/me", mapper, Collections.singletonMap("nextVisitDate", "2020-01-01")))
+            .andExpect(status().isBadRequest());
+        JsonNode me = json(mapper, mvc.perform(getMe(o.token(), "/me")).andExpect(status().isOk()).andReturn());
+        assertNotEquals("2020-01-01", me.get("nextVisitDate").asText(), "거부된 값이 저장되면 안 된다");
     }
 
     @Test

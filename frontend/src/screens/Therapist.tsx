@@ -54,8 +54,8 @@ export function Therapist() {
 
       <section className="pt-8">
         <h2 className="font-semibold">주차별 관찰</h2>
-        <div className="overflow-x-auto pt-3">
-          <table className="min-w-max border-collapse">
+        <div className="scroll-hint overflow-x-auto pt-3">
+          <table className="sticky-col min-w-max border-collapse">
             <thead>
               <tr>
                 <th className="border-b border-line px-3 py-2 text-left">항목</th>
@@ -125,7 +125,7 @@ export function Therapist() {
       {data.sleep.length > 0 ? (
         <section className="pt-8">
           <h2 className="font-semibold">야간 수면</h2>
-          <div className="overflow-x-auto pt-3">
+          <div className="scroll-hint overflow-x-auto pt-3">
             <div className="flex min-w-max gap-6">
               {data.sleep.map((s) => (
                 <div key={s.week}>

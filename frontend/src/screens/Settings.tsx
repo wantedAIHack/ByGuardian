@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { APP_NAME, WEEKLY_ICS_FILENAME } from '../lib/constants';
 import { downloadIcs, weeklyReminderIcs } from '../lib/ics';
 import { useMe, useReissueRecoveryCode, useUpdateVisitDate } from '../lib/queries';
+import { loadRecoveryCode } from '../lib/recoveryCode';
 import { Button } from '../ui/Button';
 import { Notice } from '../ui/Notice';
 import { TherapistLinkPanel } from '../ui/TherapistLinkPanel';
@@ -13,6 +14,10 @@ export function Settings() {
   const reissue = useReissueRecoveryCode();
   const [visitDate, setVisitDate] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [codeShown, setCodeShown] = useState(false);
+  // 서버는 해시만 갖고 있어 현재 코드를 되물을 수 없다. 이 기기에
+  // 적어둔 것이 있을 때만 보여줄 수 있고, 없는 기기도 정상이다.
+  const storedCode = loadRecoveryCode();
 
   if (!me) return <main className="mx-auto max-w-lg px-gutter py-10"><p>불러오는 중입니다…</p></main>;
   const dateValue = visitDate ?? me.nextVisitDate ?? '';
@@ -35,6 +40,36 @@ export function Settings() {
           그 코드와 자신의 관계를 넣으면 같은 기록에 함께 남기실 수 있습니다.
         </p>
         <Notice>새 코드를 만들 필요가 없습니다. 누가 남긴 기록인지는 치료사용 요약에 함께 나갑니다.</Notice>
+
+        {/* 안내는 "지금 갖고 계신 코드를 알려주시면 된다"고 말하는데 정작 그
+            코드를 확인할 방법이 화면에 없었다. 서버가 되돌려줄 수 없는 값이라
+            이 기기에 적어둔 것을 꺼내 보여준다. 상시 노출하지 않는 이유는
+            어깨너머와 스크린샷이다 — 누를 때만 나온다. */}
+        {storedCode ? (
+          <div className="pt-4">
+            {codeShown ? (
+              <>
+                <p className="py-4 text-center text-[34px] font-bold tracking-[0.2em]">{storedCode}</p>
+                <button
+                  type="button"
+                  className="inline-flex min-h-[48px] items-center text-small text-ink-soft underline"
+                  onClick={() => setCodeShown(false)}
+                >
+                  가리기
+                </button>
+              </>
+            ) : (
+              <Button className="btn btn-plain" onClick={() => setCodeShown(true)}>
+                지금 코드 보기
+              </Button>
+            )}
+          </div>
+        ) : (
+          <Notice>
+            이 기기에는 코드가 저장돼 있지 않습니다. 적어두신 코드를 알려주시거나,
+            찾지 못하셨다면 아래에서 새로 만드실 수 있습니다.
+          </Notice>
+        )}
       </section>
 
       <section className="pt-12">
