@@ -1,3 +1,5 @@
+import { ScrollRegion } from '../ui/ScrollRegion';
+import { ObservationValue } from '../ui/ObservationValue';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '../ui/PageHeader';
 import { AsyncState } from '../ui/AsyncState';
@@ -56,18 +58,16 @@ export function PrepCard() {
                     {q.evidence.items.map((it) => (
                       <div key={`${it.code}-${it.axis}`}>
                         <p className="text-small text-ink-soft">{it.label} · {it.axisLabel}</p>
-                        <div className="scroll-hint overflow-x-auto">
+                        <ScrollRegion label={`${it.label} ${it.axisLabel} 주차별 기록`}>
                           <div className="flex min-w-max gap-5 pt-1">
                             {it.values.map((p) => (
                               <div key={p.week} className="min-w-[92px]">
                                 <p className="text-small text-ink-faint">{p.week}주</p>
-                                <p className={p.source === 'CARRIED' ? 'text-ink-faint' : ''}>
-                                  {p.label}
-                                </p>
+                                <ObservationValue point={p} />
                               </div>
                             ))}
                           </div>
-                        </div>
+                        </ScrollRegion>
                       </div>
                     ))}
                     {q.evidence.signal ? (

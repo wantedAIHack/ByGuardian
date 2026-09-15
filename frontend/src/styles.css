@@ -231,6 +231,11 @@ body {
   .scroll-hint { background: none !important; }
   .sticky-col th:first-child, .sticky-col td:first-child { position: static !important; }
   table { font-size: 12px; }
+  .therapist-page table { width: 100%; min-width: 0; table-layout: fixed; }
+  .therapist-page th, .therapist-page td { padding: 6px 4px; overflow-wrap: anywhere; }
+  .therapist-page .text-small { font-size: 10px; }
+  .therapist-page .note-surface { border: none; padding: 0; border-radius: 0; }
+  .therapist-page [role="region"] > .flex { min-width: 0; flex-wrap: wrap; }
   section { break-inside: avoid; }
   a[href]::after { content: none !important; }
 }

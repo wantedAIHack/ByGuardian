@@ -184,7 +184,7 @@ describe('치료사용 요약', () => {
     expect(screen.getByText('6주 · 아침')).toBeInTheDocument();
   });
 
-  it('이어간 값은 옅게 표시하되 숨기거나 다른 색조를 쓰지 않는다', async () => {
+  it('이어간 값과 직접 확인한 값을 글자로 구별한다', async () => {
     renderIt();
     await screen.findByText('화장실 이용');
     // 5주차 '지켜보면 됨'은 source: 'CARRIED'(보호자가 '달라진 것 없음'으로 이어간 값)이고,
@@ -192,8 +192,8 @@ describe('치료사용 요약', () => {
     // CARRIED만 옅은 톤 클래스를 받고 색상 자체(의미색)는 바뀌지 않는다.
     const carried = screen.getByText('지켜보면 됨');
     const confirmed = screen.getByText('손 잡아드림');
-    expect(carried.className).toContain('text-ink-faint');
-    expect(confirmed.className).not.toContain('text-ink-faint');
+    expect(carried.parentElement).toHaveTextContent('지난 값 유지');
+    expect(confirmed.parentElement).toHaveTextContent('직접 확인');
   });
 
   it('두 축을 가진 항목은 축마다 한 줄로 나뉜다', async () => {
@@ -204,17 +204,17 @@ describe('치료사용 요약', () => {
     // 없다(둘 다 텍스트 노드를 직접 자식으로 갖는 별개 엘리먼트다) — 라벨로 행을
     // 찾은 뒤 그 칸의 textContent(자손까지 이어붙인 값)로 확인한다.
     // 첫 축(ai===0) 행: 항목 라벨 + ' · ' 연결어 + 첫 축 라벨이 한 칸에 담긴다.
-    const firstRow = screen.getByText('옷 입기').closest('tr');
-    expect(firstRow?.querySelector('td')?.textContent).toBe('옷 입기 · 도움 수준');
+    const firstRow = screen.getAllByText('옷 입기')[0]!.closest('tr');
+    expect(firstRow?.querySelector('th')?.textContent).toBe('옷 입기도움 수준');
     // 두 번째 축(ai>0) 행: 축 라벨만 홀로 한 칸을 이룬다 — 라벨을 되풀이하지 않는다.
     const secondRow = screen.getByText('마비 쪽 손').closest('tr');
-    expect(secondRow?.querySelector('td')?.textContent).toBe('마비 쪽 손');
+    expect(secondRow?.querySelector('th')?.textContent).toBe('옷 입기마비 쪽 손');
     expect(secondRow).not.toBe(firstRow);
     // 두 줄 다 같은 항목의 주차별 값을 낸다.
     expect(screen.getByText('거들기만')).toBeInTheDocument();
   });
 
-  it('그 주에 기록이 없으면 자리표시 점을 낸다', async () => {
+  it('그 주에 기록이 없으면 미기록으로 명시한다', async () => {
     renderIt({ ...summary, items: [...summary.items, missingWeekItem] });
     await screen.findByText('화장실 이용');
 
@@ -222,9 +222,9 @@ describe('치료사용 요약', () => {
     const row = screen.getByText('세수·양치').closest('tr');
     const cells = row?.querySelectorAll('td');
     // cells[0]은 라벨 칸, [1]~[3]은 4주·5주·6주 값 칸이다.
-    expect(cells?.[1]?.textContent).toBe('지켜보면 됨');
-    expect(cells?.[2]?.textContent).toBe('·');
-    expect(cells?.[3]?.textContent).toBe('혼자 하심');
+    expect(cells?.[0]?.textContent).toBe('지켜보면 됨직접 확인');
+    expect(cells?.[1]?.textContent).toBe('미기록');
+    expect(cells?.[2]?.textContent).toBe('혼자 하심직접 확인');
   });
 
   it('기록 밀도와 작성자 변경을 보여준다', async () => {
@@ -347,16 +347,16 @@ describe('치료사용 요약', () => {
     const expected = [
       '가정 관찰 기록',
       `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
-      '주차별 관찰',
+      '주차별 관찰', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       '항목', ...summary.weeks.map((w) => `${w}주`),
-      `${toilet.label} · ${toiletAxis.axisLabel}`,
-      ...toiletAxis.values.map((p) => p.label),
+      `${toilet.label}${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p, i) => `${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `같은 기간 변화 없음 — ${bathing.label}`,
-      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
       '비언어 신호',
       `${signal.actionLabel} · ${signal.kindLabel}`,
       summary.weeks.map((w) => (signal.weeks.includes(w) ? '●' : '·')).join(' '),
-      '야간 수면',
+      '야간 수면', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자 기록 (원문)',
       `${note.week}주 · ${note.timeTagLabel}`,
@@ -389,13 +389,13 @@ describe('치료사용 요약', () => {
     const expected = [
       '가정 관찰 기록',
       `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
-      '주차별 관찰',
+      '주차별 관찰', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       '항목', ...summary.weeks.map((w) => `${w}주`),
-      `${toilet.label} · ${toiletAxis.axisLabel}`,
-      ...toiletAxis.values.map((p) => p.label),
+      `${toilet.label}${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p, i) => `${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `같은 기간 변화 없음 — ${bathing.label}`,
-      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
-      '야간 수면',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
+      '야간 수면', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자 기록 (원문)',
       `${note.week}주 · ${note.timeTagLabel}`,
@@ -432,15 +432,15 @@ describe('치료사용 요약', () => {
     const expected = [
       '가정 관찰 기록',
       `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
-      '주차별 관찰',
+      '주차별 관찰', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       '항목', ...summary.weeks.map((w) => `${w}주`),
-      `${toilet.label} · ${toiletAxis.axisLabel}`,
-      ...toiletAxis.values.map((p) => p.label),
+      `${toilet.label}${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p, i) => `${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `같은 기간 변화 없음 — ${bathing.label}`,
-      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
       '비언어 신호',
       '관찰된 신호 없음',
-      '야간 수면',
+      '야간 수면', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자 기록 (원문)',
       `${note.week}주 · ${note.timeTagLabel}`,
@@ -473,16 +473,16 @@ describe('치료사용 요약', () => {
     const expected = [
       '가정 관찰 기록',
       `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
-      '주차별 관찰',
+      '주차별 관찰', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       '항목', ...summary.weeks.map((w) => `${w}주`),
-      `${toilet.label} · ${toiletAxis.axisLabel}`,
-      ...toiletAxis.values.map((p) => p.label),
+      `${toilet.label}${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p, i) => `${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `같은 기간 변화 없음 — ${bathing.label}`,
-      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
       '비언어 신호',
       `${signal.actionLabel} · ${signal.kindLabel}`,
       summary.weeks.map((w) => (signal.weeks.includes(w) ? '●' : '·')).join(' '),
-      '야간 수면',
+      '야간 수면', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자가 여쭤보고 싶은 것',
       ...summary.questions,
@@ -514,16 +514,16 @@ describe('치료사용 요약', () => {
     const expected = [
       '가정 관찰 기록',
       `${summary.weeks[0]}주차 ~ ${summary.weeks.at(-1)}주차 · ${summary.generatedAt.slice(0, 10)} 생성`,
-      '주차별 관찰',
+      '주차별 관찰', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       '항목', ...summary.weeks.map((w) => `${w}주`),
-      `${toilet.label} · ${toiletAxis.axisLabel}`,
-      ...toiletAxis.values.map((p) => p.label),
+      `${toilet.label}${toiletAxis.axisLabel}`,
+      ...toiletAxis.values.map((p, i) => `${p.label}${['직접 확인', '지난 값 유지', '직접 확인'][i]}`),
       `같은 기간 변화 없음 — ${bathing.label}`,
-      '옅은 값은 보호자가 ‘달라진 것 없음’으로 이어간 주입니다.',
+      '지난 값 유지: 달라진 것 없음으로 이어간 기록',
       '비언어 신호',
       `${signal.actionLabel} · ${signal.kindLabel}`,
       summary.weeks.map((w) => (signal.weeks.includes(w) ? '●' : '·')).join(' '),
-      '야간 수면',
+      '야간 수면', '좌우로 밀어 주차별 기록을 볼 수 있어요',
       ...summary.sleep.flatMap((s) => [`${s.week}주`, s.label]),
       '보호자 기록 (원문)',
       `${note.week}주 · ${note.timeTagLabel}`,
