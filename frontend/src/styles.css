@@ -98,12 +98,39 @@ body {
   }
 }
 
+/*
+ * 표가 화면보다 넓을 때 "더 있다"를 알리는 신호. 모바일에는 상시 스크롤바가
+ * 없어서, 값이 오른쪽에서 잘린 표는 스크롤되는 표가 아니라 끝난 표로 읽힌다.
+ * 실제로 375px 치료사 화면에서 1주차만 보이고 나머지 다섯 주가 없는 것처럼
+ * 보였다 (scrollWidth 791 / clientWidth 311).
+ *
+ * background-attachment: local 두 장이 실제 내용이고, scroll 두 장이 그 위를
+ * 덮는 흰 그라데이션이다. 끝까지 스크롤하면 그림자가 사라진다. JS가 필요 없다.
+ */
+.scroll-hint {
+  background:
+    linear-gradient(to right, var(--color-paper) 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, var(--color-paper) 30%, rgba(255, 255, 255, 0)) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) left center / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.14), rgba(0, 0, 0, 0)) right center / 14px 100% no-repeat scroll;
+}
+
+/* 주차를 훑는 동안 항목 이름이 따라다녀야 어느 행을 보는지 알 수 있다. */
+.sticky-col th:first-child,
+.sticky-col td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-paper);
+}
+
 @media print {
   .no-print { display: none !important; }
 
   /* 화면에서는 가로 스크롤, 인쇄에서는 다 보이게 */
   main { max-width: none !important; padding: 0 !important; }
   .overflow-x-auto { overflow: visible !important; }
+  .scroll-hint { background: none !important; }
+  .sticky-col th:first-child, .sticky-col td:first-child { position: static !important; }
   table { font-size: 12px; }
   section { break-inside: avoid; }
   a[href]::after { content: none !important; }

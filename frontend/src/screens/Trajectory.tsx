@@ -10,7 +10,7 @@ function Series({ axes }: { axes: AxisSeries[] }) {
       {axes.map((a) => (
         <div key={a.axis}>
           <p className="text-small text-ink-soft">{a.axisLabel}</p>
-          <div className="overflow-x-auto">
+          <div className="scroll-hint overflow-x-auto">
             <div className="flex min-w-max gap-5 pt-2">
               {a.values.map((p) => (
                 <div key={p.week} className="min-w-[92px]">

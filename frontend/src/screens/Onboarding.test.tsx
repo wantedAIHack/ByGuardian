@@ -184,7 +184,9 @@ describe('판정 문구 화이트리스트', () => {
     expect(container.textContent).toBe(
       [
         '잠깐만 여쭤보겠습니다',
-        '5분 정도 걸립니다. 8가지를 여쭤봅니다.',
+        // 앞의 기본 질문 다섯 개와 항목별 하위 질문까지 포함한 약속이어야
+        // 중간에 "아직도 남았나" 하고 그만두지 않는다. 개수는 카탈로그에서 온다.
+        '5분 정도 걸립니다. 먼저 몇 가지를 여쭤본 뒤, 지금 상태를 8가지 항목으로 확인합니다.',
         '한 번만 하시면 됩니다. 그 뒤로는 매주 3분이면 충분합니다.',
         '시작',
       ].join(''),
@@ -251,7 +253,7 @@ describe('판정 문구 화이트리스트', () => {
         ...catalogFixture.axes.LEVEL!.map((v) => v.label),
         '보조 도구',
         ...catalogFixture.axes.AID!.map((v) => v.label),
-        '한 주 일관성',
+        '이번 주에 얼마나 자주 그러셨나요?',
         ...catalogFixture.axes.CONSISTENCY!.map((v) => v.label),
         '다음',
       ].join(''),

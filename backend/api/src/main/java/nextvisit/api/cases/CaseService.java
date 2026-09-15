@@ -11,6 +11,7 @@ import nextvisit.api.auth.GuardianRepository;
 import nextvisit.api.auth.TokenService;
 import nextvisit.api.common.Json;
 import nextvisit.api.common.NotFoundException;
+import nextvisit.api.common.ValidationException;
 import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotAssembler;
@@ -49,6 +50,7 @@ public class CaseService {
 
     public OnboardingResponse onboard(OnboardingRequest req) {
         LocalDate today = weeks.today();
+        checkedVisitDate(req.nextVisitDate());
         String recoveryCode = tokens.newRecoveryCode();
         CaseEntity kase = new CaseEntity(OBSERVATION_SET, today, req.diagnosis(), req.pareticSide(), req.verbalDifficulty(),
             req.nextVisitDate(), tokens.hash(recoveryCode), Instant.now(clock));
@@ -86,9 +88,27 @@ public class CaseService {
     public MeResponse updateCase(AuthContext ctx, UpdateCaseRequest req) {
         CaseEntity kase = cases.findById(ctx.kase().getId())
             .orElseThrow(() -> new NotFoundException("케이스를 찾을 수 없습니다"));
-        kase.setNextVisitDate(req.nextVisitDate());
+        // 지난 날짜가 "다음 진료"로 저장되면 홈이 그 날짜를 앞으로 올 일처럼
+        // 보여주고, 사흘 안쪽이 아니므로 준비 카드 배너가 사라진다. 보호자는
+        // 오타 하나로 이 제품의 결과물에 닿는 길을 잃는다. 비우는 것은 허용한다.
+        kase.setNextVisitDate(checkedVisitDate(req.nextVisitDate()));
         cases.save(kase);
         return me(new AuthContext(ctx.guardian(), kase));
+    }
+
+    /**
+     * 지난 날짜가 "다음 진료"로 저장되면 홈이 그것을 앞으로 올 일처럼 보여주고,
+     * 사흘 안쪽이 아니므로 준비 카드 배너가 사라진다. 보호자는 오타 하나로 이
+     * 제품의 결과물에 닿는 길을 잃는다. 비우는 것(null)은 허용한다.
+     *
+     * 온보딩과 PATCH 두 입구가 같은 필드를 받으므로 검증도 한 곳에 둔다. 한쪽만
+     * 막으면 다른 문으로 같은 값이 들어온다.
+     */
+    private LocalDate checkedVisitDate(LocalDate visit) {
+        if (visit != null && visit.isBefore(weeks.today())) {
+            throw new ValidationException("다음 진료일은 오늘 이후로 정해주세요");
+        }
+        return visit;
     }
 
     public RecoverResponse recover(RecoverRequest req) {

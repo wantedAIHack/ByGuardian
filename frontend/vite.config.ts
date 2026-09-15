@@ -10,8 +10,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: '집에서 본 것',
-        short_name: '집에서 본 것',
+        name: 'BYGuardian(가칭)',
+        short_name: 'BYGuardian(가칭)',
         description: '집에서 보신 것을 남겨두면 다음 진료 때 여쭤볼 것을 만들어 드립니다.',
         lang: 'ko',
         start_url: '/',

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api, setTokenChangeHandler } from './api';
+import { saveRecoveryCode } from './recoveryCode';
 import type {
   Me, PrepCard, Progress, RecoveryCodeResponse, TherapistLink, Trajectory,
   WeeklyRecordRequest, WeeklyRecordResponse,
@@ -112,4 +113,9 @@ export function useUpdateVisitDate() {
 }
 
 export const useReissueRecoveryCode = () =>
-  useMutation({ mutationFn: () => api.post<RecoveryCodeResponse>('/me/recovery-code') });
+  useMutation({
+    mutationFn: () => api.post<RecoveryCodeResponse>('/me/recovery-code'),
+    // 새 코드도 서버는 해시만 남긴다. 여기서 적어두지 않으면 이 화면을
+    // 벗어나는 순간 다시는 못 본다.
+    onSuccess: (res) => saveRecoveryCode(res.recoveryCode),
+  });

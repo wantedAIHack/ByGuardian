@@ -45,7 +45,10 @@ services:
       # Access client id/secret stay empty and the client omits those headers.
       NEXTVISIT_LLM_ENABLED: "true"
       NEXTVISIT_LLM_BASE_URL: http://ollama:11434/v1
-      NEXTVISIT_LLM_MODEL: qwen3:4b-q8_0
+      # Pins live in infra/llm/compose.yml and application.yml; this stack only
+      # overrides them when an operator explicitly sets the variable.
+      NEXTVISIT_LLM_MODEL: "${NEXTVISIT_LLM_MODEL:-qwen3:4b-q4_K_M}"
+      NEXTVISIT_LLM_MAX_OUTPUT_TOKENS: "${NEXTVISIT_LLM_MAX_OUTPUT_TOKENS:-3000}"
       NEXTVISIT_LLM_API_KEY: ollama
       SERVER_ADDRESS: 0.0.0.0
       SERVER_PORT: "8080"

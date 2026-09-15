@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { APP_NAME } from '../lib/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -55,7 +56,7 @@ describe('온보딩 기준선', () => {
     expect(screen.queryByText('보조 도구')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '지켜보면 됨' }));
     expect(screen.getByText('보조 도구')).toBeInTheDocument();
-    expect(screen.getByText('한 주 일관성')).toBeInTheDocument();
+    expect(screen.getByText('이번 주에 얼마나 자주 그러셨나요?')).toBeInTheDocument();
   });
 
   it('마비 쪽을 모르면 마비 쪽 손을 묻지 않는다', async () => {
@@ -273,7 +274,7 @@ describe('온보딩 마무리 화면', () => {
     expect(downloadSpy).toHaveBeenCalledTimes(1);
     const [filename, content] = downloadSpy.mock.calls[0] as [string, string];
     expect(filename).toBe('주간기록.ics');
-    expect(content).toContain('집에서 본 것');
+    expect(content).toContain(APP_NAME);
     expect(content).toContain('RRULE:FREQ=WEEKLY');
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/);
   });

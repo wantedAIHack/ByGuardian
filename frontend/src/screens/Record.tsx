@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '../lib/api';
-import { axisName, axisValues, itemByCode } from '../lib/catalog';
+import { axisQuestion, axisValues, itemByCode } from '../lib/catalog';
 import { DICTATION_HINT_SEEN, clearDraft, loadDraft, saveDraft, weeklyDraftKey } from '../lib/draft';
 import { useMe, useSaveWeek, useTrajectory } from '../lib/queries';
 import {
@@ -266,7 +266,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
           return (
             <div key={axis} className="pt-8">
               {axis === 'LEVEL' ? null : (
-                <h3 className="font-semibold">{axisName(catalog, axis)}</h3>
+                <h3 className="font-semibold">{axisQuestion(catalog, axis)}</h3>
               )}
               {prev ? <Notice>지난번에는 {prev.label}</Notice> : null}
               <div className="flex flex-col gap-3 pt-3">

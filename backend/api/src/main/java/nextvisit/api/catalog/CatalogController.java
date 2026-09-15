@@ -47,8 +47,10 @@ public class CatalogController {
             axes.put(a.name(), values);
         }
         List<CatalogDto.CodeLabel> axisLabels = new ArrayList<>();
+        List<CatalogDto.CodeLabel> axisQuestions = new ArrayList<>();
         for (Axis a : AxisLabels.ORDER) {
             axisLabels.add(new CatalogDto.CodeLabel(a.name(), AxisLabels.of(a)));
+            axisQuestions.add(new CatalogDto.CodeLabel(a.name(), AxisLabels.questionOf(a)));
         }
         List<CatalogDto.CodeLabel> actions = new ArrayList<>();
         for (SignalAction a : SignalAction.values()) {
@@ -62,6 +64,7 @@ public class CatalogController {
         for (TimeTag t : TimeTag.values()) {
             tags.add(new CatalogDto.CodeLabel(t.name(), t.phrase()));
         }
-        return new CatalogDto(set.id(), items, axes, actions, kinds, tags, SLEEP_LEVELS, axisLabels);
+        return new CatalogDto(set.id(), items, axes, actions, kinds, tags, SLEEP_LEVELS, axisLabels,
+            axisQuestions);
     }
 }
