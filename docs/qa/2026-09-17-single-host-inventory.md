@@ -73,6 +73,8 @@ SERVER_PORT
 
 실사 시점에 로드되어 있던 모델(`ollama ps`): `qwen3:4b-q4_K_M`, 프로세서 `100% GPU`, 컨텍스트 8192. `compose.demo.yml`의 `NEXTVISIT_LLM_MODEL` 기본값과 일치한다.
 
+> **이 8192는 특정 시점의 관측값이다.** 호스트 시각 2026-09-16 16:40 UTC까지 실행 중이던 `nextvisit-llm-ollama-1` 컨테이너의 값이다. 같은 날 16:49:35 UTC에 이 컨테이너가 재생성되면서(무엇이 또는 누가 했는지는 확인되지 않았다) `OLLAMA_CONTEXT_LENGTH=2048`로 바뀌었고, 그 상태에서는 질문 다듬기 응답 스키마가 깨진다. 경위와 영향은 [`2026-09-17-llm-activation.md`](./2026-09-17-llm-activation.md) 3절에 있다. 지금 값을 알아야 하면 위 확인 명령 대신 `docker inspect`로 직접 읽어야 한다.
+
 확인 명령:
 ```
 ssh llm 'docker exec $(docker ps -qf name=ollama | head -1) ollama list; \
