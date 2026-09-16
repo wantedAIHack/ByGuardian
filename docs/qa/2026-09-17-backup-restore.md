@@ -6,6 +6,8 @@
 
 운영 PostgreSQL 컨테이너에서 논리 백업(`pg_dump -Fc`)을 1회 실행하고, 별도의 임시 컨테이너에 그 덤프를 복원한 뒤 운영 DB와 행 수를 표 단위로 비교했다. 6개 테이블 전부 운영과 복원본의 행 수가 정확히 일치했고, 복원은 오류 없이(exit code 0) 약 0.24초 만에 끝났다. 시험이 끝난 뒤 임시 컨테이너는 삭제했고 운영 컨테이너 3개는 시험 시작 전과 동일하게 계속 실행 중이다.
 
+**개인정보 주의:** 이 덤프에는 `guardians`(보호자), `therapist_links`(치료사 연결), `cases`(아동 케이스) 등 개인정보로 취급해야 할 데이터가 포함되어 있다. 최초 실행 시 덤프 파일과 출력 디렉터리가 그룹/기타 사용자까지 읽을 수 있는 권한(디렉터리 `drwxrwxr-x`, 파일 `-rw-rw-r--`)으로 생성되는 문제가 있었고, 이는 수정 라운드 1에서 고쳤다(아래 "수정 라운드 1" 절 참고). 현재는 디렉터리 `700`, 덤프 파일 `600`으로 소유자(`milo`)만 읽을 수 있다.
+
 ## 설치 경로 이탈 사항 (컨트롤러 지시에 따른 변경)
 
 작업 브리프는 스크립트를 `/opt/nextvisit/backup/pg-backup.sh`에 설치하라고 지시했다. 그러나 이 경로는 root 소유이며 설치하려면 `sudo install -m 0750 -o milo -g milo ...`가 필요한데, 이 작업을 수행하는 에이전트는 `sudo` 비밀번호를 갖고 있지 않다. 컨트롤러 지시에 따라 대신 `milo`가 소유한 다음 경로를 사용했다.
@@ -42,6 +44,53 @@ ssh llm '/home/milo/nextvisit-backups/pg-backup.sh nextvisit-demo-postgres-1 /ho
 
 - **덤프 크기: 28,240 바이트 (약 27.6 KiB)** — 0바이트가 아닌 정상 파일.
 - 덤프 파일명의 타임스탬프는 UTC 기준 `20260916T161551Z`(= 2026-09-17 KST 01:15:51경)이다. 호스트 시스템 시각이 UTC라 브리프의 작업일(2026-09-17)과 하루 차이로 보일 수 있으나 같은 실행이다.
+- (수정 전) 이때는 디렉터리·파일 권한이 `drwxrwxr-x` / `-rw-rw-r--`였다. 아래 "수정 라운드 1"에서 `700`/`600`으로 조였다.
+
+## 수정 라운드 1 (2026-09-17, 조정자 지적 반영)
+
+조정자 리뷰에서 지적된 두 가지를 고쳤다.
+
+**중요 — 덤프 파일이 다른 로컬 계정도 읽을 수 있었다.** 최초 실행 결과 `/home/milo/nextvisit-backups/out`이 `drwxrwxr-x`, 덤프 파일이 `-rw-rw-r--`로 생성되어 호스트의 다른 비특권 계정도 보호자·아동·치료사 개인정보가 담긴 전체 논리 백업을 읽을 수 있었다. `infra/local/pg-backup.sh`에 `umask 077`을 스크립트 시작부에 추가하고, 출력 디렉터리를 매 실행마다 `chmod 700`으로 강제하며, 덤프 파일도 완성 직전에 `chmod 600`을 건 뒤 최종 파일명으로 옮기도록 고쳤다. 호스트에 이미 있던 파일도 같은 값으로 조였다:
+
+```
+ssh llm 'chmod 700 /home/milo/nextvisit-backups/out
+chmod 600 /home/milo/nextvisit-backups/out/nextvisit-20260916T161551Z.dump'
+```
+
+확인:
+
+```
+$ ssh llm 'ls -ld /home/milo/nextvisit-backups/out; ls -l /home/milo/nextvisit-backups/out/'
+drwx------ 2 milo milo 4096 Sep 16 16:21 /home/milo/nextvisit-backups/out
+-rw------- 1 milo milo 28240 Sep 16 16:15 nextvisit-20260916T161551Z.dump
+-rw------- 1 milo milo 28240 Sep 16 16:21 nextvisit-20260916T162103Z.dump
+```
+
+기존 덤프(`nextvisit-20260916T161551Z.dump`)는 권한을 조인 뒤 그대로 두었다(삭제하지 않음) — 두 파일 모두 이제 `600`이다.
+
+**경미 — 실패한 실행이 완성된 것처럼 보이는 파일을 남길 수 있었다.** 기존 스크립트는 `docker exec ... > "$out/....dump"`처럼 셸 리다이렉션으로 최종 파일명에 바로 썼다. 리다이렉션은 `pg_dump`가 시작하기 전에 파일을 먼저 만들기 때문에, `pg_dump`가 중간에 실패해도(스크립트는 `set -eu`로 비정상 종료하지만) 0바이트 또는 잘려나간 `.dump` 파일이 out 디렉터리에 남았다. 이제는 임시 이름(`.nextvisit-<타임스탬프>.dump.tmp.<PID>`)에 먼저 쓰고, `[ -s "$tmp" ]`로 비어있지 않은지 검증한 뒤에야 최종 파일명으로 `mv`한다. `trap 'rm -f "$tmp"' EXIT INT TERM`으로 성공이든 실패든 임시 파일은 남지 않는다.
+
+존재하지 않는 컨테이너 이름으로 재현 시험을 해 확인했다:
+
+```
+$ ssh llm '/home/milo/nextvisit-backups/pg-backup.sh nextvisit-nonexistent-container /home/milo/nextvisit-backups/out; echo "exit=$?"'
+Error response from daemon: No such container: nextvisit-nonexistent-container
+exit=1
+$ ssh llm 'ls -la /home/milo/nextvisit-backups/out/'
+(변화 없음 — 임시 파일도, 부분 덤프도 남지 않음)
+```
+
+**수정된 스크립트로 재실행(증거).** 운영 컨테이너에 대해 다시 한 번 백업을 실행해 새 스크립트가 처음부터 끝까지 정상 동작함을 확인했다:
+
+```
+$ ssh llm '/home/milo/nextvisit-backups/pg-backup.sh nextvisit-demo-postgres-1 /home/milo/nextvisit-backups/out'
+-rw------- 1 milo milo 28240 Sep 16 16:21 /home/milo/nextvisit-backups/out/nextvisit-20260916T162103Z.dump
+```
+
+- **새 덤프 크기: 28,240 바이트** (기존과 동일 — 운영 데이터에 변화 없음).
+- **새 덤프 권한: `-rw-------` (600)**, 별도 `chmod` 없이 스크립트가 직접 그렇게 생성함.
+- **출력 디렉터리 권한: `drwx------` (700)**.
+- shellcheck 재확인: 수정된 `infra/local/pg-backup.sh`도 경고 없이 통과(`SC2174` 경고가 있었던 `mkdir -p -m 700`은 `mkdir -p` + 별도 `chmod 700`으로 바꿔 제거함).
 
 ### 3. 복원 시험 (운영 DB는 건드리지 않음)
 
@@ -114,6 +163,7 @@ ssh llm 'docker rm -f nextvisit-restore-test'
 
 - **시점 복구(PITR)**: WAL 아카이빙을 하지 않으므로 "백업 시점"과 "장애 발생 시점" 사이의 데이터는 복구할 수 없다. 이 방식으로 되돌릴 수 있는 시점은 마지막 `pg_dump` 실행 시점뿐이다.
 - **디스크 장애 복구**: 이 시험은 같은 호스트, 같은 디스크 위에서 컨테이너만 새로 띄워 복원한 것이다. 호스트 디스크 자체가 손상되는 시나리오(볼륨 `nextvisit-demo_demo-pg` 자체가 사라지는 경우)에서 백업 파일이 같은 디스크에만 있다면 백업도 함께 유실된다. 오프사이트(원격지) 백업 보관은 이번 시험 범위가 아니며, 현재 `/home/milo/nextvisit-backups/out/`은 운영 DB와 **같은 호스트**에 있다.
+- **개인정보가 담긴 덤프가 암호화되지 않은 채 같은 디스크에 있음**: 이번 수정으로 파일 시스템 권한(디렉터리 700 / 파일 600, 소유자 `milo`만 읽기 가능)은 확보했지만, 덤프 파일 자체는 암호화되어 있지 않다. `guardians`, `cases`, `therapist_links` 등 개인정보를 포함한 평문 논리 덤프가 운영 DB와 같은 디스크에 오프사이트 사본 없이 남아 있다는 점은 변하지 않았다. `milo` 계정 자체가 뚫리거나 디스크가 통째로 유출되면 이 권한 조치만으로는 막을 수 없다.
 - **정기 백업 스케줄**: 호스트에 확인해본 결과 `milo` 계정에는 사용자 crontab이 없었고(`crontab -l` → "no crontab for milo"), 이 백업을 위한 systemd 타이머도 없다. **현재 이 백업 스크립트를 자동으로 반복 실행하는 스케줄은 존재하지 않는다.** 이번에 만든 것은 수동 실행 스크립트와 1회성 실행 증거이며, 정기 실행(cron/systemd timer 등)은 별도 작업으로 구성해야 한다.
 - **애플리케이션 정합성**: 데이터베이스 행 수 일치만 확인했고, API 서버(`nextvisit-demo-api-1`)가 복원본을 정상적으로 읽고 쓸 수 있는지, 애플리케이션 레벨 무결성(외래키 밖의 참조, 캐시 정합성 등)까지는 검증하지 않았다.
 - **대용량 데이터에서의 소요 시간**: 이번 운영 DB는 매우 작다(6개 테이블 합계 약 200행, 덤프 28KB). 실제 프로덕션 규모로 데이터가 커지면 백업/복원 소요 시간과 디스크 사용량은 이번 수치와 크게 달라질 수 있다.
