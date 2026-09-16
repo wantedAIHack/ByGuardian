@@ -23,6 +23,17 @@ cloudflared는 **Ubuntu 노트북 한 대**에서 함께 운영 중입니다(AWS
 [`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)를
 따릅니다.
 
+## 운영 상태 (2026-09-17 확인)
+
+| 항목 | 값 |
+| --- | --- |
+| 보호자 화면 | `https://app.byguardian.site`와 `https://byguardian.pages.dev` 둘 다 Cloudflare Pages `main` 빌드를 서빙합니다(200 응답 확인). 두 호스트명 사이에 리다이렉트는 없습니다 |
+| API | `https://api.byguardian.site` (Ubuntu 노트북, Cloudflare Tunnel). **단, CORS는 아직 `byguardian.pages.dev` origin만 허용합니다.** `app.byguardian.site`에서 보낸 preflight는 `403`으로 거부됩니다(`byguardian.pages.dev` origin으로 같은 요청을 보내면 `200`). 화면은 `app.byguardian.site`에서도 뜨지만 API 호출은 지금 실패합니다. 수정은 저장소 소유자가 진행 중이며 아직 끝나지 않았습니다 |
+| 배포된 FE 커밋 | `0e1614b` (`https://app.byguardian.site/build.json`의 `commit` 값) |
+| 배포된 BE 이미지 | 2026-09-14 빌드로, `main`의 `a3ff703`(2026-09-15 커밋)를 포함하지 않습니다. 운영 백엔드가 `main`보다 뒤처져 있습니다 |
+| LLM | `NEXTVISIT_LLM_ENABLED=true`이지만, 확인 시점 기준 모든 생성 시도가 `code=TIMEOUT attempts=3 elapsedMs=135025`(모델 `qwen3:4b-q4_K_M`)로 끝나 질문은 매번 템플릿 폴백으로 대체됩니다. LLM이 운영에서 질문을 성공적으로 만든 적은 아직 없습니다 |
+| 검증 근거 | [`docs/qa/2026-09-17-single-host-inventory.md`](docs/qa/2026-09-17-single-host-inventory.md), [`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](docs/superpowers/specs/2026-09-17-single-host-deployment-design.md) |
+
 > **v3 변경점**
 >
 > - 대상을 "노인 재활 전반"에서 **뇌졸중 후 통원 환자**로 좁혔습니다(§1). 관찰 항목은 "관찰 세트" 단위로 묶고 MVP는 뇌졸중 세트 하나만 출시합니다(§5).
@@ -641,9 +652,14 @@ LLM은 "무엇을 말할지"를 정하지 않고 "이미 정해진 것을 어떻
 | **Mistral Research 라이선스 모델** | 비상업 한정                                                                                                                                                                         |
 | **Qwen3.6-Plus 같은 상위 모델**    | 오픈소스로 공개되지 않고 클라우드 API로만 제공됨                                                                                                                                    |
 
-### 배포 환경 — 결정됨
+### 배포 환경 — 2026-09-10 결정, 2026-09-17 대체됨
 
-**앱과 DB는 작은 EC2에, LLM은 집 게이밍 노트북에.** GPU 인스턴스는 월 $300이 넘어 쓰지 않습니다.
+**아래 EC2 계획은 실제로 구축되지 않았고 지금은 폐기된 계획입니다.** 실제 운영은 API·PostgreSQL·
+Ollama·cloudflared가 모두 Ubuntu 노트북 한 대에서 함께 도는 형태이며, 그 결정과 근거는
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)에
+있습니다. 아래 표는 처음 계획했던 설계를 그대로 남긴 이력입니다.
+
+**앱과 DB는 작은 EC2에, LLM은 집 게이밍 노트북에.** GPU 인스턴스는 월 $300이 넘어 쓰지 않습니다. (이력 — 실제로는 미구축)
 
 | 항목                       | 선택                              | 비용                 |
 | -------------------------- | --------------------------------- | -------------------- |

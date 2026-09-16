@@ -43,16 +43,45 @@
       `down`(`--volumes` 미사용) 후 재기동 시 모델 재다운로드 없음(6초),
       포트 11434는 `127.0.0.1` 전용이며 외부 리스너 없음.
       **재부팅 복구는 아직 검증하지 않았다**(6절).
-- [ ] Cloudflare/GitHub 외부 설정 — Access 정책 구성, Tunnel 연결, 외부(EC2)
-      Access smoke, GitHub runner group을 이 저장소와 `main` 배포 workflow로
-      제한하는 작업 중 어느 것도 수행되지 않았다.
-- [ ] 자동 배포 및 백엔드 LLM 활성화 — `LLM_DEPLOY_ENABLED`와
-      `NEXTVISIT_LLM_ENABLED`는 계속 `false`이며, 둘 다 위 두 항목이 실기로
-      전부 끝난 뒤에만 켠다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** Cloudflare Access 정책 구성 —
+      Ollama가 API와 같은 물리 호스트·같은 Docker 브리지 네트워크
+      (`nextvisit-llm_default`)에서 인터넷을 거치지 않고 내부 호출로만 연결되므로
+      보호할 공개 구간이 없다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** Ollama용 공개 Tunnel
+      hostname(`llm.<도메인>`) 연결 및 외부(EC2) Access smoke — cloudflared는
+      대신 API(`api.byguardian.site`)를 터널링하도록 이미 운영 중이며, Ollama를
+      별도로 인터넷에 노출할 이유가 사라졌다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** GitHub organization
+      `llm-production` runner group을 이 저장소와 `main` 배포 workflow로
+      제한하는 작업 — 노트북을 통한 GitHub self-hosted runner 자동 배포 자체가
+      2026-09-17 단일 호스트 설계에서 범위 밖으로 빠졌으므로 runner group 제한이
+      적용될 대상이 없다.
+- [ ] 자동 배포 — `LLM_DEPLOY_ENABLED`는 계속 `absent`/`false`이며, 이 저장소를
+      통한 GitHub Actions 기반 노트북 자동 배포는 여전히 구성되지 않았다.
 
 이 오프라인 실행 전체의 명령과 결과는 위 항목에 요약돼 있다. 더 상세한 근거가
 필요하면 이 커밋들의 이력과 각 커밋 메시지의 `Claude-Session` URL을 참고한다 —
 검증 과정에서 쓰인 임시 작업 디렉터리는 저장소에 커밋되지 않는 scratch였다.
+
+## 현재 상태 — 2026-09-17 (단일 호스트 실사, 이 문서의 목표와 실제가 갈라짐)
+
+이 체크리스트는 원래 "비공개 저장소 → GitHub 조직 이전 → 제한된 runner group →
+Cloudflare Access 뒤의 Ollama"라는 목표를 전제로 작성됐다. 2026-09-17 실사
+([`docs/qa/2026-09-17-single-host-inventory.md`](../../docs/qa/2026-09-17-single-host-inventory.md))와
+그 결과를 반영한
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](../../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)는
+그 전제 자체가 바뀌었다고 기록한다. 위 세 항목을 폐기로 표시한 이유가 그것이다.
+
+**한 가지는 이 문서의 다른 전제와 어긋난다.** 위 "자동 배포 및 백엔드 LLM
+활성화" 항목은 `NEXTVISIT_LLM_ENABLED`가 "위 두 항목이 실기로 전부 끝난 뒤에만"
+켜진다고 적었지만, 실사 결과 운영 API 컨테이너(`nextvisit-demo-api-1`)에는
+이미 `NEXTVISIT_LLM_ENABLED=true`가 설정되어 있다(2026-09-17 확인:
+`docker inspect`로 이름만 조회. 이 문서·실사 문서 모두 값 자체는 다루지 않는다).
+그런데 현재 모든 생성 시도가 `code=TIMEOUT attempts=3 elapsedMs=135025`(모델
+`qwen3:4b-q4_K_M`)로 끝나 질문은 매번 템플릿 폴백으로 대체되고 있다. 즉 이
+문서가 전제한 "활성화 전 완료 조건"을 거치지 않고 값이 이미 켜졌고, 그 결과
+LLM은 운영에서 한 번도 성공적으로 질문을 만들지 못했다. 이 타임아웃의 원인
+조사와 수정은 이 문서의 범위가 아니고 후속 LLM 수정 작업이 담당한다.
 
 ## 완료 조건
 

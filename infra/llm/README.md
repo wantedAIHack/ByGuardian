@@ -1,9 +1,26 @@
 # NextVisit LLM operations
 
+**2026-09-17 live state.** The real deployment is a single Ubuntu laptop
+(SSH alias `llm`) running the API, PostgreSQL, Ollama, and cloudflared
+together; see
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](../../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md).
+Under that design, cloudflared tunnels the **API** (`api.byguardian.site`),
+not Ollama, and the API reaches Ollama over the internal Docker bridge
+network (`nextvisit-llm_default`) — never over the internet. As a
+consequence, the Cloudflare Access / public-`llm.<domain>`-hostname material
+in this file (sections below) and the GitHub organization runner group in
+`OWNER_CHECKLIST.md` describe a plan that was never built and is now
+obsolete for that reason; `OWNER_CHECKLIST.md`'s "현재 상태" section marks
+each obsolete item explicitly. The command reference below is kept for its
+still-accurate parts (Compose usage, immutable releases, macOS development)
+and as a historical record where superseded.
+
 The required image is Ollama `0.33.3`; Docker Compose v2.24.4 or later is
-required. The default model is `qwen3:4b-q4_K_M`
-with a 2,048-token context. The named volume `nextvisit-llm-ollama-data`
-survives container replacement.
+required. The default model is `qwen3:4b-q4_K_M`. The Compose default context
+is 2,048 tokens, but the live host runs with `OLLAMA_CONTEXT_LENGTH=8192`
+(see `OWNER_CHECKLIST.md`'s 2026-09-15 entry) because the model needs about
+2,500 tokens of thinking budget before it can answer. The named volume
+`nextvisit-llm-ollama-data` survives container replacement.
 
 The repository owner's post-merge setup, hardware acceptance, activation, and
 rollback checklist is [`OWNER_CHECKLIST.md`](./OWNER_CHECKLIST.md). Complete it
