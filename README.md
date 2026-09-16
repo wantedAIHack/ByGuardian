@@ -17,10 +17,10 @@
 - `infra/llm/` — Ollama CPU/GPU, 모델 초기화, Tunnel, smoke와 배포 보조 구성을 포함합니다.
 
 보호자는 홈에서 시작해 온보딩 또는 이어받기를 거친 뒤, 주간 기록·전체 궤적·진료 준비 카드·설정을
-사용합니다. 치료사용 요약은 보호자 UI와 분리된 읽기 전용 화면입니다. 현재 이 구현은 **외부에
-적용·배포되지 않았습니다**. 외부 호스트명과 배포 설정은 아직 소유자가 승인한 보호된 배포 설정으로
-넣어야 하며, 승인된 전체 경계와 절차는
-[`docs/superpowers/specs/2026-09-10-full-service-deployment-design.md`](docs/superpowers/specs/2026-09-10-full-service-deployment-design.md)를
+사용합니다. 치료사용 요약은 보호자 UI와 분리된 읽기 전용 화면입니다. 현재 API·PostgreSQL·Ollama·
+cloudflared는 **Ubuntu 노트북 한 대**에서 함께 운영 중입니다(AWS EC2는 구축되지 않았습니다).
+실제 운영 경계와 완료 조건은
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)를
 따릅니다.
 
 > **v3 변경점**

@@ -1,6 +1,6 @@
 # 백엔드 — 구현된 것
 
-2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. Ubuntu/NVIDIA 실기 검증과 외부 배포 활성화는 장비·소유자 설정 준비 뒤 남습니다.
+2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. 현재 API·PostgreSQL·Ollama·cloudflared는 실제 Ubuntu/NVIDIA 노트북 한 대에서 운영 중입니다(2026-09-17 실사: `../docs/qa/2026-09-17-single-host-inventory.md`).
 
 이 문서는 코드를 검토하려는 사람을 위한 것입니다. 제품이 무엇이고 왜 이렇게 설계했는지는 최상위 `README.md`(제품 스펙)에 있고, 이 문서는 **그 스펙이 코드의 어디에 어떻게 들어갔는지**만 다룹니다.
 
@@ -9,7 +9,7 @@
 | `../README.md` | 제품 스펙. 무엇을 만들고 무엇을 안 만드는가. 충돌하면 이 문서가 이깁니다 |
 | `../frontend/README.md` | React PWA 실행, 환경변수, 화면·테스트 지도 |
 | `../docs/superpowers/specs/2026-09-05-api-design.md` | API 계약. 데이터·주차 규칙·엔드포인트 |
-| `../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정 |
+| `../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정(단일 호스트 기준) |
 | `../docs/superpowers/specs/2026-09-07-llm-server-design.md` | LLM, Docker, Tunnel, CI/CD의 승인된 계약 |
 | `../infra/llm/README.md` | macOS CPU 실행과 향후 Ubuntu/NVIDIA 운영 절차 |
 | `../docs/superpowers/plans/2026-09-06-api-followups.md` | 다음 계획이 알아야 할 것 |

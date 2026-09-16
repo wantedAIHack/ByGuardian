@@ -29,4 +29,4 @@ Production API: VITE_API_BASE is the owner-approved https://api subdomain
 - [제품과 실제 통합 상태](../README.md)
 - [프론트엔드 설계](../docs/superpowers/specs/2026-09-06-frontend-design.md)
 - [API 설계](../docs/superpowers/specs/2026-09-05-api-design.md)
-- [전체 서비스 배포 설계](../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md)
+- [단일 호스트 배포 설계](../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)
