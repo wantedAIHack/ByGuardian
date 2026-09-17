@@ -1406,7 +1406,7 @@ git commit -m "feat: synthesize visit questions from caregiver notes instead of 
 - Consumes: `QuestionCacheBody.Q.originOrDefault()/basisOrEmpty()`, `SynthesisInputAssembler.noteLines(...)` (Task 2, 5)
 - Produces:
   - `record ConfirmedItem(String id, String sentence, String origin, boolean edited, String type, List<String> items, QuestionCacheBody.SignalRef signal, QuestionCacheBody.Basis basis)` + `static ConfirmedItem caregiver(String id, String sentence)`
-  - `QuestionListService.visible(CaseEntity, QuestionCacheBody)` → `List<ConfirmedItem>`; 캐시 항목 id는 `"q" + rank + "-" + hex(NFC sentence hashCode)`, 추가 질문은 `"x" + (i+1) + "-" + hex(...)`, 확정 항목은 `"c" + n`
+  - `QuestionListService.visible(CaseEntity, QuestionCacheBody)` → `List<ConfirmedItem>`; 캐시 항목 id는 `"q" + rank + "-" + hex(NFC sentence hashCode)`, 추가 질문은 `"x" + (i+1) + "-" + hex(...)`, 새 확정 항목은 불투명한 `"c-" + UUID`, 기존 확정 항목은 편집·순서 변경 뒤에도 id를 유지한다
   - `boolean suggestionAvailable(CaseEntity, Optional<QuestionCache>)`, `static String generationStatus(Optional<QuestionCache>)`
   - `void save(AuthContext, List<SaveQuestionsRequest.Item>)`, `void regenerate(AuthContext)`, `void replaceCaregiver(CaseEntity, List<String>)`
   - `PrepCardDto` 끝에 `List<Item> items, String generationStatus, boolean edited, boolean suggestionAvailable`
@@ -1415,6 +1415,8 @@ git commit -m "feat: synthesize visit questions from caregiver notes instead of 
   - `POST /me/prep-card/regenerate` → `PrepCardDto`
 
 항목 id에 문장 해시를 넣는 이유: 보호자가 편집하는 사이 정리안이 완성돼 캐시가 바뀌면, 옛 id가 새 질문의 근거를 잘못 이어받는다. 문장이 달라지면 id도 달라지므로 옛 id는 맞지 않고 "직접 적은 질문"으로 저장된다(근거를 지어내지 않는다).
+
+확정 항목 id는 위치 번호가 아니라 근거 연결 키다. 최초 확정 때만 `c-UUID`를 발급하고, 이미 확정된 항목은 삭제·순서 변경·문장 편집 뒤에도 같은 id를 유지한다. 지워진 id는 다시 쓰지 않으며, 옛 추가 질문 API가 교체하는 보호자 항목도 새 id를 받는다.
 
 - [x] **Step 1: 실패하는 테스트 작성** (`PrepCardControllerTest`에 추가)
 
@@ -1708,16 +1710,22 @@ public class QuestionListService {
         for (ConfirmedItem item : visible(kase, cache)) {
             current.put(item.id(), item);
         }
+        boolean wasConfirmed = kase.getConfirmedQuestions() != null;
         List<ConfirmedItem> saved = new ArrayList<>();
-        int n = 1;
         for (SaveQuestionsRequest.Item item : given) {
             String sentence = item.sentence().strip();
-            String id = "c" + n++;
             ConfirmedItem base = item.id() == null ? null : current.get(item.id());
-            if (base == null || base.isCaregiver()) {
-                saved.add(ConfirmedItem.caregiver(id, sentence));
+            if (base == null) {
+                saved.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
+            } else if (!wasConfirmed && base.isCaregiver()) {
+                saved.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
+            } else if (!wasConfirmed) {
+                saved.add(new ConfirmedItem(newConfirmedId(), sentence, base.origin(),
+                    !sentence.equals(base.sentence()), base.type(), base.items(), base.signal(), base.basis()));
+            } else if (base.isCaregiver()) {
+                saved.add(ConfirmedItem.caregiver(base.id(), sentence));
             } else {
-                saved.add(new ConfirmedItem(id, sentence, base.origin(),
+                saved.add(new ConfirmedItem(base.id(), sentence, base.origin(),
                     base.edited() || !sentence.equals(base.sentence()),
                     base.type(), base.items(), base.signal(), base.basis()));
             }
@@ -1748,9 +1756,8 @@ public class QuestionListService {
     /** 옛 추가 질문 API 호환: 확정 목록이 있으면 그 안의 보호자 작성 질문만 바꾼다. */
     public void replaceCaregiver(CaseEntity kase, List<String> sentences) {
         List<ConfirmedItem> kept = new ArrayList<>(confirmed(kase).stream().filter(i -> !i.isCaregiver()).toList());
-        int n = kept.size() + 1;
         for (String sentence : sentences) {
-            kept.add(ConfirmedItem.caregiver("c" + n++, sentence));
+            kept.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
         }
         kase.confirmQuestions(json.toJson(kept), kase.getConfirmedAt());
     }

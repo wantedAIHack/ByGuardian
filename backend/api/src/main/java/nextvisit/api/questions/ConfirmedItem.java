@@ -15,8 +15,4 @@ public record ConfirmedItem(String id, String sentence, String origin, boolean e
     public boolean isCaregiver() {
         return QuestionCacheBody.ORIGIN_CAREGIVER.equals(origin);
     }
-
-    public ConfirmedItem withId(String replacementId) {
-        return new ConfirmedItem(replacementId, sentence, origin, edited, type, items, signal, basis);
-    }
 }

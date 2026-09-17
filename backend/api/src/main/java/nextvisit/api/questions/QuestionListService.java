@@ -5,9 +5,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import nextvisit.api.auth.AuthContext;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
@@ -82,16 +85,22 @@ public class QuestionListService {
         for (ConfirmedItem item : visible(kase, cache)) {
             current.put(item.id(), item);
         }
+        boolean wasConfirmed = kase.getConfirmedQuestions() != null;
         List<ConfirmedItem> saved = new ArrayList<>();
-        int n = 1;
         for (SaveQuestionsRequest.Item item : given) {
             String sentence = item.sentence().strip();
-            String id = "c" + n++;
             ConfirmedItem base = item.id() == null ? null : current.get(item.id());
-            if (base == null || base.isCaregiver()) {
-                saved.add(ConfirmedItem.caregiver(id, sentence));
+            if (base == null) {
+                saved.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
+            } else if (!wasConfirmed && base.isCaregiver()) {
+                saved.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
+            } else if (!wasConfirmed) {
+                saved.add(new ConfirmedItem(newConfirmedId(), sentence, base.origin(),
+                    !sentence.equals(base.sentence()), base.type(), base.items(), base.signal(), base.basis()));
+            } else if (base.isCaregiver()) {
+                saved.add(ConfirmedItem.caregiver(base.id(), sentence));
             } else {
-                saved.add(new ConfirmedItem(id, sentence, base.origin(),
+                saved.add(new ConfirmedItem(base.id(), sentence, base.origin(),
                     base.edited() || !sentence.equals(base.sentence()),
                     base.type(), base.items(), base.signal(), base.basis()));
             }
@@ -125,13 +134,9 @@ public class QuestionListService {
         if (retained.size() + sentences.size() > MAX_ITEMS) {
             throw new ValidationException("질문은 " + MAX_ITEMS + "개까지입니다");
         }
-        List<ConfirmedItem> replaced = new ArrayList<>();
-        int n = 1;
-        for (ConfirmedItem item : retained) {
-            replaced.add(item.withId("c" + n++));
-        }
+        List<ConfirmedItem> replaced = new ArrayList<>(retained);
         for (String sentence : sentences) {
-            replaced.add(ConfirmedItem.caregiver("c" + n++, sentence));
+            replaced.add(ConfirmedItem.caregiver(newConfirmedId(), sentence));
         }
         kase.confirmQuestions(json.toJson(replaced), kase.getConfirmedAt());
     }
@@ -151,6 +156,7 @@ public class QuestionListService {
         if (given.size() > MAX_ITEMS) {
             throw new ValidationException("질문은 " + MAX_ITEMS + "개까지입니다");
         }
+        Set<String> ids = new HashSet<>();
         for (SaveQuestionsRequest.Item item : given) {
             if (item == null || item.sentence() == null || item.sentence().isBlank()) {
                 throw new ValidationException("빈 질문은 넣을 수 없습니다");
@@ -158,7 +164,14 @@ public class QuestionListService {
             if (item.sentence().strip().length() > MAX_LENGTH) {
                 throw new ValidationException("질문은 " + MAX_LENGTH + "자까지입니다");
             }
+            if (item.id() != null && !ids.add(item.id())) {
+                throw new ValidationException("같은 질문을 두 번 넣을 수 없습니다");
+            }
         }
+    }
+
+    private static String newConfirmedId() {
+        return "c-" + UUID.randomUUID();
     }
 
     static String stableId(String prefix, String sentence) {

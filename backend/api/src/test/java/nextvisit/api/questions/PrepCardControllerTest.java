@@ -210,7 +210,7 @@ class PrepCardControllerTest {
     }
 
     @Test
-    void savingValidatesCountBlankLengthAndNullItems() throws Exception {
+    void savingValidatesCountBlankLengthNullItemsAndDuplicateIds() throws Exception {
         Onboarded o = seeded();
         List<Object> nine = new ArrayList<>();
         for (int i = 0; i < 9; i++) { nine.add(null); nine.add("질문 " + i + " 괜찮을까요?"); }
@@ -223,6 +223,11 @@ class PrepCardControllerTest {
         List<Object> nullItem = new ArrayList<>();
         nullItem.add(null);
         mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", nullItem)))
+            .andExpect(status().isBadRequest());
+        String knownId = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn())
+            .get("items").get(0).get("id").asText();
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(knownId, "첫 질문", knownId, "두 번째 질문"))))
             .andExpect(status().isBadRequest());
     }
 
@@ -251,11 +256,16 @@ class PrepCardControllerTest {
     }
 
     @Test
-    void extraEndpointReplacesCaregiverItemsWhenAListIsConfirmed() throws Exception {
+    void extraEndpointPreservesRetainedIdentityAndReplacesCaregiverItemsWhenAListIsConfirmed() throws Exception {
         Onboarded o = seeded();
         JsonNode before = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
-        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items",
-            saveBody(before.get(0).get("id").asText(), before.get(0).get("sentence").asText(), null, "옛 질문인데 괜찮을까요?"))));
+        JsonNode confirmed = json(mapper, mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items",
+            saveBody(before.get(0).get("id").asText(), before.get(0).get("sentence").asText(), null, "옛 질문인데 괜찮을까요?"))))
+            .andExpect(status().isOk()).andReturn()).get("items");
+        String retainedId = confirmed.get(0).get("id").asText();
+        String removedCaregiverId = confirmed.get(1).get("id").asText();
+        assertTrue(retainedId.startsWith("c-"));
+        assertTrue(removedCaregiverId.startsWith("c-"));
 
         mvc.perform(putJson(o.token(), "/me/prep-card/extra", mapper, Map.of("questions", List.of("새 질문인데 괜찮을까요?"))))
             .andExpect(status().isOk());
@@ -264,8 +274,34 @@ class PrepCardControllerTest {
         assertEquals(2, items.size());
         assertEquals("TEMPLATE", items.get(0).get("origin").asText());
         assertEquals("새 질문인데 괜찮을까요?", items.get(1).get("sentence").asText());
-        assertEquals("c1", items.get(0).get("id").asText());
-        assertEquals("c2", items.get(1).get("id").asText());
+        assertEquals(retainedId, items.get(0).get("id").asText());
+        assertTrue(items.get(1).get("id").asText().startsWith("c-"));
+        assertFalse(removedCaregiverId.equals(items.get(1).get("id").asText()));
+    }
+
+    @Test
+    void removedConfirmedIdCannotInheritBasisAfterReorder() throws Exception {
+        Onboarded o = seeded();
+        JsonNode before = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
+        JsonNode confirmed = json(mapper, mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(before.get(0).get("id").asText(), before.get(0).get("sentence").asText(),
+                before.get(1).get("id").asText(), before.get(1).get("sentence").asText()))))
+            .andExpect(status().isOk()).andReturn()).get("items");
+        String removedId = confirmed.get(0).get("id").asText();
+        String retainedId = confirmed.get(1).get("id").asText();
+
+        JsonNode reordered = json(mapper, mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(retainedId, confirmed.get(1).get("sentence").asText()))))
+            .andExpect(status().isOk()).andReturn()).get("items");
+        assertEquals(retainedId, reordered.get(0).get("id").asText());
+
+        JsonNode stale = json(mapper, mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(removedId, "오래된 질문인데 괜찮을까요?"))))
+            .andExpect(status().isOk()).andReturn()).get("items").get(0);
+        assertEquals("CAREGIVER", stale.get("origin").asText());
+        assertTrue(stale.get("id").asText().startsWith("c-"));
+        assertFalse(removedId.equals(stale.get("id").asText()));
+        assertEquals(0, stale.get("basis").get("evidence").get("items").size());
     }
 
     @Test
