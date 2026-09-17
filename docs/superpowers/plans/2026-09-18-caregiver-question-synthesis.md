@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 1 완료
-- **다음 할 일:** Task 2
+- **현재 위치:** Task 2 완료
+- **다음 할 일:** Task 3
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -241,7 +241,7 @@ git commit -m "refactor: send one system and one user message and make reasoning
   - `static List<SynthesisInput.NoteLine> SynthesisInputAssembler.noteLines(int week, SnapshotBody body)`
   - `static boolean SynthesisInputAssembler.hasNote(SnapshotBody body)`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 package nextvisit.api.llm;
@@ -332,12 +332,12 @@ class SynthesisInputAssemblerTest {
 
 주의: 이 Task 시점의 `QuestionCacheBody.Q`는 7개 인자다. Task 5에서 9개로 늘어나면 `template` 도우미를 `QuestionCacheBody.Q.template(...)` 호출로 바꾼다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.SynthesisInputAssemblerTest"`
 Expected: 컴파일 실패 — `SynthesisInputAssembler`가 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `SynthesisInput.java`:
 
@@ -483,12 +483,12 @@ public class SynthesisInputAssembler {
 }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.SynthesisInputAssemblerTest"`
 Expected: PASS (5 tests)
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add backend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md
