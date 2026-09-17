@@ -74,6 +74,24 @@ class QuestionOutputGuardTest {
             new QuestionOutputGuard.Rewrite(3, "걷기를 3주 중 2주 지켜봤습니다. 어떻게 보시나요?"));
     }
 
+    /**
+     * 2026-09-17 주간 기록 수정 재현에서 사고 켠 qwen3가 실제로 낸 출력. 결합은 했지만 마침표를 남겼다.
+     * 수락률을 올리려고 이 형태를 통과시키지 않는다 — 원인은 요청 쪽에서 고쳤다.
+     */
+    @Test
+    void rejectsJoinThatKeepsTheSentenceBoundaryPeriod() {
+        List<QuestionCacheBody.Q> input = List.of(
+            question(1, "일어설 때 얼굴을 찡그리시는 걸 4주 중 2주 봤습니다. 통증일 수 있을까요?"));
+        String content = """
+            {"questions":[{"rank":1,"sentence":"일어설 때 얼굴을 찡그리시는 걸 4주 중 2주 봤는데. 통증일 수 있을까요?"}]}
+            """;
+
+        QuestionOutputGuard.Rejected rejected = assertThrows(QuestionOutputGuard.Rejected.class,
+            () -> guard.validate(input, content));
+
+        assertThat(rejected.rule()).isEqualTo(QuestionOutputGuard.Rule.SURFACE_REWRITE);
+    }
+
     @Test
     void rejectsMedicationProposalThatOnlyPreservesTheTemplateNumbers() {
         List<QuestionCacheBody.Q> input = List.of(

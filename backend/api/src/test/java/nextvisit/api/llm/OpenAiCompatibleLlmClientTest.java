@@ -64,6 +64,37 @@ class OpenAiCompatibleLlmClientTest {
         server.verify();
     }
 
+    /**
+     * 2026-09-17 운영 재현: qwen3의 사고 과정이 표면 결합을 잘못 적용하거나(SURFACE_REWRITE)
+     * 같은 판단을 반복하다 max_tokens=3000을 다 써서 빈 content(EMPTY_CONTENT)를 냈다.
+     * /no_think와 chat_template_kwargs는 무시됐고 Ollama OpenAI 호환 엔드포인트의
+     * reasoning_effort="none"만 사고를 껐다(reasoning 0자, 약 5초).
+     */
+    @Test
+    void disablesReasoningAndSendsTheDemonstrationBeforeTheRealInput() throws Exception {
+        server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andExpect(request -> {
+                JsonNode body = mapper.readTree(((MockClientHttpRequest) request).getBodyAsString());
+                assertThat(body.get("reasoning_effort").asText()).isEqualTo("none");
+                assertThat(body.at("/messages").size()).isEqualTo(4);
+                assertThat(body.at("/messages/0/role").asText()).isEqualTo("system");
+                assertThat(body.at("/messages/0/content").asText()).isEqualTo("system");
+                assertThat(body.at("/messages/1/role").asText()).isEqualTo("user");
+                assertThat(body.at("/messages/1/content").asText()).isEqualTo("example-user");
+                assertThat(body.at("/messages/2/role").asText()).isEqualTo("assistant");
+                assertThat(body.at("/messages/2/content").asText()).isEqualTo("example-assistant");
+                assertThat(body.at("/messages/3/role").asText()).isEqualTo("user");
+                assertThat(body.at("/messages/3/content").asText()).isEqualTo("real-user");
+            })
+            .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                MediaType.APPLICATION_JSON));
+
+        client.complete(new QuestionRewritePrompt.Prompt("system",
+            java.util.List.of(new QuestionRewritePrompt.Example("example-user", "example-assistant")),
+            "real-user"));
+        server.verify();
+    }
+
     @Test
     void sendsNoCloudflareHeaderUnlessBothValuesExist() {
         RestClient.Builder builder = RestClient.builder();
