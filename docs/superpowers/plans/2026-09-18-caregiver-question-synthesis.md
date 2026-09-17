@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 2 완료
-- **다음 할 일:** Task 3
+- **현재 위치:** Task 3 완료
+- **다음 할 일:** Task 4
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -511,7 +511,7 @@ git commit -m "feat: assemble detections and weekly caregiver notes for question
   - `enum SynthesisValidator.Rule { JSON_OBJECT, ROOT_FIELDS, QUESTIONS_ARRAY, QUESTION_COUNT, QUESTION_FIELDS, SENTENCE_LENGTH, MARKDOWN, QUESTION_MARK, FORBIDDEN_WORD, DIRECTIVE, BASIS_EMPTY, UNKNOWN_DETECTION, UNKNOWN_NOTE_WEEK, UNSUPPORTED_NUMBER, DUPLICATE }`
   - `SynthesisValidator.Rejected.rule()`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 모든 문장은 합성이다.
 
@@ -628,12 +628,12 @@ class SynthesisValidatorTest {
 
 `pom`이 아니라 Gradle이다. `junit-jupiter-params`가 없으면 `backend/api/build.gradle.kts`의 `dependencies`에 `testImplementation("org.junit.jupiter:junit-jupiter-params")`를 추가한다(Spring Boot BOM이 버전을 정한다). 먼저 `grep -rn "ParameterizedTest" backend/api/src/test | head -1`로 이미 쓰는지 확인한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.SynthesisValidatorTest"`
 Expected: 컴파일 실패 — `SynthesisValidator`가 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 package nextvisit.api.llm;
@@ -855,12 +855,12 @@ public class SynthesisValidator {
 }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.SynthesisValidatorTest"`
 Expected: PASS. 어떤 거부 사례가 다른 규칙으로 걸리면, 규칙 순서(길이 → 마크다운 → 의문형 → 금지어 → 지시형 → 근거 → 숫자 → 중복)를 바꾸지 말고 **테스트 문장**을 그 규칙만 어기도록 고친다.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add backend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md
