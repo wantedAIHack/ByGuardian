@@ -106,7 +106,14 @@ class SynthesisValidatorTest {
             Arguments.of(one(ok, "[\"D1\",\"D1\"]", "[]"), SynthesisValidator.Rule.QUESTION_FIELDS),
             Arguments.of(one(ok, "[]", "[3,3]"), SynthesisValidator.Rule.QUESTION_FIELDS),
             Arguments.of(one("오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN),
-            Arguments.of(one("오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN));
+            Arguments.of(one("오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN),
+            // Fix round 2: item 2's 때문/진통제/복용/투약/standalone-약 branches each need their own
+            // single-clause proof — the original example had two '?' and was caught by QUESTION_MARK first.
+            Arguments.of(one("어깨를 만지시는 건 굳은살 때문일까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("진통제를 드려도 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("복용 중인 것을 여쭤봐도 될까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("투약 시간을 여쭤봐도 될까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("약을 드리는 게 나을지 여쭤봐도 될까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD));
     }
 
     @ParameterizedTest
