@@ -47,6 +47,12 @@ class SynthesisValidatorTest {
         assertThat(validator.validate(input, content).questions()).hasSize(1);
     }
 
+    @Test
+    void allowsInnocentWordsThatContainStandaloneYakSubstring() {
+        String content = one("오후마다 어깨가 약간 결리시는데 어떤 점을 보면 좋을까요?", "[]", "[3]");
+        assertThat(validator.validate(input, content).questions()).hasSize(1);
+    }
+
     static Stream<Arguments> rejected() {
         String ok = "오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?";
         return Stream.of(
@@ -78,7 +84,29 @@ class SynthesisValidatorTest {
             Arguments.of("{\"questions\":["
                 + "{\"sentence\":\"" + ok + "\",\"detections\":[],\"noteWeeks\":[3]},"
                 + "{\"sentence\":\" " + ok + "\",\"detections\":[\"D1\"],\"noteWeeks\":[]}]}",
-                SynthesisValidator.Rule.DUPLICATE));
+                SynthesisValidator.Rule.DUPLICATE),
+            // Fix round 1, item 1: non-ASCII decimal digits must not slip past the ASCII-only number check.
+            Arguments.of(one("어깨를 ３주째 만지시는데 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.UNSUPPORTED_NUMBER),
+            Arguments.of(one("어깨를 ９번씩 만지시는데 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.UNSUPPORTED_NUMBER),
+            Arguments.of(one("어깨를 ٩번 만지시는데 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.UNSUPPORTED_NUMBER),
+            // Fix round 1, item 2: improvement/decline judgments the fixed FORBIDDEN list misses (ㄹ-irregular conjugations).
+            Arguments.of(one("걷기가 나빠진 것 같은데 어떻게 보시나요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("어깨는 조금 나아진 것 같은데 어떻게 보시나요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("걷기가 앞으로 좋아질지 어떻게 보시나요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            // Fix round 1, item 3: a directive/statement clause before the question mark.
+            Arguments.of(one("걷기 연습을 매일 해야 합니다. 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.QUESTION_MARK),
+            Arguments.of(one("어깨를 자주 주물러 드려야 합니다. 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.QUESTION_MARK),
+            Arguments.of(one("어깨가 아프신가요? 약을 드려야 할까요?", "[]", "[3]"), SynthesisValidator.Rule.QUESTION_MARK),
+            // Fix round 1, item 4: a mid-word space or invisible format character must not defeat the forbidden-word scan.
+            Arguments.of(one("치 료를 받아야 할까요?", "[]", "[3]"), SynthesisValidator.Rule.FORBIDDEN_WORD),
+            Arguments.of(one("진​단을 받아야 할까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN),
+            // Fix round 1, item 5: a cited week number reused as an unrelated count (not followed by 주).
+            Arguments.of(one("어깨를 3번이나 만지시는데 괜찮을까요?", "[]", "[3]"), SynthesisValidator.Rule.UNSUPPORTED_NUMBER),
+            // Fix round 1, item 6: duplicate ids/weeks, and line/paragraph separators as markdown-equivalent control characters.
+            Arguments.of(one(ok, "[\"D1\",\"D1\"]", "[]"), SynthesisValidator.Rule.QUESTION_FIELDS),
+            Arguments.of(one(ok, "[]", "[3,3]"), SynthesisValidator.Rule.QUESTION_FIELDS),
+            Arguments.of(one("오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN),
+            Arguments.of(one("오후마다 어깨를 자꾸 만지시는데 어떤 점을 보면 좋을까요?", "[]", "[3]"), SynthesisValidator.Rule.MARKDOWN));
     }
 
     @ParameterizedTest
