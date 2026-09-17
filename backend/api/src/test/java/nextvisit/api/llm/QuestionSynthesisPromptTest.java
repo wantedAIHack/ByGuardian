@@ -42,7 +42,11 @@ class QuestionSynthesisPromptTest {
             .contains("'~까요?', '~나요?', '~가요?'")
             .contains("1개에서 3개")
             .contains("둘 중 적어도 하나는 비우지 마세요")
-            .contains("{\"questions\":[{\"sentence\":\"질문?\",\"detections\":[\"D1\"],\"noteWeeks\":[3]}]}")
+            .contains("좋아졌는지 나빠졌는지 판단하지 마세요")
+            .contains("'때문', '약', '진통제', '복용'")
+            .contains("물음표를 정확히 하나만")
+            .contains("'N주' 형태로만")
+            .contains("{\"questions\":[{\"sentence\":\"오후마다 어깨를 자주 만지시는데 어떤 점을 살펴보면 좋을까요?\",\"detections\":[\"D1\"],\"noteWeeks\":[3]}]}")
             .doesNotContain("/no_think");
     }
 
