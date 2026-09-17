@@ -291,7 +291,7 @@ class QuestionAsyncIntegrationTest {
         });
     }
 
-    private String successfulRewrite(QuestionRewritePrompt.Prompt prompt,
+    private String successfulRewrite(LlmPrompt prompt,
                                      SurfaceForm surfaceForm) throws Exception {
         JsonNode input = mapper.readTree(prompt.userMessage()).get("questions");
         ObjectNode output = mapper.createObjectNode();

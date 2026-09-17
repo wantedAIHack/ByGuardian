@@ -53,6 +53,7 @@ services:
       # 예열 41.5~44.3초, 콜드 65~67.4초였고 실패해도 3회 재시도 뒤 템플릿으로
       # 돌아간다. 근거는 docs/qa/2026-09-17-llm-activation.md에 있다.
       NEXTVISIT_LLM_READ_TIMEOUT: "${NEXTVISIT_LLM_READ_TIMEOUT:-180s}"
+      NEXTVISIT_LLM_REASONING_EFFORT: "${NEXTVISIT_LLM_REASONING_EFFORT:-none}"
       NEXTVISIT_LLM_API_KEY: ollama
       SERVER_ADDRESS: 0.0.0.0
       SERVER_PORT: "8080"

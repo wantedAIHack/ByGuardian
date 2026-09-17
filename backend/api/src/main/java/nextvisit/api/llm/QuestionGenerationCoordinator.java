@@ -70,7 +70,7 @@ public class QuestionGenerationCoordinator {
             }
             attempts = attempt;
             try {
-                QuestionRewritePrompt.Prompt prompt = prompts.build(templates.questions(),
+                LlmPrompt prompt = prompts.build(templates.questions(),
                     Optional.ofNullable(retryRule));
                 String content = client.complete(prompt);
                 QuestionOutputGuard.Accepted accepted = guard.validate(templates.questions(), content);

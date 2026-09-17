@@ -30,6 +30,8 @@ class LlmConfigurationTest {
             assertThat(properties.readTimeout()).isEqualTo(Duration.ofSeconds(45));
             assertThat(properties.maxAttempts()).isEqualTo(3);
             assertThat(properties.maxOutputTokens()).isEqualTo(3000);
+            assertThat(properties.reasoningEffort()).isEqualTo("none");
+            assertThat(properties.synthesisMaxNoteChars()).isEqualTo(4000);
             assertThat(context.containsBean("llmTaskExecutor")).isFalse();
             assertThat(context).doesNotHaveBean(LlmClient.class);
             assertThat(context).doesNotHaveBean(RestClient.class);

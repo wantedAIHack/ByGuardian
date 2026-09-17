@@ -59,7 +59,7 @@ class QuestionGenerationCoordinatorTest {
         when(writer.markFailed(any(), any())).thenReturn(true);
         LlmProperties properties = new LlmProperties(true,
             URI.create("http://localhost:11434/v1"), "qwen3:4b-q8_0", "ollama", "", "",
-            Duration.ofSeconds(3), Duration.ofSeconds(45), 3, 512);
+            Duration.ofSeconds(3), Duration.ofSeconds(45), 3, 512, "none", 4000);
         coordinator = new QuestionGenerationCoordinator(caches, json, client,
             new QuestionRewritePrompt(mapper), new QuestionOutputGuard(mapper), writer, properties);
     }
@@ -78,8 +78,8 @@ class QuestionGenerationCoordinatorTest {
 
         coordinator.generate(new QuestionGenerationRequested(caseId, generationId));
 
-        ArgumentCaptor<QuestionRewritePrompt.Prompt> prompts =
-            ArgumentCaptor.forClass(QuestionRewritePrompt.Prompt.class);
+        ArgumentCaptor<LlmPrompt> prompts =
+            ArgumentCaptor.forClass(LlmPrompt.class);
         verify(client, org.mockito.Mockito.times(3)).complete(prompts.capture());
         assertThat(prompts.getAllValues().get(0).systemMessage()).doesNotContain("직전 응답");
         assertThat(prompts.getAllValues().get(1).systemMessage()).contains("QUESTION_MARK");

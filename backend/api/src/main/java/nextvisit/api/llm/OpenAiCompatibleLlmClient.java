@@ -1,5 +1,6 @@
 package nextvisit.api.llm;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -8,7 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpTimeoutException;
-import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -34,26 +34,15 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             + "/chat/completions");
     }
 
-    /**
-     * qwen3는 하이브리드 추론 모델이고 Ollama OpenAI 호환 엔드포인트는 /no_think와
-     * chat_template_kwargs를 무시한다. reasoning_effort="none"만 사고를 끈다. 사고가 켜져 있으면
-     * 표면 결합을 잘못 적용하거나 max_tokens를 사고에 다 써서 빈 content가 된다
-     * (docs/qa/2026-09-17-llm-activation.md 9절).
-     */
-    static final String REASONING_EFFORT = "none";
-
     @Override
-    public String complete(QuestionRewritePrompt.Prompt prompt) {
-        List<Message> messages = new ArrayList<>();
-        messages.add(new Message("system", prompt.systemMessage()));
-        for (QuestionRewritePrompt.Example example : prompt.examples()) {
-            messages.add(new Message("user", example.userMessage()));
-            messages.add(new Message("assistant", example.assistantMessage()));
-        }
-        messages.add(new Message("user", prompt.userMessage()));
+    public String complete(LlmPrompt prompt) {
+        // Ollama OpenAI 호환 엔드포인트에서 qwen3의 생각을 끄는 방법은 reasoning_effort="none"뿐이다
+        // (docs/qa/2026-09-17-llm-activation.md 9절). 값이 비어 있으면 필드를 보내지 않는다.
+        String effort = StringUtils.hasText(properties.reasoningEffort()) ? properties.reasoningEffort() : null;
         Request body = new Request(properties.model(), false, 0.1, 0,
-            properties.maxOutputTokens(), new ResponseFormat("json_object"),
-            REASONING_EFFORT, List.copyOf(messages));
+            properties.maxOutputTokens(), new ResponseFormat("json_object"), effort,
+            List.of(new Message("system", prompt.systemMessage()),
+                new Message("user", prompt.userMessage())));
         try {
             RestClient.RequestBodySpec request = restClient.post().uri(endpoint)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -127,6 +116,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         int seed,
         @JsonProperty("max_tokens") int maxTokens,
         @JsonProperty("response_format") ResponseFormat responseFormat,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
         @JsonProperty("reasoning_effort") String reasoningEffort,
         List<Message> messages
     ) {}

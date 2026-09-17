@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 1 시작 전
-- **다음 할 일:** Task 1
+- **현재 위치:** Task 1 완료
+- **다음 할 일:** Task 2
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -52,7 +52,7 @@
 **Interfaces:**
 - Produces: `record LlmPrompt(String systemMessage, String userMessage)`, `LlmClient.complete(LlmPrompt)`, `LlmProperties.reasoningEffort()`(String, 기본 `"none"`), `LlmProperties.synthesisMaxNoteChars()`(int, 기본 4000, 최소 500)
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `OpenAiCompatibleLlmClientTest`에서 `disablesReasoningAndSendsTheDemonstrationBeforeTheRealInput`을 지우고 아래 두 테스트로 바꾼다. `properties(...)` 도우미는 새 필드를 받게 고친다.
 
@@ -121,12 +121,12 @@
         assertThat(properties.synthesisMaxNoteChars()).isEqualTo(4000);
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.*"`
 Expected: 컴파일 실패 — `LlmPrompt`가 없고 `LlmProperties` 인자 수가 맞지 않는다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `LlmPrompt.java`:
 
@@ -208,12 +208,12 @@ public interface LlmClient {
       NEXTVISIT_LLM_REASONING_EFFORT: "${NEXTVISIT_LLM_REASONING_EFFORT:-none}"
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.*"`
 Expected: PASS
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 인수인계 칸을 "현재 위치: Task 1 완료 / 다음 할 일: Task 2"로 바꾸고 이 Task의 체크박스를 `[x]`로 바꾼다.
 
