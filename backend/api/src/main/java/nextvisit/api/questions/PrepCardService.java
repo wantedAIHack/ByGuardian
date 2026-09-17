@@ -15,6 +15,8 @@ import nextvisit.api.common.Json;
 import nextvisit.api.common.ValidationException;
 import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.engine.EngineBridge;
+import nextvisit.api.llm.SynthesisInput;
+import nextvisit.api.llm.SynthesisInputAssembler;
 import nextvisit.api.progress.AxisLabels;
 import nextvisit.api.progress.TrajectoryMapper;
 import nextvisit.api.snapshots.Snapshot;
@@ -46,16 +48,21 @@ public class PrepCardService {
     private final CaseRepository cases;
     private final SnapshotRepository snapshots;
     private final QuestionService questions;
+    private final QuestionListService list;
+    private final QuestionCacheRepository caches;
     private final EngineBridge bridge;
     private final TrajectoryMapper trajectories;
     private final WeekCalculator weeks;
     private final Json json;
 
-    public PrepCardService(CaseRepository cases, SnapshotRepository snapshots, QuestionService questions, EngineBridge bridge,
+    public PrepCardService(CaseRepository cases, SnapshotRepository snapshots, QuestionService questions,
+                           QuestionListService list, QuestionCacheRepository caches, EngineBridge bridge,
                            TrajectoryMapper trajectories, WeekCalculator weeks, Json json) {
         this.cases = cases;
         this.snapshots = snapshots;
         this.questions = questions;
+        this.list = list;
+        this.caches = caches;
         this.bridge = bridge;
         this.trajectories = trajectories;
         this.weeks = weeks;
@@ -63,25 +70,15 @@ public class PrepCardService {
     }
 
     public PrepCardDto card(AuthContext ctx) {
-        CaseEntity kase = ctx.kase();
+        CaseEntity kase = cases.findById(ctx.kase().getId()).orElseThrow();
         List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(kase.getId());
         QuestionCacheBody cache = questions.current(kase.getId()).orElseGet(() -> questions.refresh(kase.getId()));
         PipelineResult r = bridge.run(kase, snaps);
 
         List<PrepCardDto.Question> qs = new ArrayList<>();
         for (QuestionCacheBody.Q q : cache.questions()) {
-            List<PrepCardDto.EvidenceItem> items = new ArrayList<>();
-            for (String code : q.items()) {
-                Item item = ObservationSet.STROKE.item(code);
-                for (Axis axis : axesFor(q.type())) {
-                    var series = trajectories.series(snaps, code, axis);
-                    if (!series.values().isEmpty()) {
-                        items.add(new PrepCardDto.EvidenceItem(code, item.label(), axis.name(), AxisLabels.of(axis), series.values()));
-                    }
-                }
-            }
-            PrepCardDto.SignalEvidence signal = q.signal() == null ? null : signalEvidence(snaps, q.signal());
-            qs.add(new PrepCardDto.Question(q.rank(), q.type(), q.sentence(), q.source(), new PrepCardDto.Evidence(items, signal)));
+            qs.add(new PrepCardDto.Question(q.rank(), q.type(), q.sentence(), q.source(),
+                evidence(q.type(), q.items(), q.signal(), snaps)));
         }
 
         List<String> extra = Arrays.asList(json.fromJson(kase.getExtraQuestions(), String[].class));
@@ -89,8 +86,14 @@ public class PrepCardService {
         for (QuestionCacheBody.Q q : cache.questions()) {
             preferredCodes.addAll(q.items());
         }
+        Optional<QuestionCache> row = caches.findByCaseId(kase.getId());
+        List<PrepCardDto.Item> items = list.visible(kase, cache).stream()
+            .map(v -> new PrepCardDto.Item(v.id(), v.sentence(), v.origin(), v.edited(), basisOf(v, snaps)))
+            .toList();
         return new PrepCardDto(weeks.currentWeek(kase.getStartDate()), kase.getNextVisitDate(), qs, extra,
-            qs.isEmpty() ? EMPTY_MESSAGE : null, glance(r, preferredCodes));
+            qs.isEmpty() ? EMPTY_MESSAGE : null, glance(r, preferredCodes),
+            items, QuestionListService.generationStatus(row), kase.getConfirmedQuestions() != null,
+            list.suggestionAvailable(kase, row));
     }
 
     public List<String> saveExtra(AuthContext ctx, List<String> given) {
@@ -107,14 +110,22 @@ public class PrepCardService {
             }
             cleaned.add(q.trim());
         }
-        CaseEntity kase = cases.findById(ctx.kase().getId()).orElseThrow();
-        kase.setExtraQuestions(json.toJson(cleaned));
+        CaseEntity kase = cases.findByIdForQuestionRefresh(ctx.kase().getId()).orElseThrow();
+        if (kase.getConfirmedQuestions() != null) {
+            list.replaceCaregiver(kase, cleaned);
+            kase.setExtraQuestions("[]");
+        } else {
+            kase.setExtraQuestions(json.toJson(cleaned));
+        }
         cases.save(kase);
         return cleaned;
     }
 
     /** 설계 5절: 감지 종류별 근거 축. */
     static List<Axis> axesFor(String type) {
+        if (type == null) {
+            return List.of();
+        }
         return switch (type) {
             case "AID_CHANGE" -> List.of(Axis.LEVEL, Axis.AID);
             case "HAND_DISUSE" -> List.of(Axis.LEVEL, Axis.HAND);
@@ -122,6 +133,37 @@ public class PrepCardService {
             case "TIME_OF_DAY" -> List.of();
             default -> List.of(Axis.LEVEL);
         };
+    }
+
+    private PrepCardDto.Evidence evidence(String type, List<String> codes, QuestionCacheBody.SignalRef signal,
+                                          List<Snapshot> snaps) {
+        List<PrepCardDto.EvidenceItem> items = new ArrayList<>();
+        for (String code : codes) {
+            Item item = ObservationSet.STROKE.item(code);
+            for (Axis axis : axesFor(type)) {
+                var series = trajectories.series(snaps, code, axis);
+                if (!series.values().isEmpty()) {
+                    items.add(new PrepCardDto.EvidenceItem(code, item.label(), axis.name(), AxisLabels.of(axis), series.values()));
+                }
+            }
+        }
+        PrepCardDto.SignalEvidence signalEvidence = signal == null ? null : signalEvidence(snaps, signal);
+        return new PrepCardDto.Evidence(items, signalEvidence);
+    }
+
+    private PrepCardDto.ItemBasis basisOf(ConfirmedItem item, List<Snapshot> snaps) {
+        PrepCardDto.Evidence evidence = evidence(item.type(), item.items(), item.signal(), snaps);
+        Set<Integer> weeks = new HashSet<>(item.basis().noteWeeks());
+        List<PrepCardDto.NoteBasis> notes = new ArrayList<>();
+        for (Snapshot s : snaps) {
+            if (weeks.contains(s.getWeek())) {
+                for (SynthesisInput.NoteLine line : SynthesisInputAssembler.noteLines(s.getWeek(),
+                        json.fromJson(s.getBody(), SnapshotBody.class))) {
+                    notes.add(new PrepCardDto.NoteBasis(line.week(), line.timeTagLabel(), line.itemLabel(), line.text()));
+                }
+            }
+        }
+        return new PrepCardDto.ItemBasis(evidence, notes);
     }
 
     /** 최근 기록 4주 창 안에서 그 동작·종류가 관찰된 주차. 스냅샷에서 직접 센다. */

@@ -4,15 +4,19 @@ import static nextvisit.api.ApiTestSupport.getMe;
 import static nextvisit.api.ApiTestSupport.json;
 import static nextvisit.api.ApiTestSupport.onboardDefault;
 import static nextvisit.api.ApiTestSupport.putJson;
+import static nextvisit.api.ApiTestSupport.authed;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,6 +59,27 @@ class PrepCardControllerTest {
         questions.refresh(id);
         clock.advanceDays(35);
         return o;
+    }
+
+    private List<Map<String, Object>> saveBody(Object... idSentencePairs) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (int i = 0; i < idSentencePairs.length; i += 2) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", idSentencePairs[i]);
+            item.put("sentence", idSentencePairs[i + 1]);
+            items.add(item);
+        }
+        return items;
+    }
+
+    private Map<String, Object> noChangeWeek() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("noChange", true);
+        body.put("changedItems", Map.of());
+        body.put("painSignal", Map.of());
+        body.put("sleep", 1);
+        body.put("freeNote", null);
+        return body;
     }
 
     @Test
@@ -128,5 +153,142 @@ class PrepCardControllerTest {
         mvc.perform(putJson(o.token(), "/me/prep-card/extra", mapper, Map.of("questions", List.of())))
             .andExpect(status().isOk());
         assertNull(json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("extraQuestions").get(0));
+    }
+
+    @Test
+    void cardExposesItemsWithBasisAndFlags() throws Exception {
+        Onboarded o = seeded();
+        JsonNode card = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andExpect(status().isOk()).andReturn());
+
+        assertEquals("TEMPLATE_ONLY", card.get("generationStatus").asText());
+        assertFalse(card.get("edited").asBoolean());
+        assertFalse(card.get("suggestionAvailable").asBoolean());
+        JsonNode items = card.get("items");
+        assertEquals(3, items.size());
+        assertEquals("TEMPLATE", items.get(0).get("origin").asText());
+        assertTrue(items.get(0).get("id").asText().startsWith("q1-"));
+        assertEquals(card.get("questions").get(0).get("sentence").asText(), items.get(0).get("sentence").asText());
+        assertTrue(items.get(0).get("basis").get("evidence").get("items").size() > 0);
+        assertEquals(0, items.get(0).get("basis").get("notes").size());
+        assertTrue(card.get("questions").get(0).has("evidence"));
+        assertTrue(card.has("extraQuestions"));
+    }
+
+    @Test
+    void legacyExtraQuestionsAppearAsCaregiverItems() throws Exception {
+        Onboarded o = seeded();
+        mvc.perform(putJson(o.token(), "/me/prep-card/extra", mapper, Map.of("questions", List.of("밤에 자주 깨시는데 괜찮을까요?"))))
+            .andExpect(status().isOk());
+        JsonNode items = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
+
+        assertEquals(4, items.size());
+        assertEquals("CAREGIVER", items.get(3).get("origin").asText());
+        assertEquals("밤에 자주 깨시는데 괜찮을까요?", items.get(3).get("sentence").asText());
+        assertTrue(items.get(3).get("id").asText().startsWith("x1-"));
+    }
+
+    @Test
+    void savingKeepsServerBasisForKnownIdsAndMarksEdits() throws Exception {
+        Onboarded o = seeded();
+        JsonNode before = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
+        String firstId = before.get(0).get("id").asText();
+
+        JsonNode card = json(mapper, mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(firstId, "고친 첫 질문인데 괜찮을까요?", null, "직접 적은 질문인데 괜찮을까요?",
+                "q9-unknown", "모르는 id 질문인데 괜찮을까요?")))).andExpect(status().isOk()).andReturn());
+
+        assertTrue(card.get("edited").asBoolean());
+        JsonNode items = card.get("items");
+        assertEquals(3, items.size());
+        assertEquals("TEMPLATE", items.get(0).get("origin").asText());
+        assertTrue(items.get(0).get("edited").asBoolean());
+        assertEquals(before.get(0).get("basis").get("evidence"), items.get(0).get("basis").get("evidence"));
+        assertEquals("CAREGIVER", items.get(1).get("origin").asText());
+        assertEquals("CAREGIVER", items.get(2).get("origin").asText());
+        assertEquals(0, items.get(2).get("basis").get("evidence").get("items").size());
+        assertEquals(0, card.get("extraQuestions").size());
+    }
+
+    @Test
+    void savingValidatesCountBlankLengthAndNullItems() throws Exception {
+        Onboarded o = seeded();
+        List<Object> nine = new ArrayList<>();
+        for (int i = 0; i < 9; i++) { nine.add(null); nine.add("질문 " + i + " 괜찮을까요?"); }
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", saveBody(nine.toArray()))))
+            .andExpect(status().isBadRequest());
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", saveBody(null, "   "))))
+            .andExpect(status().isBadRequest());
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", saveBody(null, "가".repeat(201)))))
+            .andExpect(status().isBadRequest());
+        List<Object> nullItem = new ArrayList<>();
+        nullItem.add(null);
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", nullItem)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void confirmedListSurvivesANewWeekAndRegenerateRestoresTheSuggestion() throws Exception {
+        Onboarded o = seeded();
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper,
+            Map.of("items", saveBody(null, "직접 적은 질문인데 괜찮을까요?")))).andExpect(status().isOk());
+
+        clock.advanceSeconds(60);
+        mvc.perform(putJson(o.token(), "/me/weeks/6", mapper, noChangeWeek())).andExpect(status().isOk());
+
+        JsonNode after = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn());
+        assertEquals(1, after.get("items").size());
+        assertEquals("직접 적은 질문인데 괜찮을까요?", after.get("items").get(0).get("sentence").asText());
+        assertTrue(after.get("suggestionAvailable").asBoolean());
+
+        JsonNode regenerated = json(mapper, mvc.perform(authed(post("/me/prep-card/regenerate"), o.token()))
+            .andExpect(status().isOk()).andReturn());
+        assertFalse(regenerated.get("edited").asBoolean());
+        assertFalse(regenerated.get("suggestionAvailable").asBoolean());
+        JsonNode items = regenerated.get("items");
+        assertEquals("TEMPLATE", items.get(0).get("origin").asText());
+        assertEquals("직접 적은 질문인데 괜찮을까요?", items.get(items.size() - 1).get("sentence").asText());
+        assertEquals("CAREGIVER", items.get(items.size() - 1).get("origin").asText());
+    }
+
+    @Test
+    void extraEndpointReplacesCaregiverItemsWhenAListIsConfirmed() throws Exception {
+        Onboarded o = seeded();
+        JsonNode before = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items",
+            saveBody(before.get(0).get("id").asText(), before.get(0).get("sentence").asText(), null, "옛 질문인데 괜찮을까요?"))));
+
+        mvc.perform(putJson(o.token(), "/me/prep-card/extra", mapper, Map.of("questions", List.of("새 질문인데 괜찮을까요?"))))
+            .andExpect(status().isOk());
+
+        JsonNode items = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn()).get("items");
+        assertEquals(2, items.size());
+        assertEquals("TEMPLATE", items.get(0).get("origin").asText());
+        assertEquals("새 질문인데 괜찮을까요?", items.get(1).get("sentence").asText());
+        assertEquals("c1", items.get(0).get("id").asText());
+        assertEquals("c2", items.get(1).get("id").asText());
+    }
+
+    @Test
+    void extraEndpointRejectsACombinedConfirmedListOverEightItems() throws Exception {
+        Onboarded o = seeded();
+        List<Map<String, Object>> confirmed = new ArrayList<>();
+        for (int i = 1; i <= 8; i++) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", "c" + i);
+            item.put("sentence", "기존 질문 " + i);
+            item.put("origin", "TEMPLATE");
+            item.put("edited", false);
+            item.put("type", "AID_CHANGE");
+            item.put("items", List.of());
+            item.put("signal", null);
+            item.put("basis", Map.of("detections", List.of(), "noteWeeks", List.of()));
+            confirmed.add(item);
+        }
+        var kase = cases.findById(UUID.fromString(o.caseId())).orElseThrow();
+        kase.confirmQuestions(mapper.writeValueAsString(confirmed), clock.instant());
+        cases.saveAndFlush(kase);
+
+        mvc.perform(putJson(o.token(), "/me/prep-card/extra", mapper, Map.of("questions", List.of("추가 질문"))))
+            .andExpect(status().isBadRequest());
     }
 }

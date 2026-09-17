@@ -47,6 +47,13 @@ public class CaseEntity {
     @Column(name = "extra_questions", nullable = false)
     private String extraQuestions;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "confirmed_questions")
+    private String confirmedQuestions;
+
+    @Column(name = "confirmed_at")
+    private Instant confirmedAt;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -85,9 +92,21 @@ public class CaseEntity {
     public LocalDate getNextVisitDate() { return nextVisitDate; }
     public String getRecoveryCodeHash() { return recoveryCodeHash; }
     public String getExtraQuestions() { return extraQuestions; }
+    public String getConfirmedQuestions() { return confirmedQuestions; }
+    public Instant getConfirmedAt() { return confirmedAt; }
     public Instant getCreatedAt() { return createdAt; }
 
     public void setNextVisitDate(LocalDate nextVisitDate) { this.nextVisitDate = nextVisitDate; }
     public void setExtraQuestions(String extraQuestions) { this.extraQuestions = extraQuestions; }
     public void setRecoveryCodeHash(String recoveryCodeHash) { this.recoveryCodeHash = recoveryCodeHash; }
+
+    public void confirmQuestions(String json, Instant at) {
+        this.confirmedQuestions = json;
+        this.confirmedAt = at;
+    }
+
+    public void clearConfirmedQuestions() {
+        this.confirmedQuestions = null;
+        this.confirmedAt = null;
+    }
 }

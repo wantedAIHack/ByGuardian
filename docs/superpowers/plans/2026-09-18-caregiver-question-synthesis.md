@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 5 완료
-- **다음 할 일:** Task 6
+- **현재 위치:** Task 6 완료
+- **다음 할 일:** Task 7
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -1416,7 +1416,7 @@ git commit -m "feat: synthesize visit questions from caregiver notes instead of 
 
 항목 id에 문장 해시를 넣는 이유: 보호자가 편집하는 사이 정리안이 완성돼 캐시가 바뀌면, 옛 id가 새 질문의 근거를 잘못 이어받는다. 문장이 달라지면 id도 달라지므로 옛 id는 맞지 않고 "직접 적은 질문"으로 저장된다(근거를 지어내지 않는다).
 
-- [ ] **Step 1: 실패하는 테스트 작성** (`PrepCardControllerTest`에 추가)
+- [x] **Step 1: 실패하는 테스트 작성** (`PrepCardControllerTest`에 추가)
 
 주간 저장 본문은 기존 스냅샷 테스트의 도우미를 쓴다(`grep -rn "noChange" backend/api/src/test | head`). `seeded()`는 LLM이 꺼진 test 프로필이라 캐시는 `READY`다.
 
@@ -1544,12 +1544,12 @@ git commit -m "feat: synthesize visit questions from caregiver notes instead of 
 
 `clock.advanceSeconds`가 없으면 `MutableClock`에 추가한다(`advanceDays`와 같은 방식). `noChangeWeek()`는 기존 도우미 이름에 맞춘다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.questions.PrepCardControllerTest"`
 Expected: FAIL — `items` 필드와 새 엔드포인트가 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 마이그레이션 (PostgreSQL):
 
@@ -1852,12 +1852,12 @@ public record PrepCardDto(int week, LocalDate nextVisitDate, List<Question> ques
 
 (생성자에 `QuestionListService list` 추가, `PostMapping` import.)
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew clean test`
 Expected: 전체 PASS.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add -A backend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md

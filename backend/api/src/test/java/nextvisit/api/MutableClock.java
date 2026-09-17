@@ -22,6 +22,10 @@ public class MutableClock extends Clock {
         this.instant = instant.plusSeconds(86_400L * days);
     }
 
+    public void advanceSeconds(long seconds) {
+        this.instant = instant.plusSeconds(seconds);
+    }
+
     @Override public ZoneId getZone() { return zone; }
     @Override public Clock withZone(ZoneId z) { return new MutableClock(z, LocalDate.ofInstant(instant, z)); }
     @Override public Instant instant() { return instant; }
