@@ -33,13 +33,13 @@ README §1은 치료사 인터뷰에서 두 예시 **문장**이 "너무 좋다"
 
 - LLM은 **주차별 보호자 원문 + 규칙 엔진이 찾은 관찰 변화**를 받아, 보호자가 치료사에게 물을 **질문을 최대 3개** 정리한다.
 - 질문마다 **근거**(원문 주차, 관찰 변화 번호)를 함께 낸다. 코드 검증기가 근거와 숫자를 확인한다.
-- 평소에는 LLM 질문이 보인다. LLM이 꺼져 있거나 실패하면 지금의 **템플릿 질문**이 보인다.
+- 평소에는 LLM 질문이 보인다. LLM이 꺼져 있거나, 보호자 원문이 하나도 없거나, 실패하면 지금의 **템플릿 질문**이 보인다.
 - 보호자는 진료 준비 카드에서 질문을 **고치고, 지우고, 추가**한다. 저장하면 **확정 목록**이 된다.
 - 확정 목록이 있으면 새 기록이 와도 보이는 목록은 바뀌지 않는다. 새 정리안은 제안으로 보관하고 "다시 정리하기"로 교체한다.
 - 기존 "추가 질문" 칸은 확정 목록에 합친다.
 - 치료사 화면에는 확정 목록(없으면 현재 목록)이 **근거 주차의 원문**과 함께 나온다.
 - 정리 중에는 화면을 막지 않고 **안내 문구**만 보인다.
-- 생각 모드는 **설정값**이다. 기본값은 4.3절의 품질 비교로 정한다.
+- 생각 모드는 **설정값**이다. 기본값은 6.2절의 품질 비교로 정한다.
 - 판단 금지 경계는 그대로다. 진단, 원인 단정, 점수, 운동·치료 권유, 호전/악화 판단을 하지 않는다.
 
 ## 2. 흐름
@@ -48,7 +48,7 @@ README §1은 치료사 인터뷰에서 두 예시 **문장**이 "너무 좋다"
 PUT /me/weeks/{w}
   └ QuestionService.refresh(case)
       ├ 규칙 엔진 실행 → 템플릿 질문 캐시 저장 (화면은 여기서 바로 응답)
-      └ LLM 켜짐 → 상태 SYNTHESIS_PENDING, AFTER_COMMIT 이벤트
+      └ LLM 켜짐 + 원문 있음 → 상태 LLM_PENDING, AFTER_COMMIT 이벤트
             └ 단일 작업 스레드
                 ├ SynthesisInputAssembler: 변화 목록 + 주차별 원문 조립
                 ├ LlmClient.complete(prompt)
@@ -71,14 +71,15 @@ PUT /me/weeks/{w}
   W3 · 화장실 이용 메모: "…"
   ```
 
-- 원문 전체에 글자 수 상한을 둔다(`nextvisit.llm.synthesis.max-note-chars`, 기본 4000). 넘으면 **최근 주부터** 넣고 오래된 주를 뺀다. 뺀 주는 근거로 댈 수 없다.
+- 원문 전체에 글자 수 상한을 둔다(`nextvisit.llm.synthesis-max-note-chars`, 기본 4000). 넘으면 **최근 주부터** 넣고 오래된 주를 뺀다. 뺀 주는 근거로 댈 수 없다.
 - 원문이 하나도 없으면 LLM을 부르지 않고 템플릿 목록을 쓴다.
 - 조립은 순수 함수로 분리한다. 나중에 원문 구조화 단계(접근법 B)를 이 앞에 끼울 수 있게 하기 위해서다.
 
 ### 3.2 지시 (`QuestionSynthesisPrompt`)
 
 - 역할: 뇌졸중 후 집에서 지내는 환자의 보호자를 돕는다. 다음 진료에서 보호자가 치료사에게 **직접 물을 질문**을 정리한다.
-- 말투: 보호자가 말하는 존댓말 질문. 물음표로 끝난다.
+- 말투: 보호자가 말하는 존댓말 질문. "~까요?", "~나요?", "~가요?" 중 하나로 끝낸다(검증기의 의문형 어미 규칙과 맞춘다).
+- 호칭: 치료사를 부를 때는 "선생님"이라고 쓴다. 금지어 목록에 "치료"가 있어 "치료사"라는 단어가 거부되기 때문이다(10절 열린 결정 1).
 - 사실: 입력의 원문과 관찰 변화에 있는 것만 쓴다. 입력에 없는 숫자, 기간, 증상을 만들지 않는다.
 - 금지: 진단, 원인 단정, 점수, 운동·치료·약 권유, 좋아졌다/나빠졌다는 판단, 지시형 문장.
 - 개수: 1~3개. 서로 겹치지 않게 한다.
@@ -98,10 +99,11 @@ PUT /me/weeks/{w}
 | `QUESTION_COUNT` | 1~3개 |
 | `SENTENCE_LENGTH` | 문장 10~160자 |
 | `QUESTION_MARK` | 기존 의문형 어미 패턴(`나요|까요|가요|습니까|지요|죠`)으로 끝남 |
-| `MARKDOWN`, `DIRECTIVE` | 기존 패턴 그대로 |
+| `MARKDOWN` | 기존 패턴 그대로 |
+| `DIRECTIVE` | 기존 패턴에서 `해야`만 뺀다. "어떻게 해야 할까요?"는 보호자의 자연스러운 질문이고, "하셔야"는 금지어 목록이 이미 막는다 |
 | `FORBIDDEN_WORD` | `Templates.containsForbiddenWord` 그대로 |
 | `DUPLICATE` | NFC 정규화 후 같은 문장 없음 |
-| `BASIS_EMPTY` | `detections`와 `noteWeeks`가 둘 다 비어 있지 않음 |
+| `BASIS_EMPTY` | `detections`와 `noteWeeks` 중 적어도 하나가 비어 있지 않음 |
 | `UNKNOWN_DETECTION` | 모든 `detections`가 입력에 있는 번호 |
 | `UNKNOWN_NOTE_WEEK` | 모든 `noteWeeks`가 입력에 실제로 들어간 원문 주차 |
 | `UNSUPPORTED_NUMBER` | 문장 속 모든 숫자가 근거로 댄 변화 문장, 근거로 댄 원문, 또는 근거 주차 번호 안에 있음 |
@@ -111,8 +113,8 @@ PUT /me/weeks/{w}
 ### 3.4 모델 설정
 
 - 모델: `qwen3:4b-q4_K_M` 유지(GTX 1060 6GB에 전부 올라감).
-- 생각 모드: `nextvisit.llm.reasoning-effort` 설정값. `none`이면 요청에 `reasoning_effort:"none"`을 넣고, 비어 있으면 필드를 보내지 않는다. 기본값은 4.3절 결과로 정한다.
-- 출력 한도와 읽기 제한은 4.3절 측정으로 다시 정한다. 생각 모드를 켜면 사고 토큰까지 담을 만큼 한도를 올린다.
+- 생각 모드: `nextvisit.llm.reasoning-effort` 설정값. `none`이면 요청에 `reasoning_effort:"none"`을 넣고, 비어 있으면 필드를 보내지 않는다. 기본값은 6.2절 결과로 정한다.
+- 출력 한도와 읽기 제한은 6.2절 측정으로 다시 정한다. 생각 모드를 켜면 사고 토큰까지 담을 만큼 한도를 올린다.
 - 재시도: 기존과 같이 최대 3회.
 - 작업 스레드는 하나다. 생각 모드에서 동시에 여러 보호자가 저장하면 뒤 요청이 기다린다. 대회 규모에서는 받아들이고 한계로 기록한다.
 
@@ -125,7 +127,7 @@ LLM이 꺼져 있거나, 원문이 없거나, 3회 모두 실패하면 규칙 �
 ### 4.1 저장
 
 - `question_cache.body`의 질문 항목에 `origin`(`TEMPLATE | LLM | CAREGIVER`)과 `basis`(`detections`, `noteWeeks`)를 추가한다. 기존 `templateSentence`, `sentence`, `source`는 그대로 둔다(기존 화면 호환).
-- `question_cache.status`에 `SYNTHESIS_PENDING`, `SYNTHESIS_DONE`, `SYNTHESIS_FAILED`를 추가한다. 기존 `LLM_*` 값은 읽을 때 같은 뜻으로 해석한다.
+- `question_cache.status`는 기존 값(`READY`, `LLM_PENDING`, `LLM_DONE`, `LLM_FAILED`)을 그대로 쓴다. 새 값을 만들지 않는다.
 - `cases`에 `confirmed_questions`(JSON, null 허용)와 `confirmed_at`(시각, null 허용)을 추가한다. 마이그레이션 `V3__confirmed_questions.sql`을 `db/migration/postgresql`과 `db/migration/h2` 두 곳에 각 DB 문법으로 둔다.
 - 기존 `extra_questions`는 일괄 변환하지 않는다. 화면에서는 목록 뒤에 `CAREGIVER` 질문으로 합쳐 보여주고, 보호자가 처음 목록을 저장할 때 확정 목록으로 옮긴 뒤 비운다.
 
@@ -134,15 +136,15 @@ LLM이 꺼져 있거나, 원문이 없거나, 3회 모두 실패하면 규칙 �
 1. `confirmed_questions`가 있으면 그것.
 2. 없으면 캐시의 현재 질문 + 기존 추가 질문.
 
-`suggestionAvailable`은 확정 목록이 있고, 캐시의 `generated_at`이 `confirmed_at`보다 늦으며, 캐시 상태가 `SYNTHESIS_PENDING`이 아닐 때 참이다.
+`suggestionAvailable`은 확정 목록이 있고, 캐시의 `generated_at`이 `confirmed_at`보다 늦으며, 캐시 상태가 `LLM_PENDING`이 아닐 때 참이다.
 
 `generationStatus`는 캐시 상태에서 이렇게 정한다.
 
 | 캐시 상태 | `generationStatus` |
 | --- | --- |
-| `SYNTHESIS_PENDING`, `LLM_PENDING` | `PENDING` |
-| `SYNTHESIS_DONE`, `LLM_DONE` | `DONE` |
-| `SYNTHESIS_FAILED`, `LLM_FAILED` | `FAILED` |
+| `LLM_PENDING` | `PENDING` |
+| `LLM_DONE` | `DONE` |
+| `LLM_FAILED` | `FAILED` |
 | `READY` (LLM 꺼짐 또는 원문 없음) | `TEMPLATE_ONLY` |
 
 ### 4.3 API (기존 필드는 지우지 않는다)
@@ -156,9 +158,9 @@ LLM이 꺼져 있거나, 원문이 없거나, 3회 모두 실패하면 규칙 �
   - `id`가 지금 보이는 목록의 항목과 맞으면 그 항목의 `origin`과 `basis`를 서버가 이어받는다. 문장이 달라졌으면 항목에 `edited: true`를 기록한다.
   - `id`가 없거나 맞지 않으면 `origin: CAREGIVER`, 근거 없음으로 저장한다.
   - 클라이언트가 보낸 근거는 믿지 않는다.
-- `POST /me/prep-card/regenerate`: 확정 목록을 지워 현재 캐시를 보이게 한다. 캐시가 이미 최신 정리안이 아니면 새 정리를 시작한다.
+- `POST /me/prep-card/regenerate`: 확정 목록을 지워 현재 캐시를 보이게 한다. 확정 목록의 `CAREGIVER` 질문은 버리지 않고 추가 질문 칸으로 되돌려 새 목록 뒤에 다시 붙인다. 보호자가 고친 LLM·템플릿 질문은 새 정리안으로 바뀐다. 캐시가 확정 시각보다 새롭지 않으면 새 정리를 시작한다.
 - 기존 `PUT /me/prep-card/extra`는 남긴다. 확정 목록이 있으면 추가 질문을 확정 목록 끝에 반영한다.
-- 치료사 요약: 기존 `questions`(문자열 목록)는 보이는 목록의 문장으로 채운다. 새 `questionDetails[]`에 질문별 `noteWeeks`를 넣는다.
+- 치료사 요약: 기존 화면이 `questions`와 `extraQuestions`를 이어 붙여 보여주므로 겹치지 않게 나눈다. `questions`는 보이는 목록 중 `CAREGIVER`가 아닌 문장, `extraQuestions`는 `CAREGIVER` 문장이다. 새 `questionDetails[]`(`sentence`, `origin`, `noteWeeks`)는 보이는 목록 전체를 순서대로 담는다.
 
 ### 4.4 배포 순서
 
@@ -230,3 +232,8 @@ LLM이 꺼져 있거나, 원문이 없거나, 3회 모두 실패하면 규칙 �
 - 숫자 검사는 지어낸 숫자를 막지만, 숫자 없는 과장("매번", "항상")은 막지 못한다. 보호자 편집과 치료사 화면의 원문 근거가 그 보완이다.
 - 단일 작업 스레드라 동시 저장이 몰리면 정리가 늦어진다.
 - 실제 보호자·치료사 대상 사용성 검증은 하지 않았다.
+
+## 10. 열린 결정
+
+1. **금지어 목록과 보호자 원문.** 엔진의 금지어(`Templates.FORBIDDEN`)에는 "치료", "재활", "운동", "낙상"이 들어 있다. 제품이 스스로 권하거나 판단하는 문장을 막으려고 만든 목록이지만, 보호자가 원문에 "운동할 때", "치료 시간에"라고 적은 걱정에서 나온 질문도 함께 막힌다. 기본값은 **목록을 그대로 적용**하고, 지시문에서 "선생님" 호칭과 해당 단어 회피를 요구한다. 근거로 댄 원문에 그 단어가 실제로 있을 때만 "치료·재활·운동·낙상"을 허용할지는 제품 소유자가 정한다. "개선·악화·호전·정상·진단·점수·처방" 같은 판단 어휘는 어떤 경우에도 허용하지 않는다.
+2. **생각 모드 기본값, 출력 한도, 읽기 제한.** 6.2절 품질 비교 뒤에 정한다.
