@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 4 완료
-- **다음 할 일:** Task 5
+- **현재 위치:** Task 5 완료
+- **다음 할 일:** Task 6
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -1044,7 +1044,7 @@ git commit -m "feat: prompt the LLM to organize caregiver notes into grounded vi
   - `static QuestionCacheBody QuestionGenerationCoordinator.toBody(QuestionCacheBody templates, SynthesisValidator.Accepted accepted)`
   - 실패 코드 `NO_NOTES`(원문이 예산 안에 하나도 없을 때)
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `QuestionGenerationCoordinatorTest`를 새 생성자에 맞춰 다시 쓴다. 기존 파일의 import·`@Mock`·`OutputCaptureExtension` 구성은 그대로 두고, `setUp`과 테스트를 아래로 바꾼다.
 
@@ -1180,12 +1180,12 @@ git commit -m "feat: prompt the LLM to organize caregiver notes into grounded vi
 
 `QuestionAsyncIntegrationTest`: `successfulRewrite(QuestionRewritePrompt.Prompt ...)` 도우미를 지우고, 목 `LlmClient`가 위 `GROUNDED`와 같은 형태를 돌려주게 바꾼다. 준비 케이스는 `DemoSeedWriter`로 만드는데 시드에 자유 기록이 있으므로(`DemoSeedWriter.java`의 합성 메모) `noteWeeks`에는 **시드에 실제로 원문이 있는 주**를 넣는다. `grep -n "FreeNote" backend/api/src/main/java/nextvisit/api/demo/DemoSeedWriter.java`로 주차를 확인한다. 기대값은 캐시 `LLM_DONE`, 첫 질문 `origin=LLM`.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.llm.*" --tests "nextvisit.api.questions.QuestionServiceTest"`
 Expected: 컴파일 실패 — 새 생성자와 `Q.template`, `Basis`가 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `QuestionCacheBody.java` 전체:
 
@@ -1374,12 +1374,12 @@ git rm backend/api/src/main/java/nextvisit/api/llm/QuestionRewritePrompt.java \
 
 남은 `new QuestionCacheBody.Q(` 호출(`grep -rn "QuestionCacheBody.Q(" backend/api/src`)은 템플릿이면 `Q.template(...)`로, 아니면 끝에 `origin, basis` 두 인자를 붙인다. Task 2의 `SynthesisInputAssemblerTest.template` 도우미도 `Q.template(rank, "STALL", List.of("ambulation"), null, sentence)`로 바꾼다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew clean test`
 Expected: 전체 PASS. 실패한 테스트가 옛 `SURFACE_REWRITE`·`RANK_SET`·연결 규칙을 검사하던 것이면, 그 테스트는 이 설계가 없앤 동작이므로 지우고 커밋 메시지 본문에 지운 테스트 이름을 적는다. 그 밖의 실패는 고친다.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add -A backend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md

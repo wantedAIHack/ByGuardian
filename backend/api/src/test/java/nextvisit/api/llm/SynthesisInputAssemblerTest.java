@@ -28,7 +28,7 @@ class SynthesisInputAssemblerTest {
     }
 
     private static QuestionCacheBody.Q template(int rank, String sentence) {
-        return new QuestionCacheBody.Q(rank, "STALL", List.of("ambulation"), null, sentence, sentence, "TEMPLATE");
+        return QuestionCacheBody.Q.template(rank, "STALL", List.of("ambulation"), null, sentence);
     }
 
     @Test

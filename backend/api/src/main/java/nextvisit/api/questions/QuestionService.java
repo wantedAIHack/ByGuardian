@@ -13,7 +13,9 @@ import nextvisit.api.common.NotFoundException;
 import nextvisit.api.engine.EngineBridge;
 import nextvisit.api.llm.LlmProperties;
 import nextvisit.api.llm.QuestionGenerationRequested;
+import nextvisit.api.llm.SynthesisInputAssembler;
 import nextvisit.api.snapshots.Snapshot;
+import nextvisit.api.snapshots.SnapshotBody;
 import nextvisit.api.snapshots.SnapshotRepository;
 import nextvisit.engine.Detection;
 import nextvisit.engine.PipelineResult;
@@ -62,14 +64,15 @@ public class QuestionService {
             String template = r.sentences().get(i);
             QuestionCacheBody.SignalRef ref = d.signal() == null ? null
                 : new QuestionCacheBody.SignalRef(d.signal().action().name(), d.signal().kind().name());
-            qs.add(new QuestionCacheBody.Q(i + 1, d.type().name(), d.items(), ref, template, template, QuestionCacheBody.SOURCE_TEMPLATE));
+            qs.add(QuestionCacheBody.Q.template(i + 1, d.type().name(), d.items(), ref, template));
         }
         QuestionCacheBody body = new QuestionCacheBody(List.copyOf(qs), r.detections().size());
 
         int week = snaps.isEmpty() ? 0 : snaps.get(snaps.size() - 1).getWeek();
         String js = json.toJson(body);
         Instant now = Instant.now(clock);
-        boolean generateWithLlm = properties.enabled() && !body.questions().isEmpty();
+        // 2026-09-17 정리 설계 3.1: 보호자 원문이 하나도 없으면 LLM을 부르지 않는다.
+        boolean generateWithLlm = properties.enabled() && snaps.stream().anyMatch(this::hasNote);
         QuestionCacheStatus status = generateWithLlm
             ? QuestionCacheStatus.LLM_PENDING : QuestionCacheStatus.READY;
         UUID generationId = UUID.randomUUID();
@@ -85,6 +88,10 @@ public class QuestionService {
             events.publishEvent(new QuestionGenerationRequested(caseId, generationId));
         }
         return body;
+    }
+
+    private boolean hasNote(Snapshot snapshot) {
+        return SynthesisInputAssembler.hasNote(json.fromJson(snapshot.getBody(), SnapshotBody.class));
     }
 
     @Transactional(readOnly = true)

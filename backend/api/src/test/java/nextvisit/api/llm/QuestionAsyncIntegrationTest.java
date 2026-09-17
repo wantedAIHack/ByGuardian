@@ -35,6 +35,9 @@ import nextvisit.api.questions.QuestionCacheBody;
 import nextvisit.api.questions.QuestionCacheRepository;
 import nextvisit.api.questions.QuestionCacheStatus;
 import nextvisit.api.questions.QuestionService;
+import nextvisit.api.snapshots.Snapshot;
+import nextvisit.api.snapshots.SnapshotBody;
+import nextvisit.api.snapshots.SnapshotRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +68,7 @@ class QuestionAsyncIntegrationTest {
     @Autowired DemoSeedWriter seedWriter;
     @Autowired QuestionService questions;
     @Autowired QuestionCacheRepository caches;
+    @Autowired SnapshotRepository snapshots;
     @Autowired TransactionTemplate transactions;
     @Autowired @Qualifier("llmTaskExecutor") ThreadPoolTaskExecutor executor;
     @Autowired ApplicationEvents applicationEvents;
@@ -101,7 +105,7 @@ class QuestionAsyncIntegrationTest {
         UUID caseId = seededCase();
         CountDownLatch entered = new CountDownLatch(1);
         release.set(new CountDownLatch(1));
-        stubSuccessfulRewrite(entered);
+        stubSuccessfulSynthesis(entered);
 
         QuestionCacheBody immediate = assertTimeout(Duration.ofSeconds(1),
             () -> questions.refresh(caseId));
@@ -121,15 +125,19 @@ class QuestionAsyncIntegrationTest {
         release.get().countDown();
         awaitStatus(caseId, QuestionCacheStatus.LLM_DONE);
         assertThat(questions.current(caseId).orElseThrow().questions())
-            .allSatisfy(question -> assertThat(question.source())
-                .isEqualTo(QuestionCacheBody.SOURCE_LLM));
+            .allSatisfy(question -> {
+                assertThat(question.source()).isEqualTo(QuestionCacheBody.SOURCE_LLM);
+                assertThat(question.origin()).isEqualTo(QuestionCacheBody.ORIGIN_LLM);
+                assertThat(question.type()).isEqualTo(QuestionCacheBody.TYPE_SYNTHESIS);
+                assertThat(question.basisOrEmpty().noteWeeks()).isNotEmpty();
+            });
     }
 
     @Test
     void demoAndWeeklyHttpTransactionsReturnWhileSlowLlmRuns() throws Exception {
         CountDownLatch demoEntered = new CountDownLatch(1);
         release.set(new CountDownLatch(1));
-        stubSuccessfulRewrite(demoEntered);
+        stubSuccessfulSynthesis(demoEntered);
 
         MvcResult demo = assertTimeout(Duration.ofSeconds(1), () ->
             mvc.perform(post("/demo"))
@@ -148,7 +156,7 @@ class QuestionAsyncIntegrationTest {
         reset(client);
         CountDownLatch weeklyEntered = new CountDownLatch(1);
         release.set(new CountDownLatch(1));
-        stubSuccessfulRewrite(weeklyEntered);
+        stubSuccessfulSynthesis(weeklyEntered);
         clock.advanceDays(7);
 
         assertTimeout(Duration.ofSeconds(1), () ->
@@ -167,7 +175,7 @@ class QuestionAsyncIntegrationTest {
     void outerCommitTriggersWorkButOuterRollbackDoesNot() throws Exception {
         UUID committedCase = seededCase();
         CountDownLatch committedCall = new CountDownLatch(1);
-        stubSuccessfulRewrite(committedCall);
+        stubSuccessfulSynthesis(committedCall);
 
         transactions.executeWithoutResult(status -> {
             questions.refresh(committedCase);
@@ -179,7 +187,7 @@ class QuestionAsyncIntegrationTest {
         reset(client);
         UUID rolledBackCase = seededCase();
         CountDownLatch rolledBackCall = new CountDownLatch(1);
-        stubSuccessfulRewrite(rolledBackCall);
+        stubSuccessfulSynthesis(rolledBackCall);
         transactions.executeWithoutResult(status -> {
             questions.refresh(rolledBackCase);
             status.setRollbackOnly();
@@ -206,8 +214,8 @@ class QuestionAsyncIntegrationTest {
             if (!callRelease.await(5, TimeUnit.SECONDS)) {
                 throw new LlmClientException(LlmFailureCode.TIMEOUT);
             }
-            String response = successfulRewrite(invocation.getArgument(0),
-                call == 1 ? SurfaceForm.CONNECTED : SurfaceForm.UNCHANGED);
+            String response = synthesized(invocation.getArgument(0),
+                call == 1 ? Synthesis.NAP : Synthesis.SHOULDER);
             (call == 1 ? olderResponse : newerResponse).set(response);
             return response;
         });
@@ -246,11 +254,11 @@ class QuestionAsyncIntegrationTest {
     }
 
     @Test
-    void emptyQuestionSetStaysReadyAndMakesNoProviderCall() throws Exception {
+    void caseWithoutAnyCaregiverNoteStaysReadyAndMakesNoProviderCall() throws Exception {
         Onboarded onboarded = onboardDefault(mvc, mapper);
         UUID caseId = UUID.fromString(onboarded.caseId());
         CountDownLatch called = new CountDownLatch(1);
-        stubSuccessfulRewrite(called);
+        stubSuccessfulSynthesis(called);
 
         QuestionCacheBody body = questions.refresh(caseId);
 
@@ -263,12 +271,79 @@ class QuestionAsyncIntegrationTest {
         assertThat(called.await(300, TimeUnit.MILLISECONDS)).isFalse();
     }
 
+    /** 2026-09-17 정리 설계 3.1: 부르는 조건은 '질문이 있느냐'가 아니라 '보호자 원문이 있느냐'다. */
+    @Test
+    void questionsWithoutAnyCaregiverNoteStayReadyAndMakeNoProviderCall() throws Exception {
+        UUID caseId = seededCase();
+        stripEveryCaregiverNote(caseId);
+        CountDownLatch called = new CountDownLatch(1);
+        stubSuccessfulSynthesis(called);
+
+        QuestionCacheBody body = questions.refresh(caseId);
+
+        assertThat(body.questions()).isNotEmpty();
+        assertThat(caches.findByCaseId(caseId).orElseThrow().getStatus())
+            .isEqualTo(QuestionCacheStatus.READY);
+        assertThat(applicationEvents.stream(QuestionGenerationRequested.class)
+            .filter(event -> event.caseId().equals(caseId))
+            .count()).isZero();
+        assertThat(called.await(300, TimeUnit.MILLISECONDS)).isFalse();
+    }
+
+    @Test
+    void aCaregiverNoteWithoutAnyQuestionStillSchedulesSynthesis() throws Exception {
+        Onboarded onboarded = onboardDefault(mvc, mapper);
+        UUID caseId = UUID.fromString(onboarded.caseId());
+        CountDownLatch entered = new CountDownLatch(1);
+        release.set(new CountDownLatch(1));
+        stubSuccessfulSynthesis(entered);
+        clock.advanceDays(7);
+
+        mvc.perform(putJson(onboarded.token(), "/me/weeks/2", mapper, weeklyWithNote()))
+            .andExpect(status().isOk());
+
+        assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+        assertThat(questions.current(caseId).orElseThrow().questions()).isEmpty();
+        assertThat(caches.findByCaseId(caseId).orElseThrow().getStatus())
+            .isEqualTo(QuestionCacheStatus.LLM_PENDING);
+        assertThat(applicationEvents.stream(QuestionGenerationRequested.class)
+            .filter(event -> event.caseId().equals(caseId))
+            .count()).isEqualTo(1);
+    }
+
+    /** 시드 케이스에서 자유 기록만 지운다 — 질문은 그대로 남고 보호자 원문만 사라진다. */
+    private void stripEveryCaregiverNote(UUID caseId) {
+        transactions.executeWithoutResult(status -> {
+            for (Snapshot snapshot : snapshots.findByCaseIdOrderByWeekAsc(caseId)) {
+                SnapshotBody body;
+                try {
+                    body = mapper.readValue(snapshot.getBody(), SnapshotBody.class);
+                    if (body.freeNote() == null) {
+                        continue;
+                    }
+                    snapshot.overwrite(snapshot.getKind(), snapshot.isNoChange(), snapshot.getAuthorId(),
+                        mapper.writeValueAsString(new SnapshotBody(body.items(), body.painSignal(), body.sleep(), null)),
+                        snapshot.getRecordedAt());
+                } catch (Exception e) {
+                    throw new IllegalStateException(e);
+                }
+                snapshots.save(snapshot);
+            }
+        });
+    }
+
     private UUID seededCase() throws Exception {
         Onboarded onboarded = onboardDefault(mvc, mapper);
         UUID caseId = UUID.fromString(onboarded.caseId());
         seedWriter.write(cases.findById(caseId).orElseThrow(),
             guardians.findByCaseId(caseId).get(0));
         return caseId;
+    }
+
+    private static Map<String, Object> weeklyWithNote() {
+        Map<String, Object> body = weeklyNoChange();
+        body.put("freeNote", Map.of("text", "합성 기록: 오후에 어깨를 자꾸 만지신다", "timeTag", "AFTERNOON"));
+        return body;
     }
 
     private static Map<String, Object> weeklyNoChange() {
@@ -281,55 +356,49 @@ class QuestionAsyncIntegrationTest {
         return body;
     }
 
-    private void stubSuccessfulRewrite(CountDownLatch entered) {
+    private void stubSuccessfulSynthesis(CountDownLatch entered) {
         when(client.complete(any())).thenAnswer(invocation -> {
             entered.countDown();
             if (!release.get().await(5, TimeUnit.SECONDS)) {
                 throw new LlmClientException(LlmFailureCode.TIMEOUT);
             }
-            return successfulRewrite(invocation.getArgument(0), SurfaceForm.UNCHANGED);
+            return synthesized(invocation.getArgument(0), Synthesis.SHOULDER);
         });
     }
 
-    private String successfulRewrite(LlmPrompt prompt,
-                                     SurfaceForm surfaceForm) throws Exception {
-        JsonNode input = mapper.readTree(prompt.userMessage()).get("questions");
+    /**
+     * 정리 경로의 성공 응답을 흉내낸다. 근거는 프롬프트에 실제로 들어간 변화 id와 보호자 기록 주차에서만
+     * 고르므로, 검증기가 근거 없는 인용을 막는 규칙에 걸리지 않는다.
+     */
+    private String synthesized(LlmPrompt prompt, Synthesis variant) throws Exception {
+        JsonNode payload = mapper.readTree(prompt.userMessage());
         ObjectNode output = mapper.createObjectNode();
-        ArrayNode rewritten = output.putArray("questions");
-        for (JsonNode question : input) {
-            String template = question.get("templateSentence").asText();
-            rewritten.addObject()
-                .put("rank", question.get("rank").asInt())
-                .put("sentence", surfaceForm.rewrite(template));
+        ArrayNode questions = output.putArray("questions");
+        ObjectNode question = questions.addObject();
+        question.put("sentence", variant.sentence());
+        ArrayNode detections = question.putArray("detections");
+        if (!payload.get("detections").isEmpty()) {
+            detections.add(payload.get("detections").get(0).get("id").asText());
         }
+        ArrayNode noteWeeks = question.putArray("noteWeeks");
+        noteWeeks.add(payload.get("notes").get(0).get("week").asInt());
         return mapper.writeValueAsString(output);
     }
 
-    private enum SurfaceForm {
-        UNCHANGED {
-            @Override
-            String rewrite(String template) {
-                return template;
-            }
-        },
-        CONNECTED {
-            @Override
-            String rewrite(String template) {
-                int seumnida = template.lastIndexOf("습니다. ");
-                if (seumnida >= 0) {
-                    return template.substring(0, seumnida) + "는데 "
-                        + template.substring(seumnida + "습니다. ".length());
-                }
-                int ibnida = template.lastIndexOf("입니다. ");
-                if (ibnida >= 0) {
-                    return template.substring(0, ibnida) + "인데 "
-                        + template.substring(ibnida + "입니다. ".length());
-                }
-                throw new AssertionError("fixture template has no permitted connected ending: " + template);
-            }
-        };
+    /** 검증기를 통과하는 두 문장. 숫자를 쓰지 않아 근거 밖 숫자 규칙에 걸리지 않는다. */
+    private enum Synthesis {
+        SHOULDER("오후마다 어깨를 자꾸 만지시는데 어떤 점을 살펴보면 좋을까요?"),
+        NAP("낮잠에서 깨신 뒤 어깨를 감싸시는데 선생님께서는 어떻게 보시나요?");
 
-        abstract String rewrite(String template);
+        private final String sentence;
+
+        Synthesis(String sentence) {
+            this.sentence = sentence;
+        }
+
+        String sentence() {
+            return sentence;
+        }
     }
 
     private CountDownLatch cleanupRelease() {
