@@ -76,7 +76,7 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
   await page.goBack();
   await page.getByRole('link', { name: '진료 준비 카드 보기' }).click();
   for (const question of prep.questions) await expect(page.getByText(question.sentence, { exact: false })).toBeVisible();
-  await page.getByRole('button', { name: '이 질문의 관찰 근거' }).first().click();
+  await page.getByRole('button', { name: '이 질문의 근거' }).first().click();
   await expect(page.getByText('6주', { exact: true }).first()).toBeVisible();
 
   await page.getByRole('button', { name: '치료사에게 보여드리기', exact: true }).click();

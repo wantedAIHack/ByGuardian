@@ -31,7 +31,7 @@ cloudflared는 **Ubuntu 노트북 한 대**에서 함께 운영 중입니다(AWS
 | API | `https://api.byguardian.site` (Ubuntu 노트북, Cloudflare Tunnel). **단, CORS는 아직 `byguardian.pages.dev` origin만 허용합니다.** `app.byguardian.site`에서 보낸 preflight는 `403`으로 거부됩니다(`byguardian.pages.dev` origin으로 같은 요청을 보내면 `200`). 화면은 `app.byguardian.site`에서도 뜨지만 API 호출은 지금 실패합니다. 수정은 저장소 소유자가 진행 중이며 아직 끝나지 않았습니다 |
 | 배포된 FE 커밋 | `0e1614b` (`https://app.byguardian.site/build.json`의 `commit` 값) |
 | 배포된 BE 이미지 | 2026-09-14 빌드로, `main`의 `a3ff703`(2026-09-15 커밋)를 포함하지 않습니다. 운영 백엔드가 `main`보다 뒤처져 있습니다 |
-| LLM | `NEXTVISIT_LLM_ENABLED=true`이지만, 확인 시점 기준 모든 생성 시도가 `code=TIMEOUT attempts=3 elapsedMs=135025`(모델 `qwen3:4b-q4_K_M`)로 끝나 질문은 매번 템플릿 폴백으로 대체됩니다. LLM이 운영에서 질문을 성공적으로 만든 적은 아직 없습니다 |
+| LLM | 2026-09-17 정리 기능으로 교체 중 — 운영 반영 전 |
 | 검증 근거 | [`docs/qa/2026-09-17-single-host-inventory.md`](docs/qa/2026-09-17-single-host-inventory.md), [`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](docs/superpowers/specs/2026-09-17-single-host-deployment-design.md) |
 
 > **v3 변경점**
@@ -119,8 +119,13 @@ cloudflared는 **Ubuntu 노트북 한 대**에서 함께 운영 중입니다(AWS
 
 ### 검증된 것
 
-물리치료사 인터뷰에서 아래 두 질문을 **"이런 질문들은 너무 좋다"**고 평가했습니다.
-이 두 문장이 제품이 만들어야 할 최종 산출물의 기준입니다.
+물리치료사 인터뷰에서 좋은 평가를 받은 것은 특정 문장이 아니라 **구조**였습니다.
+보호자가 기록할 때마다 자기 생각을 남기고, 진료 때 LLM이 그 생각들을 모아
+"선생님께 무엇을 어떻게 여쭤보면 좋을지" 정리해 주는 구조입니다
+(2026-09-17 제품 소유자 정정, `docs/superpowers/specs/2026-09-17-caregiver-question-synthesis-design.md`).
+
+아래 두 문장은 규칙 엔진이 관찰 기록만으로 만드는 템플릿 질문의 예입니다.
+LLM이 꺼져 있거나 보호자 기록이 없을 때 이 형태의 질문이 보입니다.
 
 > "화장실은 혼자 가시게 됐는데 집 안에서 걷는 건 6주째 그대로입니다. 걷기는 왜 안 늘고 있을까요?"
 
@@ -603,9 +608,10 @@ v2는 "정확히 3개"였는데, 없는 질문을 지어내면 §8의 원칙이 
 
 **판정은 전부 §6·§7의 규칙 엔진이 끝냅니다. LLM은 언어만 담당합니다.**
 
-현재 구현된 첫 흐름은 규칙 엔진이 감지한 것을 **진료 질문**으로 문장화하는
-일 하나뿐입니다. LLM에는 보호자 자유 기록이 아니라 규칙 엔진이 만든
-`templateSentence`만 전달합니다.
+LLM은 **주차별 보호자 원문과 규칙 엔진이 찾은 관찰 변화**를 받아, 보호자가 선생님께 여쭤볼
+질문을 최대 3개 정리합니다. 질문마다 근거(원문 주차, 관찰 변화)를 함께 내고, 코드 검증기가
+근거·숫자·금지 표현을 확인합니다. 판정(무엇이 변했는지)은 여전히 규칙 엔진이 합니다.
+원문은 노트북의 Ollama로만 가고 로그에 남지 않습니다.
 
 아래 세 가지는 같은 LLM 경계를 재사용할 수 있는 후속 범위이며 아직 구현되지 않았습니다.
 
@@ -624,6 +630,7 @@ LLM은 "무엇을 말할지"를 정하지 않고 "이미 정해진 것을 어떻
 - **4B를 고른 이유는 GPU입니다.** 추론 서버가 GTX 1060 6GB라 8B는 4비트로 줄여도 컨텍스트까지 합치면 약 5.9GB로 경계선입니다. 4B Q8_0은 약 4.8GB로 전부 GPU에 올라가고, 8비트라 4비트 8B보다 문장 안정성이 나쁘지 않습니다
 - 이 제품에서 LLM이 하는 일이 좁아서(§8 첫 절) 4B로 충분합니다. 프롬프트가 짧으니 컨텍스트는 2K
 - Qwen3는 기본으로 "생각" 모드가 켜져 응답이 길어집니다. **질문 생성에서는 반드시 끕니다**
+  끄는 방법은 `reasoning_effort` 설정값이며(`NEXTVISIT_LLM_REASONING_EFFORT`), `/no_think`는 Ollama OpenAI 호환 엔드포인트에서 무시됩니다.
 
 ### A/B 해볼 것 (질문 생성 태스크에만)
 

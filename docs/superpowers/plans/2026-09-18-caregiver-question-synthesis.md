@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 10 완료
-- **다음 할 일:** Task 11
+- **현재 위치:** Task 11 완료
+- **다음 할 일:** Task 12
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -2640,16 +2640,16 @@ git commit -m "feat: link therapist questions to the caregiver weeks they came f
 - Modify: `README.md` (§1 "검증된 것", §8 첫 절, 운영 상태 표의 LLM 줄)
 - Modify: `docs/superpowers/specs/2026-09-05-api-design.md`, `docs/superpowers/specs/2026-09-07-llm-server-design.md` (대체 표시 한 단락)
 
-- [ ] **Step 1: 합성 UI 스펙 갱신**
+- [x] **Step 1: 합성 UI 스펙 갱신**
 
 `warm-observation.spec.ts`의 진료 준비 목 응답에 Task 9의 `base` 표본과 같은 새 필드를 넣는다. "긴 추가 질문 5개" 검사는 **편집 화면**으로 옮긴다: `질문 고치기` → 긴 합성 질문 5개를 `+ 질문 추가`로 넣고, 각 `질문 {n}` 칸의 `scrollHeight <= clientHeight + 1`(내부 세로 잘림 없음)과 페이지 가로 넘침 없음을 확인한다. 저장 요청은 `page.route`로 받아 200 카드로 응답한다.
 
-- [ ] **Step 2: 실제 통합 흐름 확인**
+- [x] **Step 2: 실제 통합 흐름 확인**
 
 Run: `bash scripts/ci/integration-e2e.sh` (Docker 필요. 꺼져 있으면 `open -a Docker` 후 데몬을 기다린다)
 Expected: 통과. `critical-flow.spec.ts`가 옛 "내가 더 여쭤보고 싶은 것" UI나 문구에 의존해 실패하면, 같은 의미의 새 UI 조작(편집 → 추가 → 저장)으로 바꾼다. 데이터·토큰·캐시 검사는 줄이지 않는다. 통합 환경은 LLM이 꺼져 있으므로 기대 출처는 `관찰에서 나온 질문`이다.
 
-- [ ] **Step 3: README 정정**
+- [x] **Step 3: README 정정**
 
 §1 "검증된 것"의 첫 두 문단(두 문장이 "너무 좋다"고 평가됐고 산출물 기준이라는 서술)을 다음으로 바꾼다. 두 예시 문장 인용은 "규칙 엔진 템플릿의 예"로 남긴다.
 
@@ -2674,7 +2674,7 @@ LLM은 **주차별 보호자 원문과 규칙 엔진이 찾은 관찰 변화**�
 
 같은 절의 "Qwen3는 기본으로 생각 모드가 켜져… 반드시 끕니다" 줄 뒤에 "끄는 방법은 `reasoning_effort` 설정값이며(`NEXTVISIT_LLM_REASONING_EFFORT`), `/no_think`는 Ollama OpenAI 호환 엔드포인트에서 무시된다"를 덧붙인다. 운영 상태 표의 LLM 줄은 Task 13에서 실측값으로 갱신하므로 여기서는 "2026-09-17 정리 기능으로 교체 중 — 운영 반영 전"으로 둔다.
 
-- [ ] **Step 4: 옛 설계서 대체 표시**
+- [x] **Step 4: 옛 설계서 대체 표시**
 
 두 설계서의 첫 제목 아래에 넣는다.
 
@@ -2682,7 +2682,7 @@ LLM은 **주차별 보호자 원문과 규칙 엔진이 찾은 관찰 변화**�
 > **LLM 입력과 검증 부분은 2026-09-17자 [보호자 기록 기반 질문 정리 설계](2026-09-17-caregiver-question-synthesis-design.md)로 대체됐다.** 보호자 원문을 LLM에 보내고, 문장 다듬기 검사 대신 근거 기반 검사를 쓴다.
 ```
 
-- [ ] **Step 5: 전체 검증 후 커밋**
+- [x] **Step 5: 전체 검증 후 커밋**
 
 Run: `npm --prefix frontend test && npm --prefix frontend run typecheck && npm --prefix frontend run build && (cd backend && ./gradlew clean test)`
 Expected: 모두 PASS.
