@@ -1,284 +1,352 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/server';
 import { PrepCard } from './PrepCard';
 import { setToken } from '../lib/api';
-import type { PrepCard as Card } from '../lib/types';
+import { QK } from '../lib/queries';
+import type { PrepCard as Card, PrepItem } from '../lib/types';
 
 const BASE = 'http://localhost:8080';
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-const full: Card = {
-  week: 6, nextVisitDate: '2026-09-08',
-  questions: [{
-    rank: 1, type: 'PLATEAU', source: 'engine',
-    sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?',
-    evidence: {
-      items: [{
-        code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
-        values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
-      }],
-      signal: null,
-    },
+const evidence = {
+  items: [{
+    code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
+    values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
   }],
-  extraQuestions: ['밤에 자주 깨시는데 괜찮은가요?'],
-  emptyMessage: null,
-  therapistGlance: ['화장실 이용 · 도움 수준 4주째 유지'],
+  signal: null,
 };
 
-// 질문도 추가 질문도 다음 진료일도 요약도 없는, 완전히 빈 상태. 고정 UI 문구
-// 밖에 남는 게 없어야 화이트리스트의 기대 문자열이 작고 안정적으로 유지된다.
-const empty: Card = {
-  week: 6, nextVisitDate: null,
-  questions: [],
-  extraQuestions: [],
-  emptyMessage: null,
-  therapistGlance: [],
-};
-
-// 통증 신호 근거(evidence.signal) 줄은 다른 어떤 표본에도 없어 커버되지 않았다.
-const withSignal: Card = {
+const base: Card = {
   week: 6, nextVisitDate: '2026-09-08',
   questions: [{
-    rank: 1, type: 'PLATEAU', source: 'engine',
-    sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?',
-    evidence: {
-      items: [{
-        code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
-        values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
-      }],
-      signal: {
-        action: 'STANDING', actionLabel: '일어설 때',
-        kind: 'GRIMACE', kindLabel: '찡그림',
-        weeks: [5, 6], window: 2,
+    rank: 1, type: 'SYNTHESIS', source: 'LLM',
+    sentence: '합성 정리 질문인데 괜찮을까요?', evidence,
+  }],
+  extraQuestions: [], emptyMessage: null,
+  therapistGlance: ['화장실 이용 · 도움 수준 4주째 유지'],
+  generationStatus: 'DONE', edited: false, suggestionAvailable: false,
+  items: [
+    {
+      id: 'q1-a', sentence: '합성 정리 질문인데 괜찮을까요?', origin: 'LLM', edited: false,
+      basis: {
+        evidence,
+        notes: [{ week: 3, timeTagLabel: '오후', itemLabel: null, text: '합성 원문 메모' }],
       },
     },
-  }],
-  extraQuestions: [],
-  emptyMessage: null,
-  therapistGlance: [],
+    {
+      id: 'x1-b', sentence: '직접 적은 합성 질문인데 괜찮을까요?', origin: 'CAREGIVER', edited: false,
+      basis: { evidence: { items: [], signal: null }, notes: [] },
+    },
+  ],
 };
+
+const noBasis = { evidence: { items: [], signal: null }, notes: [] };
+
+function item(id: string, sentence: string, origin: PrepItem['origin'] = 'CAREGIVER'): PrepItem {
+  return { id, sentence, origin, edited: false, basis: noBasis };
+}
 
 function renderIt(card: Card) {
   setToken('t');
   server.use(http.get(`${BASE}/me/prep-card`, () => HttpResponse.json(card)));
-  const qc = new QueryClient({
+  const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={qc}>
+  const view = render(
+    <QueryClientProvider client={queryClient}>
       <MemoryRouter><PrepCard /></MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, queryClient };
+}
+
+function legacyCard(): Card {
+  const {
+    items: _items,
+    generationStatus: _generationStatus,
+    edited: _edited,
+    suggestionAvailable: _suggestionAvailable,
+    ...legacy
+  } = base;
+  return { ...legacy, extraQuestions: ['밤에 자주 깨시는데 괜찮은가요?'] };
 }
 
 describe('진료 준비 카드', () => {
-  it('저장 성공 뒤 재조회가 실패해도 방금 저장한 질문을 유지한다', async () => {
-    renderIt(full);
+  it('질문을 하나의 목록에서 출처와 함께 보여준다', async () => {
+    renderIt(base);
+
+    expect(await screen.findByRole('heading', { name: '진료실에서 여쭤볼 것' })).toBeInTheDocument();
+    expect(screen.getByText('질문 1 · 기록에서 정리')).toBeInTheDocument();
+    expect(screen.getByText('질문 2 · 직접 적은 질문')).toBeInTheDocument();
+    expect(screen.getByText('합성 정리 질문인데 괜찮을까요?')).toBeInTheDocument();
+    expect(screen.getByText('직접 적은 합성 질문인데 괜찮을까요?')).toBeInTheDocument();
+  });
+
+  it('질문 안에서 보호자 원문과 관찰 근거를 펼친다', async () => {
     const user = userEvent.setup();
-    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
-    await user.clear(input);
-    await user.type(input, '새 질문');
-    server.use(
-      http.put(`${BASE}/me/prep-card/extra`, () => HttpResponse.json(['새 질문'])),
-      http.get(`${BASE}/me/prep-card`, () => new HttpResponse(null, { status: 503 })),
+    renderIt(base);
+    const articles = await screen.findAllByRole('article');
+
+    expect(within(articles[1]!).queryByRole('button', { name: '이 질문의 근거' })).not.toBeInTheDocument();
+    await user.click(within(articles[0]!).getByRole('button', { name: '이 질문의 근거' }));
+
+    expect(within(articles[0]!).getByText('3주 · 오후')).toBeInTheDocument();
+    expect(within(articles[0]!).getByText('합성 원문 메모')).toBeInTheDocument();
+    expect(within(articles[0]!).getByText('보호자 기록')).toBeInTheDocument();
+    expect(within(articles[0]!).getByText('관찰 기록')).toBeInTheDocument();
+    expect(within(articles[0]!).getByText('집 안에서 걷기 · 도움 수준')).toBeInTheDocument();
+  });
+
+  it('질문을 고치고 추가하고 지운 뒤 하나의 목록으로 저장한다', async () => {
+    const user = userEvent.setup();
+    let body: unknown;
+    const savedItems = [
+      { ...base.items![0]!, id: 'c-one', sentence: '고친 질문인데 괜찮을까요?', edited: true },
+      item('c-two', '새 질문인데 괜찮을까요?'),
+    ];
+    server.use(http.put(`${BASE}/me/prep-card/questions`, async ({ request }) => {
+      body = await request.json();
+      return HttpResponse.json({ ...base, edited: true, items: savedItems });
+    }));
+    renderIt(base);
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.clear(screen.getByLabelText('질문 1'));
+    await user.type(screen.getByLabelText('질문 1'), '고친 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '+ 질문 추가' }));
+    await user.type(screen.getByLabelText('질문 3'), '새 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '질문 2 지우기' }));
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(body).toEqual({
+      items: [
+        { id: 'q1-a', sentence: '고친 질문인데 괜찮을까요?' },
+        { id: null, sentence: '새 질문인데 괜찮을까요?' },
+      ],
+    }));
+    expect(await screen.findByText('고친 질문인데 괜찮을까요?')).toBeInTheDocument();
+    expect(screen.getByText('새 질문인데 괜찮을까요?')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('질문을 저장했습니다.');
+  });
+
+  it('저장 실패 뒤 편집한 질문을 그대로 둔다', async () => {
+    const user = userEvent.setup();
+    server.use(http.put(`${BASE}/me/prep-card/questions`, () => new HttpResponse(null, { status: 500 })));
+    renderIt(base);
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.clear(screen.getByLabelText('질문 1'));
+    await user.type(screen.getByLabelText('질문 1'), '실패해도 남는 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '질문을 저장하지 못했습니다. 입력한 내용은 그대로 있습니다. 다시 저장해 주세요.',
     );
-    await user.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
-    expect(input).toHaveValue('새 질문');
-  });
-  it('저장 응답이 늦어도 그동안 새로 쓴 질문은 덮어쓰지 않는다', async () => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    let questions = full.extraQuestions;
-    server.use(http.put(`${BASE}/me/prep-card/extra`, async ({ request }) => {
-      questions = (await request.json() as { questions: string[] }).questions;
-      await gate;
-      return HttpResponse.json(questions);
-    }));
-    renderIt(full);
-    const user = userEvent.setup();
-    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
-    await user.clear(input);
-    await user.type(input, '첫 질문');
-    await user.click(screen.getByRole('button', { name: '저장' }));
-    await user.clear(input);
-    await user.type(input, '저장 중 새로 쓴 질문');
-    let reads = 0;
-    server.use(http.get(`${BASE}/me/prep-card`, () => {
-      reads++;
-      return HttpResponse.json({ ...full, extraQuestions: questions });
-    }));
-    release();
-    await waitFor(() => expect(reads).toBeGreaterThan(0));
-    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toBeEnabled());
-    expect(input).toHaveValue('저장 중 새로 쓴 질문');
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
-    expect(questions).toEqual(['저장 중 새로 쓴 질문']);
-  });
-  it('질문 안에서 해당 근거를 펼친다', async () => {
-    renderIt(full);
-    const article = await screen.findByRole('article', { name: full.questions[0]!.sentence });
-    await userEvent.setup().click(within(article).getByRole('button', { name: '이 질문의 관찰 근거' }));
-    expect(within(article).getByText('손 잡아드림')).toBeInTheDocument();
+    expect(screen.getByLabelText('질문 1')).toHaveValue('실패해도 남는 질문인데 괜찮을까요?');
   });
 
-  it('저장 실패 후 입력을 보존하고 재시도 성공을 알린다', async () => {
-    renderIt(full);
+  it('취소하면 원래 목록으로 돌아가고 저장하지 않는다', async () => {
     const user = userEvent.setup();
-    const input = await screen.findByLabelText('여쭤보고 싶은 것 1');
-    await user.clear(input);
-    await user.type(input, '걸을 때 어떤 도움을 드릴까요?');
-    server.use(http.put(`${BASE}/me/prep-card/extra`, () => new HttpResponse(null, { status: 503 })));
-    await user.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('입력한 내용은 그대로 있습니다.');
-    expect(input).toHaveValue('걸을 때 어떤 도움을 드릴까요?');
-    server.use(
-      http.put(`${BASE}/me/prep-card/extra`, () => HttpResponse.json(['걸을 때 어떤 도움을 드릴까요?'])),
-      http.get(`${BASE}/me/prep-card`, () => HttpResponse.json({ ...full, extraQuestions: ['걸을 때 어떤 도움을 드릴까요?'] })),
+    let puts = 0;
+    server.use(http.put(`${BASE}/me/prep-card/questions`, () => {
+      puts++;
+      return HttpResponse.json(base);
+    }));
+    renderIt(base);
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.clear(screen.getByLabelText('질문 1'));
+    await user.type(screen.getByLabelText('질문 1'), '저장하지 않을 질문');
+    await user.click(screen.getByRole('button', { name: '취소' }));
+
+    expect(screen.getByText('합성 정리 질문인데 괜찮을까요?')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('저장하지 않을 질문')).not.toBeInTheDocument();
+    expect(puts).toBe(0);
+  });
+
+  it('정리 중에도 현재 질문 목록과 상태를 보여준다', async () => {
+    renderIt({ ...base, generationStatus: 'PENDING' });
+
+    expect(await screen.findByText('기록을 바탕으로 질문을 정리하고 있어요.')).toHaveAttribute('role', 'status');
+    expect(screen.getByText('합성 정리 질문인데 괜찮을까요?')).toBeInTheDocument();
+  });
+
+  it('편집 중 정리가 끝나도 입력을 보존하고 새 정리안 도착을 알린다', async () => {
+    const user = userEvent.setup();
+    const pending = { ...base, generationStatus: 'PENDING' as const };
+    const { queryClient } = renderIt(pending);
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.clear(screen.getByLabelText('질문 1'));
+    await user.type(screen.getByLabelText('질문 1'), '편집 중인 질문');
+    act(() => queryClient.setQueryData(QK.prepCard, {
+      ...base,
+      items: [item('new-server-id', '서버가 새로 정리한 질문')],
+    }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '정리안이 준비됐어요. 취소하시면 정리안을 보여드려요.',
     );
-    await user.click(screen.getByRole('button', { name: '저장' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('질문을 저장했습니다.');
-    expect(input).toHaveValue('걸을 때 어떤 도움을 드릴까요?');
-  });
-  it('질문 문장을 서버 그대로 낸다', async () => {
-    renderIt(full);
-    expect(await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?')).toBeInTheDocument();
-    expect(screen.getByText('9월 8일 진료')).toBeInTheDocument();
+    expect(screen.getByLabelText('질문 1')).toHaveValue('편집 중인 질문');
   });
 
-  it('근거는 접혀 있다가 펴진다', async () => {
+  it('새 정리안을 다시 정리해 응답 목록으로 바꾼다', async () => {
     const user = userEvent.setup();
-    renderIt(full);
-    await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
-
-    expect(screen.queryByText('손 잡아드림')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
-    expect(screen.getByText('손 잡아드림')).toBeInTheDocument();
-  });
-
-  it('질문이 없으면 빈 칸을 만들지 않고 서버 문구만 낸다', async () => {
-    renderIt({ ...full, questions: [], emptyMessage: '이번에는 특별히 여쭤볼 것이 없습니다.' });
-    expect(await screen.findByText('이번에는 특별히 여쭤볼 것이 없습니다.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '이 질문의 관찰 근거' })).not.toBeInTheDocument();
-  });
-
-  it('추가 질문을 더하고 저장한다', async () => {
-    const user = userEvent.setup();
-    let sent: any = null;
-    renderIt(full);
-    server.use(http.put(`${BASE}/me/prep-card/extra`, async ({ request }) => {
-      sent = await request.json();
-      return HttpResponse.json(['밤에 자주 깨시는데 괜찮은가요?', '약을 바꿔야 할까요?']);
+    let calls = 0;
+    const regenerated = {
+      ...base,
+      edited: false,
+      suggestionAvailable: false,
+      items: [item('regenerated', '새 기록을 반영한 질문인데 괜찮을까요?', 'LLM')],
+    };
+    server.use(http.post(`${BASE}/me/prep-card/regenerate`, () => {
+      calls++;
+      return HttpResponse.json(regenerated);
     }));
+    renderIt({ ...base, edited: true, suggestionAvailable: true });
 
-    await screen.findByText('내가 더 여쭤보고 싶은 것');
-    await user.click(screen.getByRole('button', { name: '+ 추가' }));
-    // 칸마다 순번이 붙어 있어 방금 붙은 두 번째(빈) 칸을 이름으로 바로 집을 수 있다.
-    await user.type(screen.getByLabelText('여쭤보고 싶은 것 2'), '약을 바꿔야 할까요?');
-    await user.click(screen.getByRole('button', { name: '저장' }));
+    expect(await screen.findByText('새 기록이 반영된 정리안이 있어요.')).toBeInTheDocument();
+    expect(screen.getByText('직접 적으신 질문은 그대로 남아요.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '다시 정리하기' }));
 
-    expect(sent.questions).toEqual(['밤에 자주 깨시는데 괜찮은가요?', '약을 바꿔야 할까요?']);
+    expect(await screen.findByText('새 기록을 반영한 질문인데 괜찮을까요?')).toBeInTheDocument();
+    expect(calls).toBe(1);
   });
 
-  it('추가 질문은 다섯 개까지다', async () => {
-    renderIt({ ...full, extraQuestions: ['1', '2', '3', '4', '5'] });
-    await screen.findByText('내가 더 여쭤보고 싶은 것');
-    expect(screen.queryByRole('button', { name: '+ 추가' })).not.toBeInTheDocument();
+  it('다시 정리하지 못하면 재시도 안내를 보여준다', async () => {
+    const user = userEvent.setup();
+    server.use(http.post(`${BASE}/me/prep-card/regenerate`, () => new HttpResponse(null, { status: 500 })));
+    renderIt({ ...base, edited: true, suggestionAvailable: true });
+
+    await user.click(await screen.findByRole('button', { name: '다시 정리하기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      '다시 정리하지 못했습니다. 잠시 뒤 다시 눌러 주세요.',
+    );
   });
 
-  it('진료실에서 보여드릴 요약과 링크 발급이 아래에 있다', async () => {
-    renderIt(full);
-    expect(await screen.findByText('진료실에서 보여드릴 요약')).toBeInTheDocument();
-    expect(screen.getByText('화장실 이용 · 도움 수준 4주째 유지')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '치료사에게 보여드리기' })).toBeInTheDocument();
+  it('확정 목록이 없을 때만 템플릿 질문 안내를 보여준다', async () => {
+    const first = renderIt({ ...base, generationStatus: 'TEMPLATE_ONLY', edited: false });
+    expect(await screen.findByText('관찰 기록에서 나온 질문을 보여드려요.')).toBeInTheDocument();
+    first.unmount();
+
+    renderIt({ ...base, generationStatus: 'TEMPLATE_ONLY', edited: true });
+    await screen.findByText('합성 정리 질문인데 괜찮을까요?');
+    expect(screen.queryByText('관찰 기록에서 나온 질문을 보여드려요.')).not.toBeInTheDocument();
+  });
+
+  it('질문은 여덟 개까지 편집한다', async () => {
+    const user = userEvent.setup();
+    const items = Array.from({ length: 8 }, (_, i) => item(`id-${i}`, `${i + 1}번째 질문`));
+    renderIt({ ...base, items });
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+
+    expect(screen.queryByRole('button', { name: '+ 질문 추가' })).not.toBeInTheDocument();
+    expect(screen.getByText('여덟 개까지 넣으실 수 있습니다.')).toBeInTheDocument();
+  });
+
+  it('옛 백엔드 질문과 추가 질문은 읽기 전용으로 보여준다', async () => {
+    const card = legacyCard();
+    renderIt(card);
+
+    expect(await screen.findByText(card.questions[0]!.sentence)).toBeInTheDocument();
+    expect(screen.getByText(card.extraQuestions[0]!)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '질문 고치기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
   it('판정 문구를 만들지 않는다 — 빈 상태', async () => {
-    renderIt(empty);
-    await screen.findByText('내가 더 여쭤보고 싶은 것');
-    const main = screen.getByRole('main');
+    renderIt({ ...base, nextVisitDate: null, questions: [], items: [], therapistGlance: [] });
+    await screen.findByRole('heading', { name: '진료실에서 여쭤볼 것' });
 
-    // 금지어 나열이 아니라 전체를 화이트리스트로 건다(Home.test.tsx·Trajectory.test.tsx와 같은
-    // 방식). 질문도 추가 질문도 다음 진료일도 없는 빈 상태라 화면에는 고정 UI 문구만
-    // 남아야 한다 — 서버가 보내지 않은 문장이 한 글자라도 끼어들면 이 assertion이 걸린다.
-    //
-    // 이 표본은 questions: []라 data.questions.map(...) 분기(서버가 보낸 질문 문장이
-    // 실제로 찍히는 자리)를 아예 타지 않는다 — 판정 문구가 가장 위험한 자리를 비켜간다.
-    // 질문이 있는 상태는 아래의 '질문이 있는 상태' 테스트가 별도로 건다.
-    expect(main.textContent).toBe(
-      '← 뒤로진료 준비내가 더 여쭤보고 싶은 것+ 추가치료사에게 보여드리기',
+    expect(screen.getByRole('main').textContent).toBe(
+      '← 뒤로진료 준비진료실에서 여쭤볼 것+ 질문 적기치료사에게 보여드리기',
     );
   });
 
   it('판정 문구를 만들지 않는다 — 질문이 있는 상태', async () => {
-    const user = userEvent.setup();
-    renderIt(full);
-    await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
-    const main = screen.getByRole('main');
+    renderIt(base);
+    await screen.findByRole('heading', { name: '진료실에서 여쭤볼 것' });
 
-    const q = full.questions[0]!;
-    const evItem = q.evidence.items[0]!;
-    const evValue = evItem.values[0]!;
-    const glance = full.therapistGlance[0]!;
-
-    // 표본 값에서 기대 문자열을 조립한다 — 문구를 통째로 다시 타이핑하면 오타로
-    // 스스로 속을 수 있다. '9월 8일 진료'만은 리터럴로 둔다: 위 '질문 문장을 서버
-    // 그대로 낸다' 테스트가 이미 같은 리터럴로 이 표시를 고정하고 있다.
-    //
-    // 접힌 상태: data.questions.map(...) 분기가 실제로 실행된다 — 여기가 재검토가
-    // 조작된 문구를 심어 통과시켰던 바로 그 자리다. extraQuestions의 실제 텍스트는
-    // textarea의 내용과 접근성 라벨도 함께 검증한다.
     const collapsed = [
       '← 뒤로',
       '9월 8일 진료',
-      `질문 ${q.rank}${q.sentence}`,
-      '이 질문의 관찰 근거',
-      '내가 더 여쭤보고 싶은 것',
-      '여쭤보고 싶은 것 1', full.extraQuestions[0]!,
-      '+ 추가',
+      '진료실에서 여쭤볼 것',
+      `질문 1 · 기록에서 정리${base.items![0]!.sentence}이 질문의 근거`,
+      `질문 2 · 직접 적은 질문${base.items![1]!.sentence}`,
+      '질문 고치기',
       '진료실에서 보여드릴 요약',
-      glance,
+      base.therapistGlance[0]!,
       '치료사에게 보여드리기',
     ].join('');
-    expect(main.textContent).toBe(collapsed);
-
-    // 펼친 상태: 근거(값들)도 실제 렌더 경로를 탄다 — 캐어기버가 진료실에서 실제로
-    // 펼쳐 보일 상태이기도 하다. Collapse는 열리면 버튼 문구가 "라벨 접기"로 바뀐다.
-    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
-    const expanded = [
-      '← 뒤로',
-      '9월 8일 진료',
-      `질문 ${q.rank}${q.sentence}`,
-      '이 질문의 관찰 근거 접기',
-      `${evItem.label} · ${evItem.axisLabel}`,
-      '좌우로 밀어 주차별 기록을 볼 수 있어요',
-      `${evValue.week}주${evValue.label}직접 확인`,
-      '내가 더 여쭤보고 싶은 것',
-      '여쭤보고 싶은 것 1', full.extraQuestions[0]!,
-      '+ 추가',
-      '진료실에서 보여드릴 요약',
-      glance,
-      '치료사에게 보여드리기',
-    ].join('');
-    expect(main.textContent).toBe(expanded);
+    expect(screen.getByRole('main').textContent).toBe(collapsed);
   });
 
-  it('통증 신호 근거도 함께 보여준다', async () => {
+  it('저장 중 바뀐 편집은 유지하고 응답 id만 살아남은 초안에 이어 붙인다', async () => {
     const user = userEvent.setup();
-    renderIt(withSignal);
-    await screen.findByText('집 안에서 걷기는 왜 안 늘고 있을까요?');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const bodies: unknown[] = [];
+    let call = 0;
+    server.use(http.put(`${BASE}/me/prep-card/questions`, async ({ request }) => {
+      const received = await request.json();
+      bodies.push(received);
+      call++;
+      if (call === 1) {
+        await gate;
+        return HttpResponse.json({
+          ...base,
+          edited: true,
+          items: [
+            { ...base.items![0]!, id: 'c-q1' },
+            { ...base.items![1]!, id: 'c-q2' },
+            item('c-new', '첫 저장 질문인데 괜찮을까요?'),
+          ],
+        });
+      }
+      const second = received as { items: Array<{ sentence: string }> };
+      return HttpResponse.json({
+        ...base,
+        edited: true,
+        items: second.items.map((sent, i) => item(`final-${i}`, sent.sentence)),
+      });
+    }));
+    renderIt(base);
 
-    expect(screen.queryByText('일어설 때 · 찡그림 — 5주, 6주')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '이 질문의 관찰 근거' }));
-    expect(screen.getByText('일어설 때 · 찡그림 — 5주, 6주')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.click(screen.getByRole('button', { name: '+ 질문 추가' }));
+    await user.type(screen.getByLabelText('질문 3'), '첫 저장 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+
+    await user.clear(screen.getByLabelText('질문 3'));
+    await user.type(screen.getByLabelText('질문 3'), '저장 중 고친 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '질문 2 지우기' }));
+    await user.click(screen.getByRole('button', { name: '+ 질문 추가' }));
+    await user.type(screen.getByLabelText('질문 3'), '저장 뒤 추가한 질문인데 괜찮을까요?');
+    release();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toBeEnabled());
+    expect(screen.getByRole('heading', { name: '질문 고치기' })).toBeInTheDocument();
+    expect(screen.getByLabelText('질문 2')).toHaveValue('저장 중 고친 질문인데 괜찮을까요?');
+    expect(screen.getByLabelText('질문 3')).toHaveValue('저장 뒤 추가한 질문인데 괜찮을까요?');
+    expect(screen.queryByDisplayValue('직접 적은 합성 질문인데 괜찮을까요?')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual({
+      items: [
+        { id: 'c-q1', sentence: '합성 정리 질문인데 괜찮을까요?' },
+        { id: 'c-new', sentence: '저장 중 고친 질문인데 괜찮을까요?' },
+        { id: null, sentence: '저장 뒤 추가한 질문인데 괜찮을까요?' },
+      ],
+    });
   });
 });

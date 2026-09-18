@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 8 완료
-- **다음 할 일:** Task 9
+- **현재 위치:** Task 9 완료
+- **다음 할 일:** Task 10
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -2133,7 +2133,7 @@ git commit -m "feat: add question list types, save and regenerate requests, and 
 | 저장 실패 | 질문을 저장하지 못했습니다. 입력한 내용은 그대로 있습니다. 다시 저장해 주세요. |
 | 다시 정리 실패 | 다시 정리하지 못했습니다. 잠시 뒤 다시 눌러 주세요. |
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 `PrepCard.test.tsx`를 새 필드 기준으로 다시 쓴다. 파일 머리(MSW 서버, `renderIt`, `BASE`)는 그대로 둔다. 표본:
 
@@ -2179,12 +2179,12 @@ const base: Card = {
     `'← 뒤로진료 준비진료실에서 여쭤볼 것+ 질문 적기치료사에게 보여드리기'` 이다. (`TherapistLinkPanel`의 기존 문구가 이와 다르면 기존 화이트리스트 테스트의 꼬리 부분을 그대로 옮겨 붙인다.)
 13. **문구 화이트리스트 — 질문이 있는 상태**: 기존 테스트처럼 표본 값에서 기대 문자열을 조립해 접힌 상태 전체 텍스트를 고정한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `npm --prefix frontend test -- src/screens/PrepCard.test.tsx`
 Expected: FAIL — 새 문구와 편집 화면이 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `EvidenceView.tsx` — 현재 `PrepCard.tsx`의 `<Collapse label="이 질문의 관찰 근거">` 안 `<div className="flex flex-col gap-4">…</div>` 내용을 그대로 옮긴 컴포넌트:
 
@@ -2532,12 +2532,12 @@ export function PrepCard() {
 
 `useSaveExtra`는 다른 화면에서 쓰지 않으면 지운다(`grep -rn useSaveExtra frontend/src`).
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `npm --prefix frontend test && npm --prefix frontend run typecheck && npm --prefix frontend run build`
 Expected: PASS. 다른 화면 테스트(예: 홈)가 `usePrepCard` 반환 형태에 의존해 깨지면 그 테스트의 표본에 새 필드를 넣어 고친다.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add frontend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md

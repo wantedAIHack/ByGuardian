@@ -75,21 +75,6 @@ export function useSaveWeek() {
   });
 }
 
-export function useSaveExtra() {
-  const qc = useQueryClient();
-  return useMutation({
-    // API 전체에서 유일하게 객체가 아니라 배열을 돌려준다
-    mutationFn: (questions: string[]) =>
-      api.put<string[]>('/me/prep-card/extra', { questions }),
-    onSuccess: (extraQuestions) => {
-      // 재조회가 느리거나 실패해도 이미 저장한 질문을 옛 캐시로 되돌리지 않는다.
-      qc.setQueryData<PrepCard>(QK.prepCard, (previous) =>
-        previous ? { ...previous, extraQuestions } : previous);
-      void qc.invalidateQueries({ queryKey: QK.prepCard });
-    },
-  });
-}
-
 /**
  * 발급된 링크를 컴포넌트 로컬 뮤테이션 상태가 아니라 공유 쿼리 캐시(QK.therapistLink)에
  * 둔다. TherapistLinkPanel은 홈·준비 카드·설정 세 화면에 각각 따로 마운트되는데, 링크를
