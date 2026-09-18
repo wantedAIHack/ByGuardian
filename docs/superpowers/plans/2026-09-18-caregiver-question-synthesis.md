@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 11 완료
-- **다음 할 일:** Task 12
+- **현재 위치:** Task 12 측정 완료, 제품 소유자 판단 대기
+- **다음 할 일:** 소유자가 `docs/qa/2026-09-18-synthesis-quality.md`의 질문 세트를 보고 기본값을 정하면, `application.yml`의 `reasoning-effort`·`max-output-tokens` 기본값과 `infra/demo/compose.demo.yml`의 기본값을 그 값으로 바꾸고 Task 13
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -2702,7 +2702,7 @@ git commit -m "docs: correct the LLM role and update browser checks for the ques
 - Modify: `backend/api/build.gradle.kts`
 - Create: `docs/qa/2026-09-18-synthesis-quality.md`
 
-- [ ] **Step 1: 실측 테스트를 기본 실행에서 분리**
+- [x] **Step 1: 실측 테스트를 기본 실행에서 분리**
 
 `build.gradle.kts`:
 
@@ -2729,7 +2729,7 @@ tasks.register<Test>("liveLlmTest") {
 }
 ```
 
-- [ ] **Step 2: 합성 fixture 작성**
+- [x] **Step 2: 합성 fixture 작성**
 
 각 파일 형태:
 
@@ -2751,13 +2751,13 @@ tasks.register<Test>("liveLlmTest") {
 
 모든 문장은 새로 지은 합성 문장이다. 데모 시드(`DemoSeedWriter`)나 실제 보호자 문장을 쓰지 않는다. 각 주의 글자 수는 20~120자.
 
-- [ ] **Step 3: 실측 하네스 작성**
+- [x] **Step 3: 실측 하네스 작성**
 
 `LiveSynthesisEvaluation`은 `@Tag("live-llm")` 테스트다. 각 fixture를 `SnapshotBody`로 바꿔 `SynthesisInputAssembler` → `QuestionSynthesisPrompt` → 실제 `OpenAiCompatibleLlmClient`(baseUrl, effort, maxTokens는 시스템 속성) → `SynthesisValidator` 순으로 **케이스당 3회** 돌린다. `baseUrl`이 비어 있으면 `Assumptions.abort`로 건너뛴다. 읽기 제한은 300초로 둔다.
 
 결과를 `backend/api/build/live-llm/results-<effort>.json`에 쓴다: 실행마다 `case`, `run`, `elapsedMs`, `accepted`(bool), `rule`(거부 규칙 또는 null), `questions`(통과한 문장·근거). **합성 데이터이므로** 문장을 결과 파일에 남겨도 된다. 로그에는 문장을 찍지 않는다.
 
-- [ ] **Step 4: 노트북 Ollama에 읽기 전용으로 실행**
+- [x] **Step 4: 노트북 Ollama에 읽기 전용으로 실행**
 
 ```bash
 ssh -N -L 11435:127.0.0.1:11434 llm &   # 조회용 포트 포워딩, 끝나면 kill
@@ -2768,7 +2768,7 @@ cd backend
 
 운영 컨테이너를 재시작하거나 모델을 받지 않는다. 운영 API가 같은 GPU를 쓰므로 실행 전후 `curl -s https://api.byguardian.site/health`로 정상인지 확인한다.
 
-- [ ] **Step 5: 결과 문서 작성**
+- [x] **Step 5: 결과 문서 작성**
 
 `docs/qa/2026-09-18-synthesis-quality.md`(한국어)에 다음을 적는다.
 - 방식별·케이스별 통과 수(3회 중), 시도별 소요 시간(최소/중앙/최대), 거부 규칙 분포
@@ -2776,7 +2776,7 @@ cd backend
 - 권고: 기본 `reasoning-effort`, `max-output-tokens`, `read-timeout` 값과 근거
 - 한계: 결정적 설정(seed 0)이라 3회는 재현성이지 채택률이 아님, 합성 데이터, 표본 3개
 
-- [ ] **Step 6: 커밋하고 멈춘다**
+- [x] **Step 6: 커밋하고 멈춘다**
 
 인수인계 칸을 "현재 위치: Task 12 측정 완료, 제품 소유자 판단 대기 / 다음 할 일: 소유자가 `docs/qa/2026-09-18-synthesis-quality.md`의 질문 세트를 보고 기본값을 정하면, `application.yml`의 `reasoning-effort`·`max-output-tokens` 기본값과 `infra/demo/compose.demo.yml`의 기본값을 그 값으로 바꾸고 Task 13"으로 갱신한다.
 

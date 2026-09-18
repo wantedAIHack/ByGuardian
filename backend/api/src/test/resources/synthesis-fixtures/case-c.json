@@ -1,0 +1,39 @@
+{
+  "templates": [],
+  "weeks": {
+    "1": {
+      "freeNote": {
+        "text": "아침 식사 속도가 전보다 느려져 반찬이 식을 때까지 천천히 드셨습니다.",
+        "timeTag": "MORNING"
+      },
+      "itemNotes": {}
+    },
+    "2": {
+      "freeNote": {
+        "text": "숟가락을 쥐는 손을 중간에 바꾸고 그릇을 제 쪽으로 밀어 달라고 하셨습니다.",
+        "timeTag": "AFTERNOON"
+      },
+      "itemNotes": {}
+    },
+    "3": {
+      "freeNote": {
+        "text": "가족이 말을 걸어도 대답하는 말수가 적었고 고개로만 답할 때가 있었습니다.",
+        "timeTag": "EVENING"
+      },
+      "itemNotes": {}
+    },
+    "4": {
+      "freeNote": null,
+      "itemNotes": {
+        "feeding": "점심에는 숟가락을 내려놓고 한참 지난 뒤 다시 식사를 이어가셨습니다."
+      }
+    },
+    "5": {
+      "freeNote": {
+        "text": "저녁 식탁에서 먼저 이야기를 꺼내지 않고 짧은 말로만 답하셨습니다.",
+        "timeTag": "EVENING"
+      },
+      "itemNotes": {}
+    }
+  }
+}

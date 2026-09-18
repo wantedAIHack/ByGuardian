@@ -1,0 +1,46 @@
+{
+  "templates": [
+    {
+      "rank": 1,
+      "type": "RISE_VS_STALL",
+      "items": ["toilet"],
+      "sentence": "화장실 이용은 지켜보면 됨으로 바뀌셨는데 어떤 점을 여쭤보면 좋을까요?"
+    },
+    {
+      "rank": 2,
+      "type": "RISE_WITH_PAIN",
+      "items": ["transfer"],
+      "sentence": "일어설 때 얼굴을 찡그리시는 모습을 4주 중 2주 봤습니다. 어떤 점을 확인할까요?"
+    }
+  ],
+  "weeks": {
+    "1": {
+      "freeNote": {
+        "text": "저녁 식사를 마치면 소파에 기대어 눈을 감고 오래 쉬려고 하셨습니다.",
+        "timeTag": "EVENING"
+      },
+      "itemNotes": {}
+    },
+    "2": {
+      "freeNote": {
+        "text": "저녁 무렵 화장실에서 돌아온 뒤 피곤하다고 하며 바로 누우셨습니다.",
+        "timeTag": "EVENING"
+      },
+      "itemNotes": {}
+    },
+    "3": {
+      "freeNote": {
+        "text": "저녁에는 의자에서 일어설 때 찡그린 뒤 한참 앉아서 쉬셨습니다.",
+        "timeTag": "EVENING"
+      },
+      "itemNotes": {}
+    },
+    "4": {
+      "freeNote": {
+        "text": "밤에 2번 깨셨고 그때마다 화장실에 다녀온 뒤 다시 잠드는 데 오래 걸렸습니다.",
+        "timeTag": "NIGHT"
+      },
+      "itemNotes": {}
+    }
+  }
+}

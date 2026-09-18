@@ -55,8 +55,22 @@ dependencies {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("live-llm")
+    }
     testLogging {
         events("passed", "failed", "skipped")
     }
+}
+
+tasks.register<Test>("liveLlmTest") {
+    description = "Runs synthesis against a real Ollama. Needs -Dnextvisit.live.baseUrl."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    useJUnitPlatform { includeTags("live-llm") }
+    systemProperty("nextvisit.live.baseUrl", System.getProperty("nextvisit.live.baseUrl") ?: "")
+    systemProperty("nextvisit.live.effort", System.getProperty("nextvisit.live.effort") ?: "none")
+    systemProperty("nextvisit.live.maxTokens", System.getProperty("nextvisit.live.maxTokens") ?: "3000")
+    outputs.upToDateWhen { false }
 }
