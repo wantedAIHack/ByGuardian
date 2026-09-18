@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 6 완료
-- **다음 할 일:** Task 7
+- **현재 위치:** Task 7 완료
+- **다음 할 일:** Task 8
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -1884,7 +1884,7 @@ git commit -m "feat: let caregivers confirm, edit and regenerate their visit que
 - Consumes: `QuestionListService.visible(...)`, `ConfirmedItem.isCaregiver()` (Task 6)
 - Produces: `TherapistSummaryDto`에 `List<QuestionDetail> questionDetails`(`disclaimer` 앞) + `record QuestionDetail(String sentence, String origin, List<Integer> noteWeeks)`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 기존 치료사 요약 테스트 파일에 추가한다. 케이스 준비와 링크 발급은 그 파일의 기존 도우미를 쓴다.
 
@@ -1905,12 +1905,12 @@ git commit -m "feat: let caregivers confirm, edit and regenerate their visit que
 
 위 주석의 각 줄을 실제 MockMvc 호출과 `assertEquals`로 옮긴다. 쓰는 도우미·경로는 같은 파일에 이미 있다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cd backend && ./gradlew :api:test --tests "nextvisit.api.therapist.*"`
 Expected: FAIL — `questionDetails`가 없다.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `TherapistSummaryDto`:
 
@@ -1937,12 +1937,12 @@ Expected: FAIL — `questionDetails`가 없다.
 
 `kase`가 요청 시작 때 읽은 값이면 `cases.findById(...)`로 다시 읽는다. 생성자 호출에 `details`를 `authorChanges` 다음에 넣는다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cd backend && ./gradlew clean test`
 Expected: 전체 PASS.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add -A backend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md

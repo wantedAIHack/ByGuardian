@@ -16,6 +16,7 @@ public record TherapistSummaryDto(
     List<String> extraQuestions,
     Density density,
     List<AuthorChange> authorChanges,
+    List<QuestionDetail> questionDetails,
     String disclaimer
 ) {
     public record Signal(String action, String actionLabel, String kind, String kindLabel, List<Integer> weeks) {}
@@ -23,4 +24,5 @@ public record TherapistSummaryDto(
     public record FreeNote(int week, String text, String timeTag, String timeTagLabel) {}
     public record Density(int totalWeeks, int recordedWeeks, int confirmedWeeks, List<String> authors) {}
     public record AuthorChange(int week, String from, String to) {}
+    public record QuestionDetail(String sentence, String origin, List<Integer> noteWeeks) {}
 }
