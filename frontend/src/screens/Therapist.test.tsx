@@ -1,5 +1,5 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -191,6 +191,44 @@ describe('치료사용 요약', () => {
     // /아침/만으로는 자유 기록 원문("아침에 혼자...")도 함께 걸려 두 개가 잡힌다 —
     // 시간대 표시 문단("6주 · 아침")을 정확히 지정한다.
     expect(screen.getByText('6주 · 아침')).toBeInTheDocument();
+  });
+
+  it('질문 근거 주차에서 원문으로 이동하되 주소 fragment는 바꾸지 않는다', async () => {
+    const synthesized = '합성 정리 질문인데 괜찮을까요?';
+    const caregiver = '직접 적은 합성 질문인데 괜찮을까요?';
+    const scrollIntoView = vi.fn();
+    const previousScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+    try {
+      renderIt({
+        ...summary,
+        freeNotes: [{ week: 3, text: '3주 합성 원문', timeTag: null, timeTagLabel: null }],
+        questions: [synthesized],
+        extraQuestions: [caregiver],
+        questionDetails: [
+          { sentence: synthesized, origin: 'LLM', noteWeeks: [3, 5] },
+          { sentence: caregiver, origin: 'CAREGIVER', noteWeeks: [] },
+        ],
+      });
+
+      expect(await screen.findAllByText(synthesized)).toHaveLength(1);
+      expect(screen.getAllByText(caregiver)).toHaveLength(1);
+      const item = screen.getByText(synthesized).closest('li');
+      expect(item).not.toBeNull();
+      expect(within(item!).getByText('보호자 기록')).toBeInTheDocument();
+      expect(within(item!).getByRole('button', { name: '3주' })).toBeInTheDocument();
+      expect(item).toHaveTextContent('5주');
+      expect(within(item!).queryByRole('button', { name: '5주' })).not.toBeInTheDocument();
+
+      const hashBefore = window.location.hash;
+      await userEvent.setup().click(within(item!).getByRole('button', { name: '3주' }));
+
+      expect(window.location.hash).toBe(hashBefore);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+      expect(document.activeElement).toBe(document.getElementById('note-week-3'));
+    } finally {
+      Element.prototype.scrollIntoView = previousScrollIntoView;
+    }
   });
 
   it('이어간 값과 직접 확인한 값을 글자로 구별한다', async () => {

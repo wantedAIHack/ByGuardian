@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 9 완료
-- **다음 할 일:** Task 10
+- **현재 위치:** Task 10 완료
+- **다음 할 일:** Task 11
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문, (2) 생각 모드 기본값 — (2)는 Task 12에서 제품 소유자 판단을 받는다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -2555,7 +2555,7 @@ git commit -m "feat: show one editable visit question list with notes as evidenc
 **Interfaces:**
 - Consumes: `TherapistSummary.questionDetails?` (Task 8)
 
-- [ ] **Step 1: 실패하는 테스트 작성** (`Therapist.test.tsx`에 추가, 기존 표본을 복사해 `questionDetails`를 넣는다)
+- [x] **Step 1: 실패하는 테스트 작성** (`Therapist.test.tsx`에 추가, 기존 표본을 복사해 `questionDetails`를 넣는다)
 
 1. `questionDetails: [{ sentence: '합성 정리 질문인데 괜찮을까요?', origin: 'LLM', noteWeeks: [3, 5] }, { sentence: '직접 적은 합성 질문인데 괜찮을까요?', origin: 'CAREGIVER', noteWeeks: [] }]`, `freeNotes`에는 3주만 있을 때:
    - 두 문장이 한 번씩만 보인다(`questions`/`extraQuestions`와 겹쳐 두 번 나오지 않는다).
@@ -2563,12 +2563,12 @@ git commit -m "feat: show one editable visit question list with notes as evidenc
    - `3주` 버튼을 누르면 `window.location.hash`가 바뀌지 않고, id가 `note-week-3`인 요소의 `scrollIntoView`가 불린다(`Element.prototype.scrollIntoView = vi.fn()`).
 2. `questionDetails`가 없는 표본은 기존 테스트 그대로 통과한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `npm --prefix frontend test -- src/screens/Therapist.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 원문 목록의 `<li key={n.week}>`에 `id={`note-week-${n.week}`}`와 `tabIndex={-1}`을 붙인다. 질문 구역을 이렇게 바꾼다.
 
@@ -2618,12 +2618,12 @@ Expected: FAIL.
 
 (`data`가 준비된 뒤의 위치에 둔다.)
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `npm --prefix frontend test && npm --prefix frontend run typecheck`
 Expected: PASS.
 
-- [ ] **Step 5: 인수인계 칸 갱신 후 커밋**
+- [x] **Step 5: 인수인계 칸 갱신 후 커밋**
 
 ```bash
 git add frontend docs/superpowers/plans/2026-09-18-caregiver-question-synthesis.md

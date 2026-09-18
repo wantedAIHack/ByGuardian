@@ -49,6 +49,13 @@ export function Therapist() {
 
   const changed = data.items.filter((i) => i.changed);
   const unchanged = data.items.filter((i) => !i.changed);
+  const noteWeeks = new Set(data.freeNotes.map((note) => note.week));
+  // 치료사 토큰이 URL fragment로 오므로 hash를 쓰지 않고 스크롤과 초점만 옮긴다.
+  const showNote = (week: number) => {
+    const target = document.getElementById(`note-week-${week}`);
+    target?.scrollIntoView({ block: 'start' });
+    target?.focus();
+  };
 
   return (
     <main className="therapist-page mx-auto max-w-6xl p-gutter text-body leading-relaxed">
@@ -148,7 +155,7 @@ export function Therapist() {
           <h2 className="font-semibold">보호자 기록 (원문)</h2>
           <ul className="flex flex-col gap-3 pt-3">
             {data.freeNotes.map((n) => (
-              <li key={n.week}>
+              <li key={n.week} id={`note-week-${n.week}`} tabIndex={-1}>
                 <p className="text-ink-faint">
                   {n.week}주{n.timeTagLabel ? ` · ${n.timeTagLabel}` : ''}
                 </p>
@@ -160,7 +167,39 @@ export function Therapist() {
         </section>
       ) : null}
 
-      {data.questions.length + data.extraQuestions.length > 0 ? (
+      {data.questionDetails ? (
+        data.questionDetails.length > 0 ? (
+          <section className="note-surface mt-6 min-w-0">
+            <h2 className="font-semibold">보호자가 여쭤보고 싶은 것</h2>
+            <ul className="list-disc pt-3 pl-5">
+              {data.questionDetails.map((question, i) => (
+                <li key={`${i}-${question.sentence}`}>
+                  <p>{question.sentence}</p>
+                  {question.noteWeeks.length > 0 ? (
+                    <p className="text-small text-ink-soft">
+                      보호자 기록{' '}
+                      {question.noteWeeks.map((week, j) => (
+                        <span key={week}>
+                          {j > 0 ? '·' : ''}
+                          {noteWeeks.has(week) ? (
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => showNote(week)}
+                            >
+                              {week}주
+                            </button>
+                          ) : `${week}주`}
+                        </span>
+                      ))}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null
+      ) : data.questions.length + data.extraQuestions.length > 0 ? (
         <section className="note-surface mt-6 min-w-0">
           <h2 className="font-semibold">보호자가 여쭤보고 싶은 것</h2>
           <ul className="list-disc pt-3 pl-5">
