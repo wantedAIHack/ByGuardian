@@ -40,6 +40,7 @@ class LiveSynthesisEvaluation {
         Assumptions.assumeTrue(!baseUrl.isEmpty(), "nextvisit.live.baseUrl is required");
         String effort = System.getProperty("nextvisit.live.effort", "none");
         int maxTokens = Integer.parseInt(System.getProperty("nextvisit.live.maxTokens", "3000"));
+        Path outputDir = Path.of(System.getProperty("nextvisit.live.outputDir", "build/live-llm"));
 
         LlmProperties properties = new LlmProperties(true, URI.create(baseUrl),
             "qwen3:4b-q4_K_M", "ollama", "", "", Duration.ofSeconds(3), READ_TIMEOUT,
@@ -71,8 +72,8 @@ class LiveSynthesisEvaluation {
             }
         }
 
-        Path output = Path.of("build", "live-llm", "results-" + effortLabel(effort) + ".json");
-        Files.createDirectories(output.getParent());
+        Path output = outputDir.resolve("results-" + effortLabel(effort) + ".json");
+        Files.createDirectories(outputDir);
         mapper.writerWithDefaultPrettyPrinter().writeValue(output.toFile(), results);
     }
 
