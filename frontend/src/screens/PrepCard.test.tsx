@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -263,6 +263,20 @@ describe('진료 준비 카드', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
+  it('옛 백엔드의 같은 추가 질문을 경고 없이 모두 보여준다', async () => {
+    const duplicate = '밤에 자주 깨시는데 괜찮은가요?';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      renderIt({ ...legacyCard(), extraQuestions: [duplicate, duplicate] });
+
+      expect(await screen.findAllByText(duplicate)).toHaveLength(2);
+      expect(consoleError.mock.calls.flat().join(' ')).not.toContain('same key');
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('판정 문구를 만들지 않는다 — 빈 상태', async () => {
     renderIt({ ...base, nextVisitDate: null, questions: [], items: [], therapistGlance: [] });
     await screen.findByRole('heading', { name: '진료실에서 여쭤볼 것' });
@@ -346,6 +360,60 @@ describe('진료 준비 카드', () => {
         { id: 'c-q1', sentence: '합성 정리 질문인데 괜찮을까요?' },
         { id: 'c-new', sentence: '저장 중 고친 질문인데 괜찮을까요?' },
         { id: null, sentence: '저장 뒤 추가한 질문인데 괜찮을까요?' },
+      ],
+    });
+  });
+
+  it.each([
+    {
+      mismatch: '순서가 바뀐',
+      responseItems: [
+        { ...base.items![1]!, id: 'c-q2' },
+        { ...base.items![0]!, id: 'c-q1' },
+        item('c-new', '첫 저장 질문인데 괜찮을까요?'),
+      ],
+    },
+    {
+      mismatch: '항목이 빠진',
+      responseItems: [
+        { ...base.items![0]!, id: 'c-q1' },
+        { ...base.items![1]!, id: 'c-q2' },
+      ],
+    },
+  ])('$mismatch 저장 응답에서는 어떤 id도 초안에 이어 붙이지 않는다', async ({ responseItems }) => {
+    const user = userEvent.setup();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const bodies: unknown[] = [];
+    let call = 0;
+    server.use(http.put(`${BASE}/me/prep-card/questions`, async ({ request }) => {
+      const received = await request.json();
+      bodies.push(received);
+      call++;
+      if (call === 1) {
+        await gate;
+        return HttpResponse.json({ ...base, edited: true, items: responseItems });
+      }
+      return HttpResponse.json(base);
+    }));
+    renderIt(base);
+
+    await user.click(await screen.findByRole('button', { name: '질문 고치기' }));
+    await user.click(screen.getByRole('button', { name: '+ 질문 추가' }));
+    await user.type(screen.getByLabelText('질문 3'), '첫 저장 질문인데 괜찮을까요?');
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await user.clear(screen.getByLabelText('질문 3'));
+    await user.type(screen.getByLabelText('질문 3'), '저장 중 고친 질문인데 괜찮을까요?');
+    release();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '저장' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: '저장' }));
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(bodies[1]).toEqual({
+      items: [
+        { id: 'q1-a', sentence: '합성 정리 질문인데 괜찮을까요?' },
+        { id: 'x1-b', sentence: '직접 적은 합성 질문인데 괜찮을까요?' },
+        { id: null, sentence: '저장 중 고친 질문인데 괜찮을까요?' },
       ],
     });
   });

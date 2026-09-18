@@ -60,6 +60,10 @@ export function QuestionEditor({
           }
 
           const returnedItems = card.items ?? [];
+          const matchesSubmission = returnedItems.length === submitted.length
+            && returnedItems.every((returned, i) => returned.sentence === submitted[i]!.sentence);
+          if (!matchesSubmission) return;
+
           const returnedIdByKey = new Map<number, string>();
           submitted.forEach((draft, i) => {
             const returned = returnedItems[i];

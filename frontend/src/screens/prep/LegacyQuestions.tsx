@@ -33,7 +33,9 @@ export function LegacyQuestions({ card }: { card: PrepCard }) {
         <section className="note-surface">
           <h2 className="font-semibold">내가 더 여쭤보고 싶은 것</h2>
           <ul className="list-disc pt-3 pl-5">
-            {card.extraQuestions.map((question) => <li key={question}>{question}</li>)}
+            {card.extraQuestions.map((question, i) => (
+              <li key={`${question}-${i}`}>{question}</li>
+            ))}
           </ul>
         </section>
       ) : null}
