@@ -6,8 +6,8 @@
 
 다른 도구(ChatGPT/Codex 등)가 저장소만 보고 이어받을 수 있도록 유지한다.
 
-- **현재 위치:** Task 12 측정 완료, 제품 소유자가 `none` / `3000` / `45s` 기본값 승인
-- **다음 할 일:** Task 13 운영 반영. 배포 JAR과 호스트 백업을 준비한 뒤 소유자가 운영 호스트의 `sudo` 교체·재기동 명령을 직접 실행한다
+- **현재 위치:** Task 13 배포 준비 완료, 제품 소유자 `sudo` 실행 대기
+- **다음 할 일:** 소유자가 운영 호스트에서 `/tmp/api.jar`과 `/tmp/compose.demo.yml`을 설치하고 API를 재기동하면 Step 3 운영 검증부터 계속한다
 - **브랜치:** `ops/single-host-completion` (작업 폴더 `.worktrees/warm-observation-ui`)
 - **열린 결정:** 설계서 10절 (1) 금지어와 보호자 원문. (2) 생각 모드 기본값은 2026-09-18 제품 소유자가 `none` / `3000` / `45s`로 결정했다
 - **운영 반영:** 아직 없음. 운영 호스트 변경은 제품 소유자가 sudo로 직접 실행한다(Task 13)
@@ -2791,7 +2791,7 @@ git commit -m "test: measure synthesis quality with reasoning on and off against
 
 ### Task 13: 운영 반영과 인수 (제품 소유자가 sudo로 실행)
 
-- [ ] **Step 1: jar 빌드**
+- [x] **Step 1: jar 빌드**
 
 ```bash
 cd backend && ./gradlew :api:bootJar && ls -l api/build/libs/api.jar
