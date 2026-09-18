@@ -104,6 +104,15 @@ export interface Evidence { items: EvidenceItem[]; signal: SignalEvidence | null
 export interface PrepQuestion {
   rank: number; type: string; sentence: string; source: string; evidence: Evidence;
 }
+export type QuestionOrigin = 'TEMPLATE' | 'LLM' | 'CAREGIVER';
+export type GenerationStatus = 'PENDING' | 'DONE' | 'FAILED' | 'TEMPLATE_ONLY';
+export interface NoteBasis {
+  week: number; timeTagLabel: string | null; itemLabel: string | null; text: string;
+}
+export interface ItemBasis { evidence: Evidence; notes: NoteBasis[] }
+export interface PrepItem {
+  id: string; sentence: string; origin: QuestionOrigin; edited: boolean; basis: ItemBasis;
+}
 export interface PrepCard {
   week: number;
   nextVisitDate: string | null;
@@ -111,6 +120,11 @@ export interface PrepCard {
   extraQuestions: string[];
   emptyMessage: string | null;
   therapistGlance: string[];
+  /** 새 백엔드만 보낸다. 없으면 옛 필드로 읽기 전용 화면을 그린다. */
+  items?: PrepItem[];
+  generationStatus?: GenerationStatus;
+  edited?: boolean;
+  suggestionAvailable?: boolean;
 }
 
 export interface TherapistLink { url: string; token: string }
@@ -126,6 +140,9 @@ export interface Density {
   totalWeeks: number; recordedWeeks: number; confirmedWeeks: number; authors: string[];
 }
 export interface AuthorChange { week: number; from: string; to: string }
+export interface TherapistQuestionDetail {
+  sentence: string; origin: QuestionOrigin; noteWeeks: number[];
+}
 export interface TherapistSummary {
   generatedAt: string;
   weeks: number[];
@@ -138,6 +155,7 @@ export interface TherapistSummary {
   extraQuestions: string[];
   density: Density;
   authorChanges: AuthorChange[];
+  questionDetails?: TherapistQuestionDetail[];
   disclaimer: string;
 }
 
