@@ -1,5 +1,9 @@
 # 전체 서비스 통합·운영 배포 설계
 
+> **이 설계는 2026-09-17자 [단일 호스트 배포 설계](2026-09-17-single-host-deployment-design.md)로 대체됐다.**
+> EC2·ECR·SSM·S3·Caddy 구성은 구축되지 않았고, 운영은 Ubuntu 노트북 한 대에서 이뤄진다.
+> 이 문서는 당시 결정의 이력으로만 읽는다.
+
 작성일 2026-09-10. 상태는 **2026-09-10 서면 승인 완료, 구현 계획 확정**이다. 사용자가 승인한 큰 방향인
 “Cloudflare Pages의 React PWA → AWS EC2의 Spring API/PostgreSQL → Cloudflare
 Access/Tunnel 뒤 Ubuntu 노트북 Ollama”를 구현 가능한 운영 경계로 고정한다.

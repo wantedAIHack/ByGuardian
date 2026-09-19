@@ -1,6 +1,7 @@
 package nextvisit.api.therapist;
 
 import static nextvisit.api.ApiTestSupport.authed;
+import static nextvisit.api.ApiTestSupport.getMe;
 import static nextvisit.api.ApiTestSupport.json;
 import static nextvisit.api.ApiTestSupport.onboardDefault;
 import static nextvisit.api.ApiTestSupport.postJson;
@@ -25,6 +26,8 @@ import nextvisit.api.TestClockConfig;
 import nextvisit.api.auth.GuardianRepository;
 import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.demo.DemoSeedWriter;
+import nextvisit.api.questions.ConfirmedItem;
+import nextvisit.api.questions.QuestionCacheBody;
 import nextvisit.api.questions.QuestionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -102,6 +105,46 @@ class TherapistControllerTest {
         for (String word : List.of("SUSTAINED", "FLUCTUATING", "OBSERVED_ONCE", "\"status\"", "\"direction\"", "\"duration\"", "상승", "하락")) {
             assertFalse(raw.contains(word), word);
         }
+    }
+
+    @Test
+    void summarySplitsCaregiverQuestionsAndCarriesQuestionDetails() throws Exception {
+        Onboarded o = seeded();
+        JsonNode card = json(mapper, mvc.perform(getMe(o.token(), "/me/prep-card")).andReturn());
+        JsonNode first = card.get("items").get(0);
+        Map<String, Object> caregiver = new LinkedHashMap<>();
+        caregiver.put("id", null);
+        caregiver.put("sentence", "직접 적은 질문인데 괜찮을까요?");
+        mvc.perform(putJson(o.token(), "/me/prep-card/questions", mapper, Map.of("items", List.of(
+            Map.of("id", first.get("id").asText(), "sentence", first.get("sentence").asText()),
+            caregiver
+        )))).andExpect(status().isOk());
+
+        String t = issue(o.token());
+        JsonNode s = json(mapper, mvc.perform(get("/t/" + t)).andExpect(status().isOk()).andReturn());
+
+        assertEquals(List.of(first.get("sentence").asText()), mapper.convertValue(s.get("questions"), List.class));
+        assertEquals(List.of("직접 적은 질문인데 괜찮을까요?"),
+            mapper.convertValue(s.get("extraQuestions"), List.class));
+        assertEquals(2, s.get("questionDetails").size());
+        assertEquals("TEMPLATE", s.get("questionDetails").get(0).get("origin").asText());
+        assertEquals(List.of(), mapper.convertValue(s.get("questionDetails").get(0).get("noteWeeks"), List.class));
+        assertEquals("CAREGIVER", s.get("questionDetails").get(1).get("origin").asText());
+    }
+
+    @Test
+    void summaryCarriesNonEmptyLlmNoteWeeks() throws Exception {
+        Onboarded o = seeded();
+        var kase = cases.findById(UUID.fromString(o.caseId())).orElseThrow();
+        ConfirmedItem llm = new ConfirmedItem("c-llm", "3주 기록에서 정리한 질문인데 괜찮을까요?", "LLM", false,
+            "SYNTHESIS", List.of(), null, new QuestionCacheBody.Basis(List.of(), List.of(3)));
+        kase.confirmQuestions(mapper.writeValueAsString(List.of(llm)), clock.instant());
+        cases.save(kase);
+
+        JsonNode s = json(mapper, mvc.perform(get("/t/" + issue(o.token()))).andExpect(status().isOk()).andReturn());
+
+        assertEquals(List.of(3), mapper.convertValue(s.get("questionDetails").get(0).get("noteWeeks"), List.class));
+        assertEquals("LLM", s.get("questionDetails").get(0).get("origin").asText());
     }
 
     @Test

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { catalogFixture, me } from '../src/test/fixtures';
-import type { TherapistSummary } from '../src/lib/types';
+import type { PrepCard, TherapistSummary } from '../src/lib/types';
 
 test.use({ baseURL: process.env.UI_TEST_BASE_URL ?? 'http://127.0.0.1:14173' });
 
@@ -17,6 +17,30 @@ const summary: TherapistSummary = {
   questions: [], extraQuestions: [],
   density: { totalWeeks: 6, recordedWeeks: 6, confirmedWeeks: 5, authors: ['딸'] },
   authorChanges: [], disclaimer: '보호자가 집에서 관찰한 기록입니다.',
+};
+const prepEvidence = {
+  items: [{
+    code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
+    values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
+  }],
+  signal: null,
+};
+const prepCard: PrepCard = {
+  week: 6, nextVisitDate: null,
+  questions: [{
+    rank: 1, type: 'PLATEAU', source: 'TEMPLATE',
+    sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?', evidence: prepEvidence,
+  }],
+  extraQuestions: [], emptyMessage: null, therapistGlance: [],
+  generationStatus: 'TEMPLATE_ONLY', edited: false, suggestionAvailable: false,
+  items: [{
+    id: 'q1-a', sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?',
+    origin: 'TEMPLATE', edited: false,
+    basis: {
+      evidence: prepEvidence,
+      notes: [{ week: 3, timeTagLabel: '오후', itemLabel: null, text: '합성 원문 메모' }],
+    },
+  }],
 };
 
 async function catalog(page: Page) {
@@ -138,49 +162,62 @@ test('입력·설정·질문·기록을 200% 글자로 읽어도 페이지가 �
     pareticSide: 'LEFT', verbalDifficulty: 'NONE', nextVisitDate: null, items: {},
   })));
   await page.route('**/me', route => route.fulfill({ json: me() }));
-  await page.route('**/me/prep-card', route => route.fulfill({ json: {
-    week: 6, nextVisitDate: null, questions: [], extraQuestions: ['진료실에서 어떤 내용을 여쭤보면 좋을까요?'],
-    emptyMessage: null, therapistGlance: [],
-  } }));
+  await page.route('**/me/prep-card', route => route.fulfill({ json: prepCard }));
   await page.route(`**/t/${token}`, route => route.fulfill({ json: summary }));
   for (const path of ['/onboarding', '/settings', '/prep-card', `/t#${token}`]) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     if (path === '/settings') await expect(page.getByLabel('다음 진료일')).toBeVisible();
-    if (path === '/prep-card') await expect(page.getByLabel('여쭤보고 싶은 것 1')).toBeVisible();
+    if (path === '/prep-card') {
+      await page.getByRole('button', { name: '질문 고치기' }).click();
+      await expect(page.getByRole('textbox', { name: '질문 1', exact: true })).toBeVisible();
+    }
     if (path.startsWith('/t#')) await expect(page.getByRole('region')).toBeVisible();
     await doubleText(page);
     await fits(page);
   }
 });
 
-test('긴 추가 질문 5개를 여러 줄로 읽고 편집한다', async ({ page }) => {
+test('긴 질문 5개를 편집 화면에서 여러 줄로 읽고 저장한다', async ({ page }) => {
   await catalog(page);
   await page.setViewportSize({ width: 375, height: 812 });
   const question = '집에서 관찰할 때 어떤 내용을 기록해 가면 도움이 될까요? '.repeat(4);
-  await page.route('**/me/prep-card', route => route.fulfill({ json: {
-    week: 6, nextVisitDate: null, questions: [{
-      rank: 1, type: 'PLATEAU', source: 'engine', sentence: '집 안에서 걷기는 왜 안 늘고 있을까요?',
-      evidence: { items: [{
-        code: 'ambulation', label: '집 안에서 걷기', axis: 'LEVEL', axisLabel: '도움 수준',
-        values: [{ week: 5, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
-      }], signal: null },
-    }], extraQuestions: Array(5).fill(question),
-    emptyMessage: null, therapistGlance: [],
-  } }));
+  let savedBody: { items: Array<{ id: string | null; sentence: string }> } | null = null;
+  await page.route('**/me/prep-card/questions', async route => {
+    savedBody = route.request().postDataJSON();
+    const savedItems = savedBody!.items.map((item, i) => ({
+      id: item.id ?? `saved-${i}`,
+      sentence: item.sentence,
+      origin: item.id ? 'TEMPLATE' as const : 'CAREGIVER' as const,
+      edited: true,
+      basis: item.id ? prepCard.items![0]!.basis : { evidence: { items: [], signal: null }, notes: [] },
+    }));
+    await route.fulfill({ json: { ...prepCard, edited: true, items: savedItems } });
+  });
+  await page.route('**/me/prep-card', route => route.fulfill({ json: prepCard }));
   await page.goto('/prep-card');
-  const toggle = page.getByRole('button', { name: '이 질문의 관찰 근거', exact: true });
+  const toggle = page.getByRole('button', { name: '이 질문의 근거', exact: true });
   await toggle.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('region', { name: '집 안에서 걷기 도움 수준 주차별 기록' })).toBeVisible();
   await expect(page.getByText('손 잡아드림', { exact: true })).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  const input = page.getByLabel('여쭤보고 싶은 것 5');
-  await expect(input).toHaveJSProperty('tagName', 'TEXTAREA');
-  await input.scrollIntoViewIfNeeded();
-  expect(await input.evaluate(el => el.scrollHeight <= el.clientHeight + 2)).toBe(true);
+  await page.getByRole('button', { name: '질문 고치기' }).click();
+  for (let i = 2; i <= 6; i++) {
+    await page.getByRole('button', { name: '+ 질문 추가' }).click();
+    await page.getByRole('textbox', { name: `질문 ${i}`, exact: true }).fill(question);
+  }
+  for (let i = 2; i <= 6; i++) {
+    const input = page.getByRole('textbox', { name: `질문 ${i}`, exact: true });
+    await expect(input).toHaveJSProperty('tagName', 'TEXTAREA');
+    await input.scrollIntoViewIfNeeded();
+    expect(await input.evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+  }
   await fits(page);
+  await page.getByRole('button', { name: '저장', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('질문을 저장했습니다.');
+  expect(savedBody?.items).toHaveLength(6);
 });
 
 test('긴 원문 인쇄는 한 구역 전체를 다음 장으로 밀지 않는다', async ({ page }) => {

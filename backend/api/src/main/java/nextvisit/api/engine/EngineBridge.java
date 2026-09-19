@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import nextvisit.api.cases.CaseEntity;
+import nextvisit.api.catalog.QuestionnaireCatalog;
 import nextvisit.api.common.Json;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotBody;
@@ -41,6 +42,7 @@ public class EngineBridge {
         SnapshotBody body = json.fromJson(s.getBody(), SnapshotBody.class);
         Map<String, Map<Axis, Observation>> values = new LinkedHashMap<>();
         for (var e : body.items().entrySet()) {
+            if (QuestionnaireCatalog.isV2(e.getValue())) continue;
             Map<Axis, Observation> byAxis = new EnumMap<>(Axis.class);
             for (Axis axis : Axis.values()) {
                 SnapshotBody.Val v = e.getValue().axis(axis);
@@ -67,9 +69,20 @@ public class EngineBridge {
     }
 
     public CaseInput toCaseInput(CaseEntity kase, List<Snapshot> snapshots) {
+        // Once a category switches semantics, remove its old series from the current pipeline.
+        // Historical report values remain in TrajectoryMapper; v2 has no automatic rules.
+        Set<String> upgraded = new HashSet<>();
+        for (Snapshot s : snapshots) {
+            json.fromJson(s.getBody(), SnapshotBody.class).items().forEach((code, values) -> {
+                if (QuestionnaireCatalog.isV2(values)) upgraded.add(code);
+            });
+        }
         List<WeekRecord> weeks = new ArrayList<>();
         for (Snapshot s : snapshots) {
-            weeks.add(toWeekRecord(kase, s));
+            WeekRecord record = toWeekRecord(kase, s);
+            Map<String, Map<Axis, Observation>> remaining = new LinkedHashMap<>(record.values());
+            upgraded.forEach(remaining::remove);
+            weeks.add(new WeekRecord(record.week(), remaining, record.signals(), record.noteTag()));
         }
         return CaseInput.fromWeeks(ObservationSet.STROKE, weeks);
     }

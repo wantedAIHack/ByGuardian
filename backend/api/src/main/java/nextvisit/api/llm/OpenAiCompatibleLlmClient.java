@@ -1,5 +1,6 @@
 package nextvisit.api.llm;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -34,9 +35,12 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     @Override
-    public String complete(QuestionRewritePrompt.Prompt prompt) {
+    public String complete(LlmPrompt prompt) {
+        // Ollama OpenAI 호환 엔드포인트에서 qwen3의 생각을 끄는 방법은 reasoning_effort="none"뿐이다
+        // (docs/qa/2026-09-17-llm-activation.md 9절). 값이 비어 있으면 필드를 보내지 않는다.
+        String effort = StringUtils.hasText(properties.reasoningEffort()) ? properties.reasoningEffort() : null;
         Request body = new Request(properties.model(), false, 0.1, 0,
-            properties.maxOutputTokens(), new ResponseFormat("json_object"),
+            properties.maxOutputTokens(), new ResponseFormat("json_object"), effort,
             List.of(new Message("system", prompt.systemMessage()),
                 new Message("user", prompt.userMessage())));
         try {
@@ -112,6 +116,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         int seed,
         @JsonProperty("max_tokens") int maxTokens,
         @JsonProperty("response_format") ResponseFormat responseFormat,
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        @JsonProperty("reasoning_effort") String reasoningEffort,
         List<Message> messages
     ) {}
 

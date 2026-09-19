@@ -1,0 +1,46 @@
+{
+  "templates": [
+    {
+      "rank": 1,
+      "type": "STALL",
+      "items": ["ambulation"],
+      "sentence": "집 안에서 걷기는 6주째 그대로입니다. 걷기는 왜 안 늘고 있을까요?"
+    }
+  ],
+  "weeks": {
+    "1": {
+      "freeNote": {
+        "text": "현관 문턱 앞에서 잠시 멈추고 발을 옮길 때 제 손을 찾으셨습니다.",
+        "timeTag": "MORNING"
+      },
+      "itemNotes": {}
+    },
+    "2": {
+      "freeNote": null,
+      "itemNotes": {}
+    },
+    "3": {
+      "freeNote": null,
+      "itemNotes": {
+        "ambulation": "거실에서 방향을 바꾸실 때 한동안 서서 바닥을 바라보셨습니다."
+      }
+    },
+    "4": {
+      "freeNote": {
+        "text": "계단 앞에서 매번 손잡이를 먼저 찾고 첫발을 내딛기까지 기다리셨습니다.",
+        "timeTag": "AFTERNOON"
+      },
+      "itemNotes": {}
+    },
+    "5": {
+      "freeNote": null,
+      "itemNotes": {}
+    },
+    "6": {
+      "freeNote": null,
+      "itemNotes": {
+        "ambulation": "방에서 나오신 뒤 현관 쪽 문턱을 넘기 전에 제 팔을 잡으셨습니다."
+      }
+    }
+  }
+}

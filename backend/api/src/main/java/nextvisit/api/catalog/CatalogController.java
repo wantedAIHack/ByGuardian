@@ -36,7 +36,7 @@ public class CatalogController {
                     axes.add(a.name());
                 }
             }
-            items.add(new CatalogDto.ItemDto(item.code(), item.label(), item.phrase(), item.group(), axes));
+            items.add(new CatalogDto.ItemDto(item.code(), item.label(), item.phrase(), item.group(), axes, QuestionnaireCatalog.forItem(item.code())));
         }
         Map<String, List<CatalogDto.ValueDto>> axes = new LinkedHashMap<>();
         for (Axis a : AxisLabels.ORDER) {

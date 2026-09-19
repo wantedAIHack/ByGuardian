@@ -49,6 +49,10 @@ services:
       # overrides them when an operator explicitly sets the variable.
       NEXTVISIT_LLM_MODEL: "${NEXTVISIT_LLM_MODEL:-qwen3:4b-q4_K_M}"
       NEXTVISIT_LLM_MAX_OUTPUT_TOKENS: "${NEXTVISIT_LLM_MAX_OUTPUT_TOKENS:-3000}"
+      # 2026-09-18 질문 합성 실측에서 생각 끔 최대 지연은 5.327초였다.
+      # 운영 부하와 콜드 시작 여유를 두고 코드 기본값과 같은 45초를 사용한다.
+      NEXTVISIT_LLM_READ_TIMEOUT: "${NEXTVISIT_LLM_READ_TIMEOUT:-45s}"
+      NEXTVISIT_LLM_REASONING_EFFORT: "${NEXTVISIT_LLM_REASONING_EFFORT:-none}"
       NEXTVISIT_LLM_API_KEY: ollama
       SERVER_ADDRESS: 0.0.0.0
       SERVER_PORT: "8080"

@@ -1,5 +1,7 @@
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api, setTokenChangeHandler } from './api';
+import { nextPrepPoll } from './prepPolling';
 import { saveRecoveryCode } from './recoveryCode';
 import type {
   Me, PrepCard, Progress, RecoveryCodeResponse, TherapistLink, Trajectory,
@@ -28,8 +30,38 @@ export const useProgress = (enabled = true) =>
 export const useTrajectory = (enabled = true) =>
   useQuery({ queryKey: QK.trajectory, queryFn: () => api.get<Trajectory[]>('/me/trajectory'), enabled });
 
-export const usePrepCard = (enabled = true) =>
-  useQuery({ queryKey: QK.prepCard, queryFn: () => api.get<PrepCard>('/me/prep-card'), enabled });
+export function usePrepCard(enabled = true) {
+  const pendingSince = useRef<number | null>(null);
+  return useQuery({
+    queryKey: QK.prepCard,
+    queryFn: () => api.get<PrepCard>('/me/prep-card'),
+    enabled,
+    refetchInterval: (query) => {
+      const next = nextPrepPoll(query.state.data?.generationStatus, pendingSince.current, Date.now());
+      pendingSince.current = next.pendingSince;
+      return next.interval;
+    },
+  });
+}
+
+export interface SaveQuestionItem { id: string | null; sentence: string }
+
+export function useSaveQuestions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (items: SaveQuestionItem[]) =>
+      api.put<PrepCard>('/me/prep-card/questions', { items }),
+    onSuccess: (card) => { qc.setQueryData(QK.prepCard, card); },
+  });
+}
+
+export function useRegenerateQuestions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<PrepCard>('/me/prep-card/regenerate'),
+    onSuccess: (card) => { qc.setQueryData(QK.prepCard, card); },
+  });
+}
 
 /** 저장이 끝나면 홈·경과·궤적·준비 카드가 전부 낡는다. 통째로 무효화한다. */
 export function useSaveWeek() {
@@ -39,21 +71,6 @@ export function useSaveWeek() {
       api.put<WeeklyRecordResponse>(`/me/weeks/${v.week}`, v.body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });
-    },
-  });
-}
-
-export function useSaveExtra() {
-  const qc = useQueryClient();
-  return useMutation({
-    // API 전체에서 유일하게 객체가 아니라 배열을 돌려준다
-    mutationFn: (questions: string[]) =>
-      api.put<string[]>('/me/prep-card/extra', { questions }),
-    onSuccess: (extraQuestions) => {
-      // 재조회가 느리거나 실패해도 이미 저장한 질문을 옛 캐시로 되돌리지 않는다.
-      qc.setQueryData<PrepCard>(QK.prepCard, (previous) =>
-        previous ? { ...previous, extraQuestions } : previous);
-      void qc.invalidateQueries({ queryKey: QK.prepCard });
     },
   });
 }
@@ -101,7 +118,7 @@ export function useIssueLink() {
  */
 export function clearTherapistLinkOnTokenChange(qc: QueryClient): void {
   setTokenChangeHandler(() => {
-    qc.removeQueries({ queryKey: QK.therapistLink });
+    qc.removeQueries({ queryKey: ['me'] });
   });
 }
 
@@ -110,6 +127,17 @@ export function useUpdateVisitDate() {
   return useMutation({
     mutationFn: (nextVisitDate: string | null) => api.patch<Me>('/me', { nextVisitDate }),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
+
+export function useAdvanceDemo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<Me>('/me/demo/advance'),
+    onSuccess: (next) => {
+      qc.setQueryData(QK.me, next);
       void qc.invalidateQueries({ queryKey: ['me'] });
     },
   });

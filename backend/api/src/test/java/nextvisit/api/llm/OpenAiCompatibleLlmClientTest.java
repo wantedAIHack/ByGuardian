@@ -58,10 +58,46 @@ class OpenAiCompatibleLlmClientTest {
             .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"{\\\"questions\\\":[]}\"}}]}",
                 MediaType.APPLICATION_JSON));
 
-        String content = client.complete(new QuestionRewritePrompt.Prompt("system /no_think", "{\"questions\":[]}"));
+        String content = client.complete(new LlmPrompt("system /no_think", "{\"questions\":[]}"));
 
         assertThat(content).isEqualTo("{\"questions\":[]}");
         server.verify();
+    }
+
+    @Test
+    void sendsReasoningEffortFromPropertiesWithOnlySystemAndUserMessages() throws Exception {
+        server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andExpect(request -> {
+                JsonNode body = mapper.readTree(((MockClientHttpRequest) request).getBodyAsString());
+                assertThat(body.get("reasoning_effort").asText()).isEqualTo("none");
+                assertThat(body.at("/messages").size()).isEqualTo(2);
+                assertThat(body.at("/messages/0/role").asText()).isEqualTo("system");
+                assertThat(body.at("/messages/1/role").asText()).isEqualTo("user");
+                assertThat(body.at("/messages/1/content").asText()).isEqualTo("real-user");
+            })
+            .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                MediaType.APPLICATION_JSON));
+
+        client.complete(new LlmPrompt("system", "real-user"));
+        server.verify();
+    }
+
+    @Test
+    void omitsReasoningEffortWhenPropertyIsBlank() throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer blankServer = MockRestServiceServer.bindTo(builder).build();
+        OpenAiCompatibleLlmClient blankClient = new OpenAiCompatibleLlmClient(
+            properties("test-key", "", "", ""), mapper, builder.build());
+        blankServer.expect(requestTo("http://localhost:11434/v1/chat/completions"))
+            .andExpect(request -> {
+                JsonNode body = mapper.readTree(((MockClientHttpRequest) request).getBodyAsString());
+                assertThat(body.has("reasoning_effort")).isFalse();
+            })
+            .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
+                MediaType.APPLICATION_JSON));
+
+        blankClient.complete(new LlmPrompt("system", "user"));
+        blankServer.verify();
     }
 
     @Test
@@ -77,7 +113,7 @@ class OpenAiCompatibleLlmClientTest {
             .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"{\\\"questions\\\":[]}\"}}]}",
                 MediaType.APPLICATION_JSON));
 
-        client.complete(new QuestionRewritePrompt.Prompt("system", "{\"questions\":[]}"));
+        client.complete(new LlmPrompt("system", "{\"questions\":[]}"));
         server.verify();
     }
 
@@ -93,7 +129,7 @@ class OpenAiCompatibleLlmClientTest {
             .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
                 MediaType.APPLICATION_JSON));
 
-        client.complete(new QuestionRewritePrompt.Prompt("system", "user"));
+        client.complete(new LlmPrompt("system", "user"));
         server.verify();
     }
 
@@ -111,7 +147,7 @@ class OpenAiCompatibleLlmClientTest {
             .andRespond(withSuccess("{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}",
                 MediaType.APPLICATION_JSON));
 
-        client.complete(new QuestionRewritePrompt.Prompt("system", "user"));
+        client.complete(new LlmPrompt("system", "user"));
         server.verify();
     }
 
@@ -120,7 +156,7 @@ class OpenAiCompatibleLlmClientTest {
         server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
             .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR).body("RESPONSE_SENTINEL"));
         LlmClientException http = assertThrows(LlmClientException.class,
-            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+            () -> client.complete(new LlmPrompt("system", "user")));
         assertThat(http.code()).isEqualTo(LlmFailureCode.HTTP_ERROR);
         assertThat(http.getMessage()).doesNotContain("RESPONSE_SENTINEL");
 
@@ -130,7 +166,7 @@ class OpenAiCompatibleLlmClientTest {
         server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
             .andRespond(withSuccess("{\"choices\":[]}", MediaType.APPLICATION_JSON));
         LlmClientException empty = assertThrows(LlmClientException.class,
-            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+            () -> client.complete(new LlmPrompt("system", "user")));
         assertThat(empty.code()).isEqualTo(LlmFailureCode.EMPTY_CONTENT);
     }
 
@@ -139,7 +175,7 @@ class OpenAiCompatibleLlmClientTest {
         server.expect(requestTo("http://localhost:11434/v1/chat/completions"))
             .andRespond(withSuccess("not-json", MediaType.APPLICATION_JSON));
         LlmClientException invalid = assertThrows(LlmClientException.class,
-            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+            () -> client.complete(new LlmPrompt("system", "user")));
         assertThat(invalid.code()).isEqualTo(LlmFailureCode.INVALID_RESPONSE);
 
         RestClient.Builder timeoutBuilder = RestClient.builder();
@@ -152,7 +188,7 @@ class OpenAiCompatibleLlmClientTest {
                     "request timed out", new java.net.http.HttpTimeoutException("timed out"));
             });
         LlmClientException timeout = assertThrows(LlmClientException.class,
-            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+            () -> client.complete(new LlmPrompt("system", "user")));
         assertThat(timeout.code()).isEqualTo(LlmFailureCode.TIMEOUT);
     }
 
@@ -164,18 +200,22 @@ class OpenAiCompatibleLlmClientTest {
                 MediaType.APPLICATION_JSON));
 
         LlmClientException invalid = assertThrows(LlmClientException.class,
-            () -> client.complete(new QuestionRewritePrompt.Prompt("system", "user")));
+            () -> client.complete(new LlmPrompt("system", "user")));
 
         assertThat(invalid.code()).isEqualTo(LlmFailureCode.INVALID_RESPONSE);
     }
 
     private static LlmProperties properties(String accessId, String accessSecret) {
-        return properties("test-key", accessId, accessSecret);
+        return properties("test-key", accessId, accessSecret, "none");
     }
 
     private static LlmProperties properties(String apiKey, String accessId, String accessSecret) {
+        return properties(apiKey, accessId, accessSecret, "none");
+    }
+
+    private static LlmProperties properties(String apiKey, String accessId, String accessSecret, String effort) {
         return new LlmProperties(true, URI.create("http://localhost:11434/v1"),
             "qwen3:4b-q8_0", apiKey, accessId, accessSecret,
-            Duration.ofSeconds(3), Duration.ofSeconds(45), 3, 512);
+            Duration.ofSeconds(3), Duration.ofSeconds(45), 3, 512, effort, 4000);
     }
 }

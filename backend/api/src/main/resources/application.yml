@@ -19,6 +19,8 @@ nextvisit:
     allowed-origins: ${NEXTVISIT_CORS_ORIGINS:http://localhost:5173}
   demo:
     enabled: ${NEXTVISIT_DEMO_ENABLED:true}
+  internal-seed:
+    enabled: ${NEXTVISIT_INTERNAL_SEED_ENABLED:false}
   llm:
     enabled: ${NEXTVISIT_LLM_ENABLED:false}
     base-url: ${NEXTVISIT_LLM_BASE_URL:http://localhost:11434/v1}
@@ -30,3 +32,5 @@ nextvisit:
     read-timeout: ${NEXTVISIT_LLM_READ_TIMEOUT:45s}
     max-attempts: ${NEXTVISIT_LLM_MAX_ATTEMPTS:3}
     max-output-tokens: ${NEXTVISIT_LLM_MAX_OUTPUT_TOKENS:3000}
+    reasoning-effort: ${NEXTVISIT_LLM_REASONING_EFFORT:none}
+    synthesis-max-note-chars: ${NEXTVISIT_LLM_SYNTHESIS_MAX_NOTE_CHARS:4000}

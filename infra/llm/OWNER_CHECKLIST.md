@@ -43,30 +43,93 @@
       `down`(`--volumes` 미사용) 후 재기동 시 모델 재다운로드 없음(6초),
       포트 11434는 `127.0.0.1` 전용이며 외부 리스너 없음.
       **재부팅 복구는 아직 검증하지 않았다**(6절).
-- [ ] Cloudflare/GitHub 외부 설정 — Access 정책 구성, Tunnel 연결, 외부(EC2)
-      Access smoke, GitHub runner group을 이 저장소와 `main` 배포 workflow로
-      제한하는 작업 중 어느 것도 수행되지 않았다.
-- [ ] 자동 배포 및 백엔드 LLM 활성화 — `LLM_DEPLOY_ENABLED`와
-      `NEXTVISIT_LLM_ENABLED`는 계속 `false`이며, 둘 다 위 두 항목이 실기로
-      전부 끝난 뒤에만 켠다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** Cloudflare Access 정책 구성 —
+      Ollama가 API와 같은 물리 호스트·같은 Docker 브리지 네트워크
+      (`nextvisit-llm_default`)에서 인터넷을 거치지 않고 내부 호출로만 연결되므로
+      보호할 공개 구간이 없다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** Ollama용 공개 Tunnel
+      hostname(`llm.<도메인>`) 연결 및 외부(EC2) Access smoke — cloudflared는
+      대신 API(`api.byguardian.site`)를 터널링하도록 이미 운영 중이며, Ollama를
+      별도로 인터넷에 노출할 이유가 사라졌다.
+- [x] **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** GitHub organization
+      `llm-production` runner group을 이 저장소와 `main` 배포 workflow로
+      제한하는 작업 — 노트북을 통한 GitHub self-hosted runner 자동 배포 자체가
+      2026-09-17 단일 호스트 설계에서 범위 밖으로 빠졌으므로 runner group 제한이
+      적용될 대상이 없다.
+- [ ] 자동 배포 — `LLM_DEPLOY_ENABLED`는 계속 `absent`/`false`이며, 이 저장소를
+      통한 GitHub Actions 기반 노트북 자동 배포는 여전히 구성되지 않았다.
 
 이 오프라인 실행 전체의 명령과 결과는 위 항목에 요약돼 있다. 더 상세한 근거가
 필요하면 이 커밋들의 이력과 각 커밋 메시지의 `Claude-Session` URL을 참고한다 —
 검증 과정에서 쓰인 임시 작업 디렉터리는 저장소에 커밋되지 않는 scratch였다.
 
+## 현재 상태 — 2026-09-17 (단일 호스트 실사, 이 문서의 목표와 실제가 갈라짐)
+
+이 체크리스트는 원래 "비공개 저장소 → GitHub 조직 이전 → 제한된 runner group →
+Cloudflare Access 뒤의 Ollama"라는 목표를 전제로 작성됐다. 2026-09-17 실사
+([`docs/qa/2026-09-17-single-host-inventory.md`](../../docs/qa/2026-09-17-single-host-inventory.md))와
+그 결과를 반영한
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](../../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)는
+그 전제 자체가 바뀌었다고 기록한다. 위 세 항목을 폐기로 표시한 이유가 그것이다.
+
+**한 가지는 이 문서의 다른 전제와 어긋난다.** 위 "자동 배포 및 백엔드 LLM
+활성화" 항목은 `NEXTVISIT_LLM_ENABLED`가 "위 두 항목이 실기로 전부 끝난 뒤에만"
+켜진다고 적었지만, 실사 결과 운영 API 컨테이너(`nextvisit-demo-api-1`)에는
+이미 `NEXTVISIT_LLM_ENABLED=true`가 설정되어 있다(2026-09-17 확인:
+`docker inspect`로 이름만 조회. 이 문서·실사 문서 모두 값 자체는 다루지 않는다).
+그런데 현재 모든 생성 시도가 `code=TIMEOUT attempts=3 elapsedMs=135025`(모델
+`qwen3:4b-q4_K_M`)로 끝나 질문은 매번 템플릿 폴백으로 대체되고 있다. 즉 이
+문서가 전제한 "활성화 전 완료 조건"을 거치지 않고 값이 이미 켜졌고, 그 결과
+LLM은 운영에서 한 번도 성공적으로 질문을 만들지 못했다. 이 타임아웃의 원인
+조사와 수정은 이 문서의 범위가 아니고 후속 LLM 수정 작업이 담당한다.
+
+아래 "완료 조건" 목록의 조건 1과 3도 같은 이유로 폐기했다 — 두 절이 다시
+어긋나면 이 절을 기준으로 "완료 조건"을 고친다.
+
 ## 완료 조건
 
-아래 항목을 위에서부터 순서대로 모두 완료해야 운영 준비가 끝난다.
+아래 항목을 위에서부터 순서대로 모두 완료해야 운영 준비가 끝난다. **2026-09-17
+갱신 — 이 목록은 위 "현재 상태 — 2026-09-17" 절과 같은 이유로 갈라져 있었다.**
+조건 1과 3은 그 절이 이미 폐기로 표시한 것과 같은 전제(비공개 저장소 → GitHub
+조직 → runner group, Ollama를 Cloudflare Access로 공개)에 기대고 있어 함께
+폐기한다. 이 목록을 다시 고칠 때는 항상 위 "현재 상태 — 2026-09-17" 절도 같이
+갱신해서 두 절이 다시 어긋나지 않게 한다.
 
-1. 저장소가 GitHub 조직 소유이고 `llm-production` runner group이 정확한 저장소와
-   `main` 배포 workflow에만 제한된다.
+1. ~~저장소가 GitHub 조직 소유이고 `llm-production` runner group이 정확한 저장소와
+   `main` 배포 workflow에만 제한된다.~~
+   **폐기 — 단일 호스트 구성에서 불필요해져 폐기.** GitHub self-hosted runner를
+   통한 노트북 자동 배포 자체가 2026-09-17 단일 호스트 설계에서 범위 밖으로
+   빠졌으므로 조직 이전과 runner group 제한이 적용될 대상이 없다.
 2. Ubuntu 노트북에서 `verify-host.sh gpu`가 통과하고 Ollama가 `100% GPU`로 실행된다.
-3. Ollama에 호스트 공개 포트가 없고 Cloudflare Access를 거쳐서만 접근된다.
-4. 재부팅 뒤 Docker 서비스, GitHub runner, Ollama, Tunnel이 복구된다.
-5. 마지막에만 GitHub 배포와 백엔드 LLM을 차례로 활성화한다.
+   **(그대로 유지 — 2026-09-14 실기 검증에서 통과 기록 있음, 위 "현재 상태 —
+   2026-09-14" 절 참고.)**
+3. ~~Ollama에 호스트 공개 포트가 없고 Cloudflare Access를 거쳐서만 접근된다.~~
+   **일부 폐기 — "Cloudflare Access를 거쳐서만 접근된다" 부분만 폐기.** "호스트
+   공개 포트 없음"은 지금도 사실이고 그대로 유지한다(2026-09-17 재확인:
+   `ss -tlnp`에서 `127.0.0.1:11434`만 LISTEN, 공개 인터페이스 바인딩 없음).
+   다만 Ollama가 Cloudflare Access를 거쳐 접근된다는 부분은 더 이상 맞지 않는다
+   — Ollama는 인터넷에 전혀 노출되지 않고, API가 같은 호스트의 Docker 브리지
+   네트워크(`nextvisit-llm_default`)로만 내부 호출한다. `llm.byguardian.site` 같은
+   공개 hostname도 없다(2026-09-17 재확인: DNS 조회 결과 없음). **대체 조건:**
+   Ollama가 `127.0.0.1`에만 바인딩되고, API와의 통신이 Docker 내부 네트워크로만
+   이뤄지며, cloudflared는 Ollama가 아니라 API(`api.byguardian.site`, 2026-09-17
+   재확인: `/health` 200)를 터널링한다.
+4. 재부팅 뒤 Docker 서비스, ~~GitHub runner,~~ Ollama, Tunnel이 복구된다.
+   **("GitHub runner" 부분만 폐기 — 등록된 self-hosted runner가 없다(조건 1
+   참고). Docker·Ollama·Tunnel(cloudflared, 지금은 API용) 복구 확인은 그대로
+   유지하며 아직 검증되지 않았다 — 위 "현재 상태 — 2026-09-14" 절의 "재부팅
+   복구는 아직 검증하지 않았다" 참고.)**
+5. 마지막에만 ~~GitHub 배포와~~ 백엔드 LLM을 활성화한다.
+   **("GitHub 배포" 부분만 폐기 — 자동 배포 파이프라인이 이번 설계 범위 밖이다.
+   "활성화는 마지막에만" 원칙 자체는 유지한다. 단, 이 원칙은 실제로는 이미
+   지켜지지 않았다: `NEXTVISIT_LLM_ENABLED=true`가 운영에 이미 설정돼 있고
+   (2026-09-17 재확인) 모든 생성 시도가 `code=TIMEOUT attempts=3`으로 끝난다 —
+   위 "현재 상태 — 2026-09-17" 절 참고.)**
 
-하나라도 충족하지 못하면 `LLM_DEPLOY_ENABLED`와
-`NEXTVISIT_LLM_ENABLED`를 계속 `false`로 둔다.
+하나라도 충족하지 못하면 `LLM_DEPLOY_ENABLED`를 계속 `false`로 둔다.
+`NEXTVISIT_LLM_ENABLED`는 이미 `true`로 켜져 있다는 사실과 그 결과는 위 "현재
+상태 — 2026-09-17" 절을 따른다 — 이 문서가 원래 전제한 순서대로 켜진 것이
+아니다.
 
 ## 0. 지금은 하지 않을 것
 

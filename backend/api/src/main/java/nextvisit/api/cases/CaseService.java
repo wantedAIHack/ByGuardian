@@ -6,10 +6,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import nextvisit.api.auth.AuthContext;
+import nextvisit.api.catalog.QuestionnaireCatalog;
 import nextvisit.api.auth.Guardian;
 import nextvisit.api.auth.GuardianRepository;
 import nextvisit.api.auth.TokenService;
 import nextvisit.api.common.Json;
+import nextvisit.api.common.CaseTimeline;
 import nextvisit.api.common.NotFoundException;
 import nextvisit.api.common.ValidationException;
 import nextvisit.api.common.WeekCalculator;
@@ -33,27 +35,42 @@ public class CaseService {
     private final SnapshotAssembler assembler;
     private final TokenService tokens;
     private final WeekCalculator weeks;
+    private final CaseTimeline timeline;
     private final Clock clock;
     private final Json json;
 
     public CaseService(CaseRepository cases, GuardianRepository guardians, SnapshotRepository snapshots,
-                       SnapshotAssembler assembler, TokenService tokens, WeekCalculator weeks, Clock clock, Json json) {
+                       SnapshotAssembler assembler, TokenService tokens, WeekCalculator weeks, CaseTimeline timeline,
+                       Clock clock, Json json) {
         this.cases = cases;
         this.guardians = guardians;
         this.snapshots = snapshots;
         this.assembler = assembler;
         this.tokens = tokens;
         this.weeks = weeks;
+        this.timeline = timeline;
         this.clock = clock;
         this.json = json;
     }
 
     public OnboardingResponse onboard(OnboardingRequest req) {
+        return onboard(req, false);
+    }
+
+    public OnboardingResponse onboardDemo(OnboardingRequest req) {
+        return onboard(req, true);
+    }
+
+    private OnboardingResponse onboard(OnboardingRequest req, boolean demoMode) {
         LocalDate today = weeks.today();
-        checkedVisitDate(req.nextVisitDate());
+        checkedVisitDate(req.nextVisitDate(), today);
         String recoveryCode = tokens.newRecoveryCode();
-        CaseEntity kase = new CaseEntity(OBSERVATION_SET, today, req.diagnosis(), req.pareticSide(), req.verbalDifficulty(),
-            req.nextVisitDate(), tokens.hash(recoveryCode), Instant.now(clock));
+        Instant now = Instant.now(clock);
+        CaseEntity kase = demoMode
+            ? CaseEntity.demo(OBSERVATION_SET, today, req.diagnosis(), req.pareticSide(), req.verbalDifficulty(),
+                req.nextVisitDate(), tokens.hash(recoveryCode), now, today)
+            : new CaseEntity(OBSERVATION_SET, today, req.diagnosis(), req.pareticSide(), req.verbalDifficulty(),
+                req.nextVisitDate(), tokens.hash(recoveryCode), now);
 
         // 기준선을 먼저 조립해 검증 실패 시 아무것도 저장하지 않는다
         SnapshotBody body = assembler.build(kase, req.baseline().items(), null,
@@ -69,7 +86,7 @@ public class CaseService {
     @Transactional(readOnly = true)
     public MeResponse me(AuthContext ctx) {
         CaseEntity kase = ctx.kase();
-        int week = weeks.currentWeek(kase.getStartDate());
+        int week = timeline.currentWeek(kase);
         List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(kase.getId());
         Integer lastRecordedWeek = snaps.isEmpty() ? null : snaps.get(snaps.size() - 1).getWeek();
         boolean recordedThisWeek = lastRecordedWeek != null && lastRecordedWeek == week;
@@ -78,10 +95,12 @@ public class CaseService {
         int lastRecorded = lastRecordedWeek == null ? 0 : lastRecordedWeek;
         int totalWeeks = Math.max(1, Math.max(lastRecorded, recordedThisWeek ? week : week - 1));
         return new MeResponse(
-            kase.getId(), ctx.guardian().getRelation(), weeks.today(), week,
+            kase.getId(), ctx.guardian().getRelation(), timeline.today(kase), week,
             weeks.isFullRecheck(week), kase.signalsEnabled(), kase.handEnabled(),
             week >= 2, recordedThisWeek, lastRecordedWeek, kase.getNextVisitDate(),
-            snaps.size(), totalWeeks);
+            snaps.size(), totalWeeks, QuestionnaireCatalog.upgradeRequired(snaps.isEmpty() ? null
+                : json.fromJson(snaps.get(snaps.size() - 1).getBody(), SnapshotBody.class)),
+            kase.isDemoMode(), kase.isDemoMode() && recordedThisWeek);
     }
 
     /** ctx의 case 엔티티는 필터가 요청 시작 시 붙인 것이라 detach 상태일 수 있어, 여기서 다시 읽어 저장한다. */
@@ -91,7 +110,7 @@ public class CaseService {
         // 지난 날짜가 "다음 진료"로 저장되면 홈이 그 날짜를 앞으로 올 일처럼
         // 보여주고, 사흘 안쪽이 아니므로 준비 카드 배너가 사라진다. 보호자는
         // 오타 하나로 이 제품의 결과물에 닿는 길을 잃는다. 비우는 것은 허용한다.
-        kase.setNextVisitDate(checkedVisitDate(req.nextVisitDate()));
+        kase.setNextVisitDate(checkedVisitDate(req.nextVisitDate(), timeline.today(kase)));
         cases.save(kase);
         return me(new AuthContext(ctx.guardian(), kase));
     }
@@ -104,8 +123,8 @@ public class CaseService {
      * 온보딩과 PATCH 두 입구가 같은 필드를 받으므로 검증도 한 곳에 둔다. 한쪽만
      * 막으면 다른 문으로 같은 값이 들어온다.
      */
-    private LocalDate checkedVisitDate(LocalDate visit) {
-        if (visit != null && visit.isBefore(weeks.today())) {
+    private LocalDate checkedVisitDate(LocalDate visit, LocalDate today) {
+        if (visit != null && visit.isBefore(today)) {
             throw new ValidationException("다음 진료일은 오늘 이후로 정해주세요");
         }
         return visit;

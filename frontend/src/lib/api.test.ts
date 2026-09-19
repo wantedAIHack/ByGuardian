@@ -1,7 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/server';
-import { ApiError, api, clearToken, getToken, setToken, setUnauthorizedHandler } from './api';
+import {
+  ApiError, api, clearDemoToken, clearToken, getToken, hasDemoToken, setDemoToken, setToken,
+  setUnauthorizedHandler,
+} from './api';
 
 const BASE = 'http://localhost:8080';
 
@@ -10,6 +13,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   setUnauthorizedHandler(null);
 });
 
@@ -80,5 +84,37 @@ describe('api', () => {
     setToken('t');
     clearToken();
     expect(getToken()).toBeNull();
+  });
+
+  it('데모 토큰을 세션에서 우선 사용하고 일반 토큰은 보존한다', async () => {
+    let seen: string | null = null;
+    server.use(http.get(`${BASE}/me`, ({ request }) => {
+      seen = request.headers.get('X-Guardian-Token');
+      return HttpResponse.json({ week: 1 });
+    }));
+    setToken('ordinary');
+    setDemoToken('demo');
+
+    await api.get('/me');
+
+    expect(seen).toBe('demo');
+    expect(hasDemoToken()).toBe(true);
+    clearDemoToken();
+    expect(getToken()).toBe('ordinary');
+  });
+
+  it('데모 요청의 401은 데모 토큰만 지운다', async () => {
+    server.use(http.get(`${BASE}/me`, () =>
+      HttpResponse.json({ code: 'UNAUTHORIZED', message: '토큰이 필요합니다' }, { status: 401 })));
+    setToken('ordinary');
+    setDemoToken('stale-demo');
+    const onUnauthorized = vi.fn();
+    setUnauthorizedHandler(onUnauthorized);
+
+    await api.get('/me').catch(() => undefined);
+
+    expect(hasDemoToken()).toBe(false);
+    expect(getToken()).toBe('ordinary');
+    expect(onUnauthorized).toHaveBeenCalledWith(true);
   });
 });

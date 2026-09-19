@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,11 +18,13 @@ import nextvisit.api.catalog.CatalogDto;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.common.Json;
+import nextvisit.api.common.CaseTimeline;
 import nextvisit.api.common.NotFoundException;
-import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.progress.TrajectoryMapper;
+import nextvisit.api.questions.ConfirmedItem;
 import nextvisit.api.questions.PrepCardService;
 import nextvisit.api.questions.QuestionCacheBody;
+import nextvisit.api.questions.QuestionListService;
 import nextvisit.api.questions.QuestionService;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotBody;
@@ -50,23 +51,26 @@ public class TherapistSummaryService {
     private final GuardianRepository guardians;
     private final SnapshotRepository snapshots;
     private final QuestionService questions;
+    private final QuestionListService questionLists;
     private final TrajectoryMapper trajectories;
     private final TokenService tokens;
-    private final WeekCalculator weeks;
+    private final CaseTimeline timeline;
     private final Json json;
     private final Clock clock;
 
     public TherapistSummaryService(TherapistLinkRepository links, CaseRepository cases, GuardianRepository guardians,
-                                   SnapshotRepository snapshots, QuestionService questions, TrajectoryMapper trajectories,
-                                   TokenService tokens, WeekCalculator weeks, Json json, Clock clock) {
+                                   SnapshotRepository snapshots, QuestionService questions, QuestionListService questionLists,
+                                   TrajectoryMapper trajectories,
+                                   TokenService tokens, CaseTimeline timeline, Json json, Clock clock) {
         this.links = links;
         this.cases = cases;
         this.guardians = guardians;
         this.snapshots = snapshots;
         this.questions = questions;
+        this.questionLists = questionLists;
         this.trajectories = trajectories;
         this.tokens = tokens;
-        this.weeks = weeks;
+        this.timeline = timeline;
         this.json = json;
         this.clock = clock;
     }
@@ -140,18 +144,26 @@ public class TherapistSummaryService {
             prevAuthor = s.getAuthorId();
         }
 
-        int currentWeek = weeks.currentWeek(kase.getStartDate());
+        int currentWeek = timeline.currentWeek(kase);
         int lastRecorded = snaps.isEmpty() ? 0 : snaps.get(snaps.size() - 1).getWeek();
         boolean recordedThisWeek = lastRecorded == currentWeek;
         int totalWeeks = Math.max(1, Math.max(lastRecorded, recordedThisWeek ? currentWeek : currentWeek - 1));
 
-        List<String> qs = questions.current(kase.getId())
-            .map(QuestionCacheBody::questions).orElse(List.of()).stream().map(QuestionCacheBody.Q::sentence).toList();
-        List<String> extra = Arrays.asList(json.fromJson(kase.getExtraQuestions(), String[].class));
+        QuestionCacheBody cache = questions.current(kase.getId()).orElse(new QuestionCacheBody(List.of(), 0));
+        List<ConfirmedItem> visible = questionLists.visible(kase, cache);
+        List<String> qs = visible.stream().filter(item -> !item.isCaregiver())
+            .map(ConfirmedItem::sentence).toList();
+        List<String> extra = visible.stream().filter(ConfirmedItem::isCaregiver)
+            .map(ConfirmedItem::sentence).toList();
+        List<TherapistSummaryDto.QuestionDetail> details = visible.stream()
+            .map(item -> new TherapistSummaryDto.QuestionDetail(
+                item.sentence(), item.origin(), item.basis().noteWeeks()))
+            .toList();
 
         String generatedAt = ZonedDateTime.now(clock).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
         return new TherapistSummaryDto(generatedAt, weekNumbers, trajectories.items(snaps), signals, sleep, kase.signalsEnabled(),
-            notes, qs, extra, new TherapistSummaryDto.Density(totalWeeks, snaps.size(), confirmed, authors), changes, DISCLAIMER);
+            notes, qs, extra, new TherapistSummaryDto.Density(totalWeeks, snaps.size(), confirmed, authors), changes,
+            details, DISCLAIMER);
     }
 
     private static String sleepLabel(int value) {
@@ -166,6 +178,7 @@ public class TherapistSummaryService {
     /** README §4 층 1: noChange 플래그가 아니라 실제 값에서 센다. 값 하나라도 CONFIRMED면 그 주는 확인된 관찰이다. */
     private static boolean hasConfirmedAxis(SnapshotBody body) {
         for (SnapshotBody.ItemValues iv : body.items().values()) {
+            if ("CONFIRMED".equals(iv.answerSource())) return true;
             for (Axis axis : Axis.values()) {
                 SnapshotBody.Val v = iv.axis(axis);
                 if (v != null && "CONFIRMED".equals(v.source())) {

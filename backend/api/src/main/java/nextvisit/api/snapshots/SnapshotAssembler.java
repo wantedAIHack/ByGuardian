@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import nextvisit.api.cases.CaseEntity;
+import nextvisit.api.catalog.QuestionnaireCatalog;
 import nextvisit.api.common.ValidationException;
 import nextvisit.engine.Axis;
 import nextvisit.engine.Item;
@@ -34,12 +35,17 @@ public class SnapshotAssembler {
         Map<String, ItemInput> given = confirmed == null ? Map.of() : confirmed;
         for (String code : given.keySet()) {
             set.item(code); // 모르는 코드면 IllegalArgumentException → 400
+            if (given.get(code) == null) throw new ValidationException(code + ": 항목의 답이 필요합니다");
         }
 
         Map<String, SnapshotBody.ItemValues> items = new LinkedHashMap<>();
         for (Item item : set.items()) {
             ItemInput in = given.get(item.code());
             if (in != null) {
+                if (previous != null && QuestionnaireCatalog.isV2(previous.items().get(item.code()))
+                    && !Integer.valueOf(2).equals(in.questionnaireVersion())) {
+                    throw new ValidationException(item.code() + ": 새 질문 기록을 이전 질문으로 덮어쓸 수 없습니다");
+                }
                 items.put(item.code(), confirmedValues(kase, item, in));
             } else if (previous != null && previous.items().get(item.code()) != null) {
                 items.put(item.code(), carried(previous.items().get(item.code())));
@@ -57,6 +63,18 @@ public class SnapshotAssembler {
     }
 
     private SnapshotBody.ItemValues confirmedValues(CaseEntity kase, Item item, ItemInput in) {
+        String note = in.note() == null || in.note().isBlank() ? null : in.note().trim();
+        if (note != null && note.length() > FREE_NOTE_MAX) throw new ValidationException(item.code() + ": 메모는 500자까지입니다");
+        if (Integer.valueOf(2).equals(in.questionnaireVersion())) {
+            for (Axis axis : Axis.values()) if (in.axis(axis) != null)
+                throw new ValidationException(item.code() + ": 새 질문에는 이전 축 값을 함께 보낼 수 없습니다");
+            return new SnapshotBody.ItemValues(null, null, null, null, note, 2,
+                QuestionnaireCatalog.validate(item.code(), in.answers()), CONFIRMED);
+        }
+        if (in.questionnaireVersion() != null && in.questionnaireVersion() != 1)
+            throw new ValidationException("지원하지 않는 질문 버전입니다");
+        if (in.answers() != null && !in.answers().isEmpty())
+            throw new ValidationException("answers에는 questionnaireVersion 2가 필요합니다");
         Map<Axis, SnapshotBody.Val> vals = new EnumMap<>(Axis.class);
         for (Axis axis : Axis.values()) {
             Integer v = in.axis(axis);
@@ -75,11 +93,12 @@ public class SnapshotAssembler {
             }
             vals.put(axis, new SnapshotBody.Val(v, CONFIRMED));
         }
-        String note = in.note() == null || in.note().isBlank() ? null : in.note().trim();
         return new SnapshotBody.ItemValues(vals.get(Axis.LEVEL), vals.get(Axis.AID), vals.get(Axis.CONSISTENCY), vals.get(Axis.HAND), note);
     }
 
     private static SnapshotBody.ItemValues carried(SnapshotBody.ItemValues prev) {
+        if (QuestionnaireCatalog.isV2(prev))
+            return new SnapshotBody.ItemValues(null, null, null, null, null, 2, prev.answers(), CARRIED);
         return new SnapshotBody.ItemValues(carry(prev.level()), carry(prev.aid()), carry(prev.consistency()), carry(prev.hand()), null);
     }
 

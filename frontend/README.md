@@ -21,7 +21,9 @@ Production API: VITE_API_BASE is the owner-approved https://api subdomain
 비밀값이 아니므로 저장소에 비밀값처럼 넣거나 공유할 필요는 없으며, 실제 도메인은 소유자가 승인합니다.
 
 현재 소스 라우트는 `/`, `/onboarding`, `/record`, `/trajectory`, `/prep-card`, `/settings`,
-`/recover`, `/demo`, 그리고 치료사용 요약 `/t/:token`입니다. 치료사용 공개 링크의 운영 보안 전환은
+`/recover`, `/demo`, `/demo/onboarding`, 그리고 치료사용 요약 `/t/:token`입니다. `/demo`는 일반
+온보딩을 그대로 사용하되 데모 토큰을 현재 탭에만 보관하고, 기록 뒤 가상 날짜를 일주일씩 진행합니다.
+치료사용 공개 링크의 운영 보안 전환은
 프론트엔드 설계의 2026-09-10 production security amendment를 따라 외부 배포 전에 적용합니다.
 
 ## 기준 문서
@@ -29,4 +31,4 @@ Production API: VITE_API_BASE is the owner-approved https://api subdomain
 - [제품과 실제 통합 상태](../README.md)
 - [프론트엔드 설계](../docs/superpowers/specs/2026-09-06-frontend-design.md)
 - [API 설계](../docs/superpowers/specs/2026-09-05-api-design.md)
-- [전체 서비스 배포 설계](../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md)
+- [단일 호스트 배포 설계](../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md)

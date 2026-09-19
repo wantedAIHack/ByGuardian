@@ -14,4 +14,8 @@ public interface CaseRepository extends JpaRepository<CaseEntity, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from CaseEntity c where c.id = :caseId")
     Optional<CaseEntity> findByIdForQuestionRefresh(@Param("caseId") UUID caseId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from CaseEntity c where c.id = :caseId")
+    Optional<CaseEntity> findByIdForUpdate(@Param("caseId") UUID caseId);
 }

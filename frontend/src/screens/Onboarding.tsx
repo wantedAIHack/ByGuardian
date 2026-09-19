@@ -1,18 +1,19 @@
+import { QuestionnaireEditor } from '../ui/Questionnaire';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { saveRecoveryCode } from '../lib/recoveryCode';
-import { ApiError, api, getToken, setToken } from '../lib/api';
+import { ApiError, api, hasDemoToken, hasStandardToken, setDemoToken, setToken } from '../lib/api';
 import { axisQuestion, axisValues } from '../lib/catalog';
 import {
   APP_NAME, DIAGNOSIS_CHOICES, PARETIC_SIDE_CHOICES, RELATIONS, VERBAL_DIFFICULTY_CHOICES,
   WEEKLY_ICS_FILENAME,
 } from '../lib/constants';
-import { ONBOARDING_DRAFT, clearDraft, loadDraft, saveDraft } from '../lib/draft';
+import { DEMO_ONBOARDING_DRAFT, ONBOARDING_DRAFT, clearDraft, loadDraft, saveDraft } from '../lib/draft';
 import { downloadIcs, weeklyReminderIcs } from '../lib/ics';
 import {
   BASELINE_COUNT, FIRST_BASELINE_STEP, LAST_STEP, RECOVERY_STEP, SECOND_GUARDIAN_STEP,
-  axesForStep, canAdvance, initialState, itemForStep, toOnboardingRequest, type OnboardingState,
+  axesForStep, canAdvance, initialState, itemForStep, resumeOnboarding, toOnboardingRequest, type OnboardingState,
 } from '../lib/onboarding';
 import type { Catalog, OnboardingResponse } from '../lib/types';
 import { onboardingProgress } from '../lib/flowProgress';
@@ -21,15 +22,16 @@ import { Choice } from '../ui/Choice';
 import { Notice } from '../ui/Notice';
 import { Screen } from '../ui/Screen';
 
-export function Onboarding({ catalog }: { catalog: Catalog }) {
+export function Onboarding({ catalog, mode = 'standard' }: { catalog: Catalog; mode?: 'standard' | 'demo' }) {
+  const draftKey = mode === 'demo' ? DEMO_ONBOARDING_DRAFT : ONBOARDING_DRAFT;
   const [s, setS] = useState<OnboardingState>(
-    () => loadDraft<OnboardingState>(ONBOARDING_DRAFT) ?? initialState(),
+    () => resumeOnboarding(catalog, loadDraft<OnboardingState>(draftKey) ?? initialState()),
   );
 
   // 매 변화마다 남긴다. RECOVERY_STEP(복구 코드) 이후로는 케이스가 이미 만들어져 초안이 무의미하다.
   useEffect(() => {
-    if (s.step < RECOVERY_STEP) saveDraft(ONBOARDING_DRAFT, s);
-  }, [s]);
+    if (s.step < RECOVERY_STEP) saveDraft(draftKey, s);
+  }, [draftKey, s]);
 
   const set = (patch: Partial<OnboardingState>) => setS((prev) => ({ ...prev, ...patch }));
   const go = (delta: number) => setS((prev) => ({ ...prev, step: prev.step + delta }));
@@ -42,10 +44,11 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   // 없으면 POST /cases를 두 번 보내 케이스를 둘 만들고 첫 번째를 버리게 된다.
   useEffect(() => {
     if (recoveryCode) return;          // 방금 만든 참이라 복구 코드 화면을 보여줘야 한다
-    if (getToken() === null) return;
-    clearDraft(ONBOARDING_DRAFT);
+    const alreadyCreated = mode === 'demo' ? hasDemoToken() : hasStandardToken();
+    if (!alreadyCreated) return;
+    clearDraft(draftKey);
     navigate('/', { replace: true });
-  }, [recoveryCode, navigate]);
+  }, [draftKey, mode, recoveryCode, navigate]);
 
   // create.isPending을 disabled 판단에 그대로 믿을 수 없다 — @tanstack/react-query 5.62는
   // notifyManager.schedule()을 실제 setTimeout(fn, 0)으로 미루므로, mutate() 직후
@@ -55,14 +58,17 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   const submitting = useRef(false);
 
   const create = useMutation({
-    mutationFn: () => api.post<OnboardingResponse>('/cases', toOnboardingRequest(s)),
+    mutationFn: () => api.post<OnboardingResponse>(
+      mode === 'demo' ? '/demo/cases' : '/cases', toOnboardingRequest(s, catalog),
+    ),
     onSuccess: (res) => {
-      setToken(res.guardianToken);
+      if (mode === 'demo') setDemoToken(res.guardianToken);
+      else setToken(res.guardianToken);
       // 서버는 해시만 들고 있다. 여기서 안 적어두면 이 코드는 다시는 못 본다.
-      saveRecoveryCode(res.recoveryCode);
+      if (mode === 'standard') saveRecoveryCode(res.recoveryCode);
       setRecoveryCode(res.recoveryCode);
       // 케이스가 생겼다. 초안은 이제 의미가 없다.
-      clearDraft(ONBOARDING_DRAFT);
+      clearDraft(draftKey);
       setSaveError(null);
       setS((prev) => ({ ...prev, step: RECOVERY_STEP }));
       // RECOVERY_STEP으로 넘어가 이 버튼은 다시 보이지 않는다. 풀 필요가 없다.
@@ -76,7 +82,8 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
   // 위 효과가 홈으로 보내는 동안, 이미 끝난 온보딩의 단계 화면이 한 프레임이라도 그려지면
   // 안 된다. 뒤로 가기로 재진입한 경우 특히 그렇다 — 답을 다시 바꿀 수 있는 것처럼 보인다.
   // recoveryCode가 있으면 방금 이 세션에서 만든 케이스이므로 막지 않는다.
-  if (!recoveryCode && getToken() !== null) {
+  const alreadyCreated = mode === 'demo' ? hasDemoToken() : hasStandardToken();
+  if (!recoveryCode && alreadyCreated) {
     return null;
   }
 
@@ -272,6 +279,10 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
         }
       >
         <h1 data-step-title tabIndex={-1} className="text-title font-semibold">{item.label}</h1>
+        {item.questionnaire ? (
+          <QuestionnaireEditor form={item.questionnaire} value={value}
+            onChange={(next) => set({ items: { ...s.items, [item.code]: next } })} />
+        ) : <>
         <p className="pt-4 text-ink-soft">요즘 어떠신가요?</p>
 
         <div className="flex flex-col gap-3 pt-4">
@@ -307,6 +318,8 @@ export function Onboarding({ catalog }: { catalog: Catalog }) {
               </div>
             ))
           : null}
+        </>}
+
       </Screen>
     );
   }

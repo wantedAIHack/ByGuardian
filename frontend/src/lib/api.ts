@@ -2,6 +2,7 @@ import type { ApiErrorBody } from './types';
 
 const BASE: string = import.meta.env.VITE_API_BASE ?? 'http://localhost:8080';
 const TOKEN_KEY = 'guardianToken';
+const DEMO_TOKEN_KEY = 'nextvisit.demo-token';
 const HEADER = 'X-Guardian-Token';
 
 export class ApiError extends Error {
@@ -18,9 +19,31 @@ export class ApiError extends Error {
 
 export function getToken(): string | null {
   try {
+    const demo = sessionStorage.getItem(DEMO_TOKEN_KEY);
+    if (demo) return demo;
+  } catch {
+    /* 세션 저장소를 읽을 수 없으면 일반 토큰으로 계속한다. */
+  }
+  try {
     return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
+  }
+}
+
+export function hasStandardToken(): boolean {
+  try {
+    return localStorage.getItem(TOKEN_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export function hasDemoToken(): boolean {
+  try {
+    return sessionStorage.getItem(DEMO_TOKEN_KEY) !== null;
+  } catch {
+    return false;
   }
 }
 
@@ -46,7 +69,29 @@ export function setToken(token: string): void {
   onTokenChange?.();
 }
 
+export function setDemoToken(token: string): void {
+  try {
+    sessionStorage.setItem(DEMO_TOKEN_KEY, token);
+  } catch {
+    /* 저장할 수 없으면 이후 인증이 실패하지만 입력 완료 응답은 그대로 보여준다. */
+  }
+  onTokenChange?.();
+}
+
+export function clearDemoToken(): void {
+  try {
+    sessionStorage.removeItem(DEMO_TOKEN_KEY);
+  } catch {
+    /* 위와 같다 */
+  }
+  onTokenChange?.();
+}
+
 export function clearToken(): void {
+  if (hasDemoToken()) {
+    clearDemoToken();
+    return;
+  }
   try {
     localStorage.removeItem(TOKEN_KEY);
   } catch {
@@ -55,10 +100,10 @@ export function clearToken(): void {
   onTokenChange?.();
 }
 
-let unauthorized: (() => void) | null = null;
+let unauthorized: ((demoEnded: boolean) => void) | null = null;
 
 /** App이 라우터를 잡은 뒤 등록한다. fetch 층이 라우팅을 몰라도 되게 하는 이음새다. */
-export function setUnauthorizedHandler(fn: (() => void) | null): void {
+export function setUnauthorizedHandler(fn: ((demoEnded: boolean) => void) | null): void {
   unauthorized = fn;
 }
 
@@ -85,8 +130,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       /* 서버가 JSON을 못 준 경우. 위의 기본 문구를 쓴다. */
     }
     if (res.status === 401) {
+      const demoEnded = hasDemoToken();
       clearToken();
-      unauthorized?.();
+      unauthorized?.(demoEnded);
     }
     throw new ApiError(res.status, code, message);
   }

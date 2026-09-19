@@ -6,8 +6,20 @@ export type SnapshotKind = 'BASELINE' | 'WEEKLY' | 'FULL_RECHECK';
 
 export interface CodeLabel { code: string; label: string }
 export interface CatalogValue { value: number; label: string }
+export type Answers = Record<string, string[]>;
+export interface ObservationQuestion {
+  code: string;
+  label: string;
+  help?: string | null;
+  kind: 'single' | 'multiple';
+  required: boolean;
+  options: CodeLabel[];
+  when?: { question: string; anyOf: string[] } | null;
+  exclusive?: string[] | null;
+}
+export interface Questionnaire { version: number; questions: ObservationQuestion[] }
 export interface CatalogItem {
-  code: string; label: string; phrase: string; group: string; axes: Axis[];
+  code: string; label: string; phrase: string; group: string; axes: Axis[]; questionnaire?: Questionnaire | null;
 }
 export interface Catalog {
   set: string;
@@ -27,6 +39,8 @@ export interface ItemInput {
   consistency: number | null;
   hand: number | null;
   note: string | null;
+  questionnaireVersion?: number | null;
+  answers?: Answers | null;
 }
 export interface FreeNoteInput { text: string; timeTag: string | null }
 
@@ -53,6 +67,7 @@ export interface Me {
   today: string;
   week: number;
   fullRecheck: boolean;
+  questionnaireUpgradeRequired?: boolean;
   signalsEnabled: boolean;
   handEnabled: boolean;
   canRecordThisWeek: boolean;
@@ -61,6 +76,8 @@ export interface Me {
   nextVisitDate: string | null;
   recordedWeeks: number;
   totalWeeks: number;
+  demoMode?: boolean;
+  canAdvanceDemo?: boolean;
 }
 
 export interface RecoverRequest { recoveryCode: string; relation: string }
@@ -91,7 +108,15 @@ export interface Progress {
 
 export interface Point { week: number; value: number; label: string; source: string }
 export interface AxisSeries { axis: string; axisLabel: string; values: Point[] }
-export interface Trajectory { code: string; label: string; changed: boolean; axes: AxisSeries[] }
+export interface QuestionnaireObservation {
+  week: number; question: string; label: string; answers: string[]; source: string;
+}
+export interface Trajectory {
+  code: string; label: string; changed: boolean; axes: AxisSeries[];
+  questionnaireVersion?: number | null;
+  versionStartWeek?: number | null;
+  observations?: QuestionnaireObservation[];
+}
 
 export interface EvidenceItem {
   code: string; label: string; axis: string; axisLabel: string; values: Point[];
@@ -104,6 +129,15 @@ export interface Evidence { items: EvidenceItem[]; signal: SignalEvidence | null
 export interface PrepQuestion {
   rank: number; type: string; sentence: string; source: string; evidence: Evidence;
 }
+export type QuestionOrigin = 'TEMPLATE' | 'LLM' | 'CAREGIVER';
+export type GenerationStatus = 'PENDING' | 'DONE' | 'FAILED' | 'TEMPLATE_ONLY';
+export interface NoteBasis {
+  week: number; timeTagLabel: string | null; itemLabel: string | null; text: string;
+}
+export interface ItemBasis { evidence: Evidence; notes: NoteBasis[] }
+export interface PrepItem {
+  id: string; sentence: string; origin: QuestionOrigin; edited: boolean; basis: ItemBasis;
+}
 export interface PrepCard {
   week: number;
   nextVisitDate: string | null;
@@ -111,6 +145,11 @@ export interface PrepCard {
   extraQuestions: string[];
   emptyMessage: string | null;
   therapistGlance: string[];
+  /** 새 백엔드만 보낸다. 없으면 옛 필드로 읽기 전용 화면을 그린다. */
+  items?: PrepItem[];
+  generationStatus?: GenerationStatus;
+  edited?: boolean;
+  suggestionAvailable?: boolean;
 }
 
 export interface TherapistLink { url: string; token: string }
@@ -126,6 +165,9 @@ export interface Density {
   totalWeeks: number; recordedWeeks: number; confirmedWeeks: number; authors: string[];
 }
 export interface AuthorChange { week: number; from: string; to: string }
+export interface TherapistQuestionDetail {
+  sentence: string; origin: QuestionOrigin; noteWeeks: number[];
+}
 export interface TherapistSummary {
   generatedAt: string;
   weeks: number[];
@@ -138,6 +180,7 @@ export interface TherapistSummary {
   extraQuestions: string[];
   density: Density;
   authorChanges: AuthorChange[];
+  questionDetails?: TherapistQuestionDetail[];
   disclaimer: string;
 }
 

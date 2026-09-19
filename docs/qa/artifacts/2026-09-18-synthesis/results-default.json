@@ -1,0 +1,119 @@
+[ {
+  "case" : "case-a",
+  "run" : 1,
+  "elapsedMs" : 26299,
+  "accepted" : true,
+  "rule" : null,
+  "questions" : [ {
+    "sentence" : "집 안에서 방향을 바꾸실 때 한동안 서서 바닥을 바라보시는 이유가 무엇일까요?",
+    "detections" : [ ],
+    "noteWeeks" : [ 3 ]
+  }, {
+    "sentence" : "계단 앞에서 매번 손잡이를 먼저 찾고 첫발을 내딛기까지 기다리시는 이유가 무엇일까요?",
+    "detections" : [ ],
+    "noteWeeks" : [ 4 ]
+  }, {
+    "sentence" : "방에서 나오신 뒤 현관 쪽 문턱을 넘기 전에 제 팔을 잡으시는 이유가 무엇일까요?",
+    "detections" : [ ],
+    "noteWeeks" : [ 6 ]
+  } ],
+  "promptTokens" : 811,
+  "completionTokens" : 752,
+  "totalTokens" : 1563
+}, {
+  "case" : "case-a",
+  "run" : 2,
+  "elapsedMs" : 36998,
+  "accepted" : false,
+  "rule" : "ROOT_FIELDS",
+  "questions" : [ ],
+  "promptTokens" : 811,
+  "completionTokens" : 1043,
+  "totalTokens" : 1854
+}, {
+  "case" : "case-a",
+  "run" : 3,
+  "elapsedMs" : 35029,
+  "accepted" : false,
+  "rule" : "ROOT_FIELDS",
+  "questions" : [ ],
+  "promptTokens" : 811,
+  "completionTokens" : 1043,
+  "totalTokens" : 1854
+}, {
+  "case" : "case-b",
+  "run" : 1,
+  "elapsedMs" : 55695,
+  "accepted" : false,
+  "rule" : "QUESTION_COUNT",
+  "questions" : [ ],
+  "promptTokens" : 853,
+  "completionTokens" : 1523,
+  "totalTokens" : 2376
+}, {
+  "case" : "case-b",
+  "run" : 2,
+  "elapsedMs" : 36360,
+  "accepted" : true,
+  "rule" : null,
+  "questions" : [ {
+    "sentence" : "화장실 이용에 대해 어떤 점을 확인해야 할까요?",
+    "detections" : [ "D1" ],
+    "noteWeeks" : [ 4 ]
+  }, {
+    "sentence" : "일어설 때 얼굴을 찡그리는 모습에 대해 어떤 점을 확인해야 할까요?",
+    "detections" : [ "D2" ],
+    "noteWeeks" : [ 3 ]
+  } ],
+  "promptTokens" : 853,
+  "completionTokens" : 1005,
+  "totalTokens" : 1858
+}, {
+  "case" : "case-b",
+  "run" : 3,
+  "elapsedMs" : 33884,
+  "accepted" : true,
+  "rule" : null,
+  "questions" : [ {
+    "sentence" : "화장실 이용에 대해 어떤 점을 확인해야 할까요?",
+    "detections" : [ "D1" ],
+    "noteWeeks" : [ 4 ]
+  }, {
+    "sentence" : "일어설 때 얼굴을 찡그리는 모습에 대해 어떤 점을 확인해야 할까요?",
+    "detections" : [ "D2" ],
+    "noteWeeks" : [ 3 ]
+  } ],
+  "promptTokens" : 853,
+  "completionTokens" : 1005,
+  "totalTokens" : 1858
+}, {
+  "case" : "case-c",
+  "run" : 1,
+  "elapsedMs" : 56931,
+  "accepted" : false,
+  "rule" : "QUESTION_MARK",
+  "questions" : [ ],
+  "promptTokens" : 820,
+  "completionTokens" : 1561,
+  "totalTokens" : 2381
+}, {
+  "case" : "case-c",
+  "run" : 2,
+  "elapsedMs" : 78242,
+  "accepted" : false,
+  "rule" : "QUESTION_MARK",
+  "questions" : [ ],
+  "promptTokens" : 820,
+  "completionTokens" : 2136,
+  "totalTokens" : 2956
+}, {
+  "case" : "case-c",
+  "run" : 3,
+  "elapsedMs" : 73624,
+  "accepted" : false,
+  "rule" : "QUESTION_MARK",
+  "questions" : [ ],
+  "promptTokens" : 820,
+  "completionTokens" : 2136,
+  "totalTokens" : 2956
+} ]

@@ -1,9 +1,35 @@
 # NextVisit LLM operations
 
+**2026-09-17 live state.** The real deployment is a single Ubuntu laptop
+(SSH alias `llm`) running the API, PostgreSQL, Ollama, and cloudflared
+together; see
+[`docs/superpowers/specs/2026-09-17-single-host-deployment-design.md`](../../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md).
+Under that design, cloudflared tunnels the **API** (`api.byguardian.site`),
+not Ollama, and the API reaches Ollama over the internal Docker bridge
+network (`nextvisit-llm_default`) — never over the internet. As a
+consequence, the Cloudflare Access / public-`llm.<domain>`-hostname material
+in this file (sections below) and the GitHub organization runner group in
+`OWNER_CHECKLIST.md` describe a plan that was never built and is now
+obsolete for that reason; `OWNER_CHECKLIST.md`'s "현재 상태" section marks
+each obsolete item explicitly. The command reference below is kept for its
+still-accurate parts (Compose usage, immutable releases, macOS development)
+and as a historical record where superseded.
+
 The required image is Ollama `0.33.3`; Docker Compose v2.24.4 or later is
-required. The default model is `qwen3:4b-q4_K_M`
-with a 2,048-token context. The named volume `nextvisit-llm-ollama-data`
-survives container replacement.
+required. The default model is `qwen3:4b-q4_K_M`. The Compose default context
+is **8,192** tokens (`compose.yml:11`, `"${OLLAMA_CONTEXT_LENGTH:-8192}"`;
+raised from 2,048 by `OWNER_CHECKLIST.md`'s 2026-09-15 entry) because the model
+needs about 2,500 tokens of thinking budget before it can answer.
+
+**Live value, observed 2026-09-16 (host clock).** Until 16:40 UTC the running
+`nextvisit-llm-ollama-1` container had `OLLAMA_CONTEXT_LENGTH=8192`. At
+16:49:35 UTC the container was recreated — by what or whom is not established —
+and came up with `OLLAMA_CONTEXT_LENGTH=2048`, which is **not** the Compose
+default and breaks the question-rewrite response schema; see
+[`docs/qa/2026-09-17-llm-activation.md`](../../docs/qa/2026-09-17-llm-activation.md)
+§3. Check the live value with `docker inspect` before trusting either number.
+
+The named volume `nextvisit-llm-ollama-data` survives container replacement.
 
 The repository owner's post-merge setup, hardware acceptance, activation, and
 rollback checklist is [`OWNER_CHECKLIST.md`](./OWNER_CHECKLIST.md). Complete it

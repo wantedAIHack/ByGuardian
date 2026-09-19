@@ -1,5 +1,7 @@
 # API 설계 — `backend/api`
 
+> **LLM 입력과 검증 부분은 2026-09-17자 [보호자 기록 기반 질문 정리 설계](2026-09-17-caregiver-question-synthesis-design.md)로 대체됐다.** 보호자 원문을 LLM에 보내고, 문장 다듬기 검사 대신 근거 기반 검사를 쓴다.
+
 승인일 2026-09-05. README v3가 제품 스펙이고, 이 문서는 그 §4·§5·§8·§9·§10을 Spring Boot API로 옮기는 계약이다.
 README와 어긋나면 README가 이긴다. 단 하나의 예외는 §10의 LLM 클라이언트 선택(아래 6절)이며, README를 같이 고쳤다.
 

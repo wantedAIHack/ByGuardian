@@ -1,6 +1,6 @@
 # 백엔드 — 구현된 것
 
-2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. Ubuntu/NVIDIA 실기 검증과 외부 배포 활성화는 장비·소유자 설정 준비 뒤 남습니다.
+2026-09-10 병합 기준. 규칙 엔진, API core, LLM 질문 다듬기와 노트북용 컨테이너·파이프라인 구성이 구현됐고, React PWA도 같은 저장소의 `frontend/`에 통합됐습니다. 현재 API·PostgreSQL·Ollama·cloudflared는 실제 Ubuntu/NVIDIA 노트북 한 대에서 운영 중입니다(2026-09-17 실사: `../docs/qa/2026-09-17-single-host-inventory.md`).
 
 이 문서는 코드를 검토하려는 사람을 위한 것입니다. 제품이 무엇이고 왜 이렇게 설계했는지는 최상위 `README.md`(제품 스펙)에 있고, 이 문서는 **그 스펙이 코드의 어디에 어떻게 들어갔는지**만 다룹니다.
 
@@ -9,7 +9,7 @@
 | `../README.md` | 제품 스펙. 무엇을 만들고 무엇을 안 만드는가. 충돌하면 이 문서가 이깁니다 |
 | `../frontend/README.md` | React PWA 실행, 환경변수, 화면·테스트 지도 |
 | `../docs/superpowers/specs/2026-09-05-api-design.md` | API 계약. 데이터·주차 규칙·엔드포인트 |
-| `../docs/superpowers/specs/2026-09-10-full-service-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정 |
+| `../docs/superpowers/specs/2026-09-17-single-host-deployment-design.md` | 세 모듈의 런타임 경계와 배포 의사결정(단일 호스트 기준) |
 | `../docs/superpowers/specs/2026-09-07-llm-server-design.md` | LLM, Docker, Tunnel, CI/CD의 승인된 계약 |
 | `../infra/llm/README.md` | macOS CPU 실행과 향후 Ubuntu/NVIDIA 운영 절차 |
 | `../docs/superpowers/plans/2026-09-06-api-followups.md` | 다음 계획이 알아야 할 것 |
@@ -198,7 +198,8 @@ week = floor((오늘 - 시작일).days / 7) + 1
 | PUT | `/me/prep-card/extra` | 토큰 | 4 보호자 추가 질문 |
 | POST | `/me/therapist-link` | 토큰 | 5 링크 발급 |
 | GET | `/t/{token}` | 링크 토큰 | 5 치료사용 요약 |
-| POST | `/demo` | 없음 | 데모 |
+| POST | `/demo/cases` | 없음 | 데모 온보딩·1주차 기준선 |
+| POST | `/me/demo/advance` | 토큰 | 기록 완료 뒤 데모 날짜를 7일 진행 |
 | GET | `/health` | 없음 | 운영 |
 
 **`/catalog`을 먼저 보세요.** 항목 8개의 코드와 두 가지 표시 문구, 축 4개의 값별 라벨, 신호 동작·종류, 시간대, 수면 단계가 전부 들어 있습니다. 프론트가 한국어를 하드코딩할 필요가 없습니다.
@@ -264,7 +265,7 @@ else if (status == FLUCTUATING) → 전환인지만 본다
 
 감소는 "악화"가 아니라 "도움이 더 필요해지셨습니다"로 씁니다. 가치 판정을 피하는 것이 규제 방어이자 보호자에게 잘못된 확신을 주지 않는 방법입니다.
 
-LLM 출력은 같은 구조 경계 안으로 들어옵니다. `QuestionService.refresh`는 같은 케이스의 권위 행을 먼저 쓰기 잠금한 뒤 스냅샷과 캐시를 읽어 새 입력을 직렬화하고, `AFTER_COMMIT` worker는 그대로 유지합니다. 엔진 템플릿을 먼저 `LLM_PENDING`으로 저장한 뒤 최소 입력만 비동기로 보내며, `QuestionOutputGuard`는 JSON 구조, rank, 길이, 질문형, 금지 표현, 행동 지시와 숫자 보존뿐 아니라 NFC 템플릿 원문 또는 명시된 마지막 연결형 두 가지만 확인합니다. 하나라도 실패하면 전체 batch를 버리고 템플릿을 유지합니다. 늦은 응답은 `generation_id` 조건부 갱신이 차단합니다. 새로고침과 공통 오류 로그는 케이스·요청·throwable 대신 고정 코드만 남깁니다.
+LLM 출력은 같은 구조 경계 안으로 들어옵니다. `QuestionService.refresh`는 같은 케이스의 권위 행을 먼저 쓰기 잠금한 뒤 스냅샷과 캐시를 읽어 새 입력을 직렬화하고, `AFTER_COMMIT` worker는 그대로 유지합니다. 엔진 템플릿을 먼저 `LLM_PENDING`으로 저장한 뒤, 보호자 원문이 하나라도 있을 때만 관찰 변화와 그 원문을 비동기로 보냅니다. `SynthesisValidator`는 JSON 구조, 문장 길이, 질문형, 금지 표현, 행동 지시, 근거로 댄 변화·주차, 근거 밖 숫자를 확인합니다. 하나라도 실패하면 전체 batch를 버리고 템플릿을 유지합니다. 통과한 질문은 `origin=LLM`과 근거(`basis`)를 달고 캐시를 교체합니다. 늦은 응답은 `generation_id` 조건부 갱신이 차단합니다. 새로고침과 공통 오류 로그는 케이스·요청·throwable 대신 고정 코드만 남깁니다.
 
 ---
 
@@ -291,17 +292,11 @@ NEXTVISIT_LLM_MODEL=qwen3:4b-q8_0 \
 ./gradlew :api:bootRun
 ```
 
-데모를 한 번 돌려보시면 전체가 한눈에 들어옵니다.
+브라우저의 `/demo`에서 실제 온보딩과 1주차 기준선을 입력할 수 있습니다. 각 주 기록을 마치면
+`다음 주차로 이동`으로 해당 데모 케이스의 가상 날짜만 7일 진행합니다. 일반 케이스는 서버의
+실제 서울 날짜를 계속 사용합니다.
 
-```bash
-curl -s -X POST localhost:8080/demo | tee /tmp/d.json | jq
-T=$(jq -r .guardianToken /tmp/d.json)
-
-curl -s localhost:8080/me/prep-card -H "X-Guardian-Token: $T" | jq '.questions[].sentence'
-curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
-```
-
-준비 카드에서 이 세 문장이 나와야 합니다.
+아래 세 문장을 만드는 6주 시드는 공개 데모가 아니라 엔진·API 회귀 테스트의 결정적 fixture로 유지합니다.
 
 ```
 화장실 이용은 혼자 하심으로 바뀌셨는데 집 안에서 걷기는 6주째 그대로입니다. 집 안에서 걷기는 왜 안 늘고 있을까요?
@@ -322,7 +317,7 @@ curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
 3. **`api/.../progress/ProgressService.java`** — 침묵 게이트와 전환 문구가 실제로 적용되는 곳
 4. **`api/.../progress/TrajectoryMapper.java`** — 층 3이 판정을 못 흘리는 이유
 5. **`api/.../snapshots/SnapshotAssembler.java`** — 보호자 입력이 통과하는 유일한 관문
-6. **`api/.../demo/DemoFlowTest.java`** — 심사 시나리오가 HTTP로 도는 것
+6. **`api/.../demo/DemoFlowTest.java`** — 데모 온보딩과 가상 주차 진행이 HTTP로 도는 것
 
 ## 8. 아직 없는 것
 

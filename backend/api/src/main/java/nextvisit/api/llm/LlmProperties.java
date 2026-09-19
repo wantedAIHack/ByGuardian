@@ -21,5 +21,7 @@ public record LlmProperties(
     @DefaultValue("3s") Duration connectTimeout,
     @DefaultValue("45s") Duration readTimeout,
     @Min(1) @Max(3) @DefaultValue("3") int maxAttempts,
-    @Min(1) @DefaultValue("3000") int maxOutputTokens
+    @Min(1) @DefaultValue("3000") int maxOutputTokens,
+    @DefaultValue("none") String reasoningEffort,
+    @Min(500) @DefaultValue("4000") int synthesisMaxNoteChars
 ) {}
