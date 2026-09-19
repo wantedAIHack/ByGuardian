@@ -3,9 +3,31 @@ import type { Catalog } from '../src/lib/types';
 
 const API = 'http://127.0.0.1:18080';
 
+function seoulToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
+function addDays(date: string, days: number) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function displayDate(date: string) {
+  return date.replaceAll('-', '.');
+}
+
 test('judge completes onboarding and advances a private demo timeline toward the chosen visit', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const catalog = await (await request.get(`${API}/catalog`)).json() as Catalog;
+  const weekOne = seoulToday();
+  const weekTwo = addDays(weekOne, 7);
+  const visitDay = addDays(weekOne, 14);
 
   await page.goto('/demo');
   await expect(page.getByText(/온보딩과 1주차 관찰부터 직접/)).toBeVisible();
@@ -16,7 +38,7 @@ test('judge completes onboarding and advances a private demo timeline toward the
     await page.getByRole('button', { name: choice, exact: true }).click();
     await page.getByRole('button', { name: '다음', exact: true }).click();
   }
-  await page.getByLabel('다음 진료일').fill('2026-09-19');
+  await page.getByLabel('다음 진료일').fill(visitDay);
   await page.getByRole('button', { name: '다음', exact: true }).click();
   await page.getByRole('button', { name: '시작', exact: true }).click();
 
@@ -46,7 +68,7 @@ test('judge completes onboarding and advances a private demo timeline toward the
   await page.getByRole('button', { name: '나중에 하기' }).click();
 
   await expect(page.getByLabel('데모 진행')).toContainText('1주차');
-  await expect(page.getByLabel('데모 진행')).toContainText('2026.09.05');
+  await expect(page.getByLabel('데모 진행')).toContainText(displayDate(weekOne));
   expect(await page.evaluate(() => ({
     demo: sessionStorage.getItem('nextvisit.demo-token'),
     ordinary: localStorage.getItem('guardianToken'),
@@ -54,7 +76,7 @@ test('judge completes onboarding and advances a private demo timeline toward the
 
   await page.getByRole('button', { name: '다음 주차로 이동' }).click();
   await expect(page.getByLabel('데모 진행')).toContainText('2주차');
-  await expect(page.getByLabel('데모 진행')).toContainText('2026.09.12');
+  await expect(page.getByLabel('데모 진행')).toContainText(displayDate(weekTwo));
   await expect(page.getByRole('button', { name: '다음 주차로 이동' })).toBeDisabled();
 
   await page.getByRole('link', { name: '3분 기록하기' }).click();
@@ -68,7 +90,7 @@ test('judge completes onboarding and advances a private demo timeline toward the
   await expect(page.getByRole('button', { name: '다음 주차로 이동' })).toBeEnabled();
   await page.getByRole('button', { name: '다음 주차로 이동' }).click();
   await expect(page.getByLabel('데모 진행')).toContainText('3주차');
-  await expect(page.getByLabel('데모 진행')).toContainText('2026.09.19');
+  await expect(page.getByLabel('데모 진행')).toContainText(displayDate(visitDay));
   await expect(page.getByRole('link', { name: '진료 준비 카드 보기' })).toBeVisible();
 
   await page.getByRole('button', { name: '치료사에게 보여드리기', exact: true }).click();
