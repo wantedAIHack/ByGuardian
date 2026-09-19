@@ -18,8 +18,8 @@ import nextvisit.api.catalog.CatalogDto;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.common.Json;
+import nextvisit.api.common.CaseTimeline;
 import nextvisit.api.common.NotFoundException;
-import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.progress.TrajectoryMapper;
 import nextvisit.api.questions.ConfirmedItem;
 import nextvisit.api.questions.PrepCardService;
@@ -54,14 +54,14 @@ public class TherapistSummaryService {
     private final QuestionListService questionLists;
     private final TrajectoryMapper trajectories;
     private final TokenService tokens;
-    private final WeekCalculator weeks;
+    private final CaseTimeline timeline;
     private final Json json;
     private final Clock clock;
 
     public TherapistSummaryService(TherapistLinkRepository links, CaseRepository cases, GuardianRepository guardians,
                                    SnapshotRepository snapshots, QuestionService questions, QuestionListService questionLists,
                                    TrajectoryMapper trajectories,
-                                   TokenService tokens, WeekCalculator weeks, Json json, Clock clock) {
+                                   TokenService tokens, CaseTimeline timeline, Json json, Clock clock) {
         this.links = links;
         this.cases = cases;
         this.guardians = guardians;
@@ -70,7 +70,7 @@ public class TherapistSummaryService {
         this.questionLists = questionLists;
         this.trajectories = trajectories;
         this.tokens = tokens;
-        this.weeks = weeks;
+        this.timeline = timeline;
         this.json = json;
         this.clock = clock;
     }
@@ -144,7 +144,7 @@ public class TherapistSummaryService {
             prevAuthor = s.getAuthorId();
         }
 
-        int currentWeek = weeks.currentWeek(kase.getStartDate());
+        int currentWeek = timeline.currentWeek(kase);
         int lastRecorded = snaps.isEmpty() ? 0 : snaps.get(snaps.size() - 1).getWeek();
         boolean recordedThisWeek = lastRecorded == currentWeek;
         int totalWeeks = Math.max(1, Math.max(lastRecorded, recordedThisWeek ? currentWeek : currentWeek - 1));
@@ -178,6 +178,7 @@ public class TherapistSummaryService {
     /** README §4 층 1: noChange 플래그가 아니라 실제 값에서 센다. 값 하나라도 CONFIRMED면 그 주는 확인된 관찰이다. */
     private static boolean hasConfirmedAxis(SnapshotBody body) {
         for (SnapshotBody.ItemValues iv : body.items().values()) {
+            if ("CONFIRMED".equals(iv.answerSource())) return true;
             for (Axis axis : Axis.values()) {
                 SnapshotBody.Val v = iv.axis(axis);
                 if (v != null && "CONFIRMED".equals(v.source())) {

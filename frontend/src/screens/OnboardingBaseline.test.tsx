@@ -8,8 +8,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/server';
 import { Onboarding } from './Onboarding';
 import { catalogFixture } from '../test/fixtures';
-import { ONBOARDING_DRAFT } from '../lib/draft';
-import { getToken, setToken } from '../lib/api';
+import { DEMO_ONBOARDING_DRAFT, ONBOARDING_DRAFT } from '../lib/draft';
+import { getToken, hasDemoToken, setToken } from '../lib/api';
 import * as ics from '../lib/ics';
 import { LAST_STEP, SECOND_GUARDIAN_STEP } from '../lib/onboarding';
 
@@ -112,6 +112,35 @@ describe('온보딩 기준선', () => {
     expect(Object.keys((sent as any).baseline.items)).toHaveLength(8);
     // 케이스가 만들어졌으니 초안은 지운다
     expect(localStorage.getItem(ONBOARDING_DRAFT)).toBeNull();
+  });
+
+  it('데모 모드는 별도 초안과 생성 API를 쓰고 일반 토큰을 보존한다', async () => {
+    const user = userEvent.setup();
+    setToken('ordinary-token');
+    const items: Record<string, unknown> = {};
+    for (const i of catalogFixture.items) {
+      items[i.code] = { level: 2, aid: i.axes.includes('AID') ? 2 : null,
+        consistency: i.axes.includes('CONSISTENCY') ? 1 : null,
+        hand: i.axes.includes('HAND') ? 1 : null, note: null };
+    }
+    localStorage.setItem(DEMO_ONBOARDING_DRAFT, JSON.stringify({
+      step: 14, relation: '딸', relationOther: '', diagnosis: 'STROKE',
+      pareticSide: 'LEFT', verbalDifficulty: 'NONE', nextVisitDate: '2026-09-30', items,
+    }));
+    server.use(http.post(`${BASE}/demo/cases`, () => HttpResponse.json(
+      { caseId: 'demo-1', guardianToken: 'demo-token', recoveryCode: 'DEMO1234', week: 1 }, { status: 201 })));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={qc}><MemoryRouter>
+      <Onboarding catalog={catalogFixture} mode="demo" />
+    </MemoryRouter></QueryClientProvider>);
+
+    await user.click(screen.getByRole('button', { name: '다음' }));
+
+    expect(await screen.findByText('DEMO1234')).toBeInTheDocument();
+    expect(getToken()).toBe('demo-token');
+    expect(hasDemoToken()).toBe(true);
+    expect(localStorage.getItem('guardianToken')).toBe('ordinary-token');
+    expect(localStorage.getItem(DEMO_ONBOARDING_DRAFT)).toBeNull();
   });
 
   it('연속 클릭해도 케이스 생성 요청은 한 번만 보낸다', async () => {

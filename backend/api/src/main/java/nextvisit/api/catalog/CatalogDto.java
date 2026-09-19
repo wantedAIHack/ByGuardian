@@ -8,7 +8,11 @@ public record CatalogDto(String set, List<ItemDto> items, Map<String, List<Value
                          List<CodeLabel> signalActions, List<CodeLabel> signalKinds, List<CodeLabel> timeTags,
                          List<CodeLabel> sleepLevels, List<CodeLabel> axisLabels,
                          List<CodeLabel> axisQuestions) {
-    public record ItemDto(String code, String label, String phrase, String group, List<String> axes) {}
+    public record ItemDto(String code, String label, String phrase, String group, List<String> axes, QuestionnaireCatalog.Questionnaire questionnaire) {
+        public ItemDto(String code, String label, String phrase, String group, List<String> axes) {
+            this(code, label, phrase, group, axes, null);
+        }
+    }
     public record ValueDto(int value, String label) {}
     public record CodeLabel(String code, String label) {}
 }

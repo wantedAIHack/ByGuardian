@@ -198,7 +198,8 @@ week = floor((오늘 - 시작일).days / 7) + 1
 | PUT | `/me/prep-card/extra` | 토큰 | 4 보호자 추가 질문 |
 | POST | `/me/therapist-link` | 토큰 | 5 링크 발급 |
 | GET | `/t/{token}` | 링크 토큰 | 5 치료사용 요약 |
-| POST | `/demo` | 없음 | 데모 |
+| POST | `/demo/cases` | 없음 | 데모 온보딩·1주차 기준선 |
+| POST | `/me/demo/advance` | 토큰 | 기록 완료 뒤 데모 날짜를 7일 진행 |
 | GET | `/health` | 없음 | 운영 |
 
 **`/catalog`을 먼저 보세요.** 항목 8개의 코드와 두 가지 표시 문구, 축 4개의 값별 라벨, 신호 동작·종류, 시간대, 수면 단계가 전부 들어 있습니다. 프론트가 한국어를 하드코딩할 필요가 없습니다.
@@ -291,17 +292,11 @@ NEXTVISIT_LLM_MODEL=qwen3:4b-q8_0 \
 ./gradlew :api:bootRun
 ```
 
-데모를 한 번 돌려보시면 전체가 한눈에 들어옵니다.
+브라우저의 `/demo`에서 실제 온보딩과 1주차 기준선을 입력할 수 있습니다. 각 주 기록을 마치면
+`다음 주차로 이동`으로 해당 데모 케이스의 가상 날짜만 7일 진행합니다. 일반 케이스는 서버의
+실제 서울 날짜를 계속 사용합니다.
 
-```bash
-curl -s -X POST localhost:8080/demo | tee /tmp/d.json | jq
-T=$(jq -r .guardianToken /tmp/d.json)
-
-curl -s localhost:8080/me/prep-card -H "X-Guardian-Token: $T" | jq '.questions[].sentence'
-curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
-```
-
-준비 카드에서 이 세 문장이 나와야 합니다.
+아래 세 문장을 만드는 6주 시드는 공개 데모가 아니라 엔진·API 회귀 테스트의 결정적 fixture로 유지합니다.
 
 ```
 화장실 이용은 혼자 하심으로 바뀌셨는데 집 안에서 걷기는 6주째 그대로입니다. 집 안에서 걷기는 왜 안 늘고 있을까요?
@@ -322,7 +317,7 @@ curl -s "localhost:8080$(jq -r .therapistUrl /tmp/d.json)" | jq
 3. **`api/.../progress/ProgressService.java`** — 침묵 게이트와 전환 문구가 실제로 적용되는 곳
 4. **`api/.../progress/TrajectoryMapper.java`** — 층 3이 판정을 못 흘리는 이유
 5. **`api/.../snapshots/SnapshotAssembler.java`** — 보호자 입력이 통과하는 유일한 관문
-6. **`api/.../demo/DemoFlowTest.java`** — 심사 시나리오가 HTTP로 도는 것
+6. **`api/.../demo/DemoFlowTest.java`** — 데모 온보딩과 가상 주차 진행이 HTTP로 도는 것
 
 ## 8. 아직 없는 것
 

@@ -16,6 +16,10 @@ function OnboardingRoute() {
   return <Onboarding catalog={useCatalog()} />;
 }
 
+function DemoOnboardingRoute() {
+  return <Onboarding catalog={useCatalog()} mode="demo" />;
+}
+
 // Onboarding과 같은 이유다: 홈도 관찰 항목 개수(현재 8가지)를 카탈로그에서 받는다.
 // 화면 스스로 useCatalog()를 부르면 화면 테스트가 CatalogProvider의 비동기 로딩까지
 // 떠안는다. 라우트 쪽에서 한 번 받아 그냥 prop으로 내린다.
@@ -40,6 +44,7 @@ export const router = createBrowserRouter([
       { path: 'settings', element: <Settings /> },
       { path: 'recover', element: <Recover /> },
       { path: 'demo', element: <Demo /> },
+      { path: 'demo/onboarding', element: <DemoOnboardingRoute /> },
     ],
   },
   // 치료사 화면은 App 밖이다. 보호자용 껍데기도 카탈로그도 쓰지 않는다.

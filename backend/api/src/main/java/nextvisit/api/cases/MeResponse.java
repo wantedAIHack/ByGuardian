@@ -16,5 +16,8 @@ public record MeResponse(
     Integer lastRecordedWeek,
     LocalDate nextVisitDate,
     int recordedWeeks,
-    int totalWeeks
+    int totalWeeks,
+    boolean questionnaireUpgradeRequired,
+    boolean demoMode,
+    boolean canAdvanceDemo
 ) {}

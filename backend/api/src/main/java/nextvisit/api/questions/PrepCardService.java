@@ -12,8 +12,8 @@ import nextvisit.api.auth.AuthContext;
 import nextvisit.api.cases.CaseEntity;
 import nextvisit.api.cases.CaseRepository;
 import nextvisit.api.common.Json;
+import nextvisit.api.common.CaseTimeline;
 import nextvisit.api.common.ValidationException;
-import nextvisit.api.common.WeekCalculator;
 import nextvisit.api.engine.EngineBridge;
 import nextvisit.api.llm.SynthesisInput;
 import nextvisit.api.llm.SynthesisInputAssembler;
@@ -52,12 +52,12 @@ public class PrepCardService {
     private final QuestionCacheRepository caches;
     private final EngineBridge bridge;
     private final TrajectoryMapper trajectories;
-    private final WeekCalculator weeks;
+    private final CaseTimeline timeline;
     private final Json json;
 
     public PrepCardService(CaseRepository cases, SnapshotRepository snapshots, QuestionService questions,
                            QuestionListService list, QuestionCacheRepository caches, EngineBridge bridge,
-                           TrajectoryMapper trajectories, WeekCalculator weeks, Json json) {
+                           TrajectoryMapper trajectories, CaseTimeline timeline, Json json) {
         this.cases = cases;
         this.snapshots = snapshots;
         this.questions = questions;
@@ -65,7 +65,7 @@ public class PrepCardService {
         this.caches = caches;
         this.bridge = bridge;
         this.trajectories = trajectories;
-        this.weeks = weeks;
+        this.timeline = timeline;
         this.json = json;
     }
 
@@ -90,7 +90,7 @@ public class PrepCardService {
         List<PrepCardDto.Item> items = list.visible(kase, cache).stream()
             .map(v -> new PrepCardDto.Item(v.id(), v.sentence(), v.origin(), v.edited(), basisOf(v, snaps)))
             .toList();
-        return new PrepCardDto(weeks.currentWeek(kase.getStartDate()), kase.getNextVisitDate(), qs, extra,
+        return new PrepCardDto(timeline.currentWeek(kase), kase.getNextVisitDate(), qs, extra,
             qs.isEmpty() ? EMPTY_MESSAGE : null, glance(r, preferredCodes),
             items, QuestionListService.generationStatus(row), kase.getConfirmedQuestions() != null,
             list.suggestionAvailable(kase, row));

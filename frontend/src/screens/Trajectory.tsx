@@ -1,3 +1,4 @@
+import { QuestionnaireHistory } from '../ui/QuestionnaireHistory';
 import { ScrollRegion } from '../ui/ScrollRegion';
 import { ObservationValue } from '../ui/ObservationValue';
 import { PageHeader } from '../ui/PageHeader';
@@ -32,6 +33,7 @@ function Series({ label, axes }: { label: string; axes: AxisSeries[] }) {
 export function Trajectory() {
   const query = useTrajectory();
   const { data, isPending } = query;
+  const migrated = new Set((data ?? []).filter((i) => i.questionnaireVersion === 2).map((i) => i.code.replace(/:v2$/, '')));
 
   return (
     <main className="app-page">
@@ -43,7 +45,17 @@ export function Trajectory() {
 
       <div className="flex flex-col gap-10 pt-10">
         {(data ?? []).map((t) =>
-          t.changed ? (
+          t.questionnaireVersion === 2 ? (
+            <section key={t.code} className="note-surface print-flow min-w-0">
+              <h2 className="font-semibold">{t.label}</h2>
+              <QuestionnaireHistory item={t} />
+            </section>
+          ) : migrated.has(t.code) ? (
+            <section key={t.code} className="note-surface min-w-0">
+              <h2 className="pb-3 font-semibold">{t.label} (이전 질문)</h2>
+              <Series label={t.label} axes={t.axes} />
+            </section>
+          ) : t.changed ? (
             <section key={t.code} className="note-surface min-w-0">
               <h2 className="pb-3 font-semibold">{t.label}</h2>
               <Series label={t.label} axes={t.axes} />

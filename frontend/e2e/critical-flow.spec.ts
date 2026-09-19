@@ -1,5 +1,5 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
-import type { PrepCard, Trajectory, WeeklyRecordResponse } from '../src/lib/types';
+import type { Catalog, PrepCard, Trajectory, WeeklyRecordResponse } from '../src/lib/types';
 
 const FE = 'http://127.0.0.1:14173';
 const API = 'http://127.0.0.1:18080';
@@ -27,13 +27,12 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
     if (![FE, API].includes(origin)) unexpectedOrigins.push(origin);
   });
   watch(context);
-  await page.goto('/demo');
-  const demo = page.waitForResponse((r) => r.url() === `${API}/demo` && r.request().method() === 'POST');
-  await page.getByRole('button', { name: '데모 기록 만들기', exact: true }).click();
-  expect((await demo).status()).toBe(201);
-  await expect(page.getByText('여섯 주치 관찰이 들어 있습니다.', { exact: true })).toBeVisible();
+  const demoResponse = await request.post(`${API}/test/demo-seed`);
+  const seeded = await demoResponse.json() as { guardianToken: string };
+  expect(demoResponse.status()).toBe(201);
+  await page.addInitScript((token) => localStorage.setItem('guardianToken', token), seeded.guardianToken);
   const initialPrepResponse = page.waitForResponse((r) => r.url() === `${API}/me/prep-card`);
-  await page.getByRole('link', { name: '보호자 화면 보기' }).click();
+  await page.goto('/');
   await expect(page.getByText('이번 주 기록을 남겼습니다', { exact: true })).toBeVisible();
   const initialPrep = await (await initialPrepResponse).json() as PrepCard;
   const initialToilet = initialPrep.questions.flatMap((q) => q.evidence.items)
@@ -42,12 +41,33 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
 
   // The seeded current week is already recorded; open its real editor to update it.
   await page.goto('/record');
-  await page.getByRole('button', { name: '네, 달라진 게 있어요', exact: true }).click();
-  await page.getByRole('button', { name: '화장실 이용', exact: true }).click();
-  await page.getByRole('button', { name: '다음', exact: true }).click();
-  await page.getByRole('button', { name: '손 잡아드림', exact: true }).click();
-  await page.getByRole('button', { name: '매번', exact: true }).click();
-  await page.getByRole('button', { name: '다음', exact: true }).click();
+  // Existing demo records use v1, so the new UI requests a fresh questionnaire baseline.
+  const catalog = await (await request.get(`${API}/catalog`)).json() as Catalog;
+  const existing = await (await request.get(`${API}/me/trajectory`, {
+    headers: { 'X-Guardian-Token': seeded.guardianToken },
+  })).json() as Trajectory[];
+  await expect(page.getByText(/새 질문에 처음 답해 주세요/)).toBeVisible();
+  await page.getByRole('button', { name: '시작', exact: true }).click();
+  for (const item of catalog.items) {
+    await expect(page.getByRole('heading', { name: item.label, exact: true })).toBeVisible();
+    if (item.questionnaire) {
+      for (const question of item.questionnaire.questions.filter((q) => q.required)) {
+        const group = page.getByRole('group', { name: question.label, exact: true });
+        if (await group.count() === 0) continue;
+        const choice = question.code === 'route' ? '입으로 먹음' : question.options[0]!.label;
+        await group.getByRole('button', { name: choice, exact: true }).click();
+      }
+      if (item.code === 'toilet') await page.getByRole('textbox', { name: /추가로 남길 관찰/ }).fill('변기에서 일어설 때는 혼자 하셨어요.');
+    } else {
+      for (const axis of item.axes) {
+        const choices = catalog.axes[axis]!;
+        const prior = existing.find((t) => t.code === item.code)?.axes.find((a) => a.axis === axis)?.values.at(-1);
+        const label = (choices.find((choice) => choice.value === prior?.value) ?? choices.at(-1))!.label;
+        await page.getByRole('button', { name: label, exact: true }).click();
+      }
+    }
+    await page.getByRole('button', { name: '다음', exact: true }).click();
+  }
   await page.getByRole('button', { name: '없었어요', exact: true }).click();
   await page.getByRole('button', { name: '잘 주무심', exact: true }).click();
   await page.getByRole('button', { name: '다음', exact: true }).click();
@@ -64,15 +84,20 @@ test('real six-week record, prep card, and private therapist sharing with LLM of
   expect(prep.week).toBe(6);
   expect(prep.questions.length).toBeGreaterThan(0);
   expect(prep.questions.every((q) => q.source === 'TEMPLATE')).toBe(true);
-  // Changing week 6 breaks the seeded sustained rise, so toilet must leave the
-  // selected prep questions. Independently prove the new value was persisted.
+  // The questionnaire transition retires the old toilet analysis instead of comparing incompatible scales.
   expect(prep.questions.flatMap((q) => q.evidence.items).some((item) => item.code === 'toilet')).toBe(false);
   expect(prep.questions.map((q) => q.sentence)).not.toEqual(initialPrep.questions.map((q) => q.sentence));
-  const trajectoryResponse = page.waitForResponse((r) => r.url() === `${API}/me/trajectory`);
   await page.getByRole('link', { name: '전체 기록 보기', exact: true }).click();
-  const trajectory = await (await trajectoryResponse).json() as Trajectory[];
+  await expect(page.getByRole('heading', { name: '전체 기록', exact: true })).toBeVisible();
+  const trajectory = await (await request.get(`${API}/me/trajectory`, {
+    headers: { 'X-Guardian-Token': seeded.guardianToken },
+  })).json() as Trajectory[];
   const changed = trajectory.find((item) => item.code === 'toilet')?.axes.find((axis) => axis.axis === 'LEVEL');
-  expect(changed?.values.find((v) => v.week === 6)).toMatchObject({ value: 1, source: 'CONFIRMED' });
+  expect(changed?.values.find((v) => v.week === 6)).toBeUndefined();
+  const revisedToilet = trajectory.find((item) => item.code === 'toilet:v2');
+  expect(revisedToilet?.observations?.find((o) => o.week === 6 && o.question === 'transfer'))
+    .toMatchObject({ answers: ['혼자 앉고 일어섬'], source: 'CONFIRMED' });
+  await expect(page.getByText('변기에서 일어설 때는 혼자 하셨어요.', { exact: true })).toBeVisible();
   await page.goBack();
   await page.getByRole('link', { name: '진료 준비 카드 보기' }).click();
   for (const question of prep.questions) await expect(page.getByText(question.sentence, { exact: false })).toBeVisible();

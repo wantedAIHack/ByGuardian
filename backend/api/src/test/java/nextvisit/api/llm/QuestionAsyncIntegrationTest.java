@@ -140,7 +140,7 @@ class QuestionAsyncIntegrationTest {
         stubSuccessfulSynthesis(demoEntered);
 
         MvcResult demo = assertTimeout(Duration.ofSeconds(1), () ->
-            mvc.perform(post("/demo"))
+            mvc.perform(post("/test/demo-seed"))
                 .andExpect(status().isCreated())
                 .andReturn());
         JsonNode created = json(mapper, demo);
@@ -309,6 +309,33 @@ class QuestionAsyncIntegrationTest {
         assertThat(applicationEvents.stream(QuestionGenerationRequested.class)
             .filter(event -> event.caseId().equals(caseId))
             .count()).isEqualTo(1);
+    }
+
+
+    @Test
+    void structuredQuestionnaireNoteStillCompletesExistingLlmSynthesis() throws Exception {
+        Onboarded onboarded = onboardDefault(mvc, mapper);
+        UUID caseId = UUID.fromString(onboarded.caseId());
+        AtomicReference<JsonNode> received = new AtomicReference<>();
+        when(client.complete(any())).thenAnswer(invocation -> {
+            LlmPrompt prompt = invocation.getArgument(0);
+            received.set(mapper.readTree(prompt.userMessage()));
+            return synthesized(prompt, Synthesis.SHOULDER);
+        });
+        clock.advanceDays(7);
+        Map<String, Object> body = weeklyNoChange();
+        body.put("noChange", false);
+        body.put("changedItems", Map.of("dressing", Map.of(
+            "questionnaireVersion", 2, "answers", Map.of("assistance", java.util.List.of("3")),
+            "note", "오후에 옷을 입을 때 어깨를 자꾸 만지신다")));
+        mvc.perform(putJson(onboarded.token(), "/me/weeks/2", mapper, body)).andExpect(status().isOk());
+        awaitStatus(caseId, QuestionCacheStatus.LLM_DONE);
+        assertThat(received.get().path("detections").size()).isZero();
+        assertThat(received.get().path("notes").get(0).path("text").asText())
+            .isEqualTo("오후에 옷을 입을 때 어깨를 자꾸 만지신다");
+        assertThat(questions.current(caseId).orElseThrow().questions()).hasSize(1);
+        assertThat(questions.current(caseId).orElseThrow().questions().get(0).source())
+            .isEqualTo(QuestionCacheBody.SOURCE_LLM);
     }
 
     /** 시드 케이스에서 자유 기록만 지운다 — 질문은 그대로 남고 보호자 원문만 사라진다. */

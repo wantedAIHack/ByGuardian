@@ -1,3 +1,4 @@
+import { questionnaireComplete, questionnaireInput } from './questionnaire';
 import type {
   Axis, Catalog, CatalogItem, Diagnosis, ItemInput, OnboardingRequest,
   PareticSide, VerbalDifficulty,
@@ -86,6 +87,8 @@ export function canAdvance(c: Catalog, s: OnboardingState): boolean {
       const item = itemForStep(c, s.step);
       if (!item) return true; // 0·5·6·15~17단계는 막지 않는다 (외래일은 건너뛸 수 있다)
       const v = s.items[item.code] ?? EMPTY_ITEM;
+      if (item.questionnaire) return v.questionnaireVersion === item.questionnaire.version
+        && questionnaireComplete(item.questionnaire, v.answers ?? {}) && (v.note?.length ?? 0) <= 500;
       return axesForStep(c, s, item).every((a) => axisValue(v, a) !== null);
     }
   }
@@ -96,10 +99,15 @@ export function canAdvance(c: Catalog, s: OnboardingState): boolean {
  * 통증 신호는 기준선에서 묻지 않지만, 활성 케이스에는 null이 아니라 {}를 보내야 한다.
  * 서버가 활성 케이스의 null painSignal에 400을 낸다.
  */
-export function toOnboardingRequest(s: OnboardingState): OnboardingRequest {
+export function toOnboardingRequest(s: OnboardingState, catalog?: Catalog): OnboardingRequest {
   const items: Record<string, ItemInput> = {};
   for (const item of Object.keys(s.items)) {
     const v = s.items[item] ?? EMPTY_ITEM;
+    const form = catalog?.items.find((i) => i.code === item)?.questionnaire;
+    if (form) {
+      items[item] = questionnaireInput(form, v);
+      continue;
+    }
     items[item] = {
       level: v.level,
       aid: v.aid,
@@ -121,4 +129,13 @@ export function toOnboardingRequest(s: OnboardingState): OnboardingRequest {
       freeNote: null,
     },
   };
+}
+
+/** A saved v1 draft is not a completed answer to a newly revised question. */
+export function resumeOnboarding(c: Catalog, s: OnboardingState): OnboardingState {
+  if (s.step >= RECOVERY_STEP) return s;
+  const firstIncomplete = c.items.findIndex((item, index) => item.questionnaire
+    && FIRST_BASELINE_STEP + index <= s.step
+    && !canAdvance(c, { ...s, step: FIRST_BASELINE_STEP + index }));
+  return firstIncomplete < 0 ? s : { ...s, step: FIRST_BASELINE_STEP + firstIncomplete };
 }

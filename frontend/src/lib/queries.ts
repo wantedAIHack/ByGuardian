@@ -118,7 +118,7 @@ export function useIssueLink() {
  */
 export function clearTherapistLinkOnTokenChange(qc: QueryClient): void {
   setTokenChangeHandler(() => {
-    qc.removeQueries({ queryKey: QK.therapistLink });
+    qc.removeQueries({ queryKey: ['me'] });
   });
 }
 
@@ -127,6 +127,17 @@ export function useUpdateVisitDate() {
   return useMutation({
     mutationFn: (nextVisitDate: string | null) => api.patch<Me>('/me', { nextVisitDate }),
     onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+    },
+  });
+}
+
+export function useAdvanceDemo() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<Me>('/me/demo/advance'),
+    onSuccess: (next) => {
+      qc.setQueryData(QK.me, next);
       void qc.invalidateQueries({ queryKey: ['me'] });
     },
   });

@@ -1,3 +1,5 @@
+import { QuestionnaireEditor } from '../ui/Questionnaire';
+import { needsFullRecheck } from '../lib/questionnaire';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '../lib/api';
@@ -5,7 +7,7 @@ import { axisQuestion, axisValues, itemByCode } from '../lib/catalog';
 import { DICTATION_HINT_SEEN, clearDraft, loadDraft, saveDraft, weeklyDraftKey } from '../lib/draft';
 import { useMe, useSaveWeek, useTrajectory } from '../lib/queries';
 import {
-  axesFor, initialRecord, itemComplete, previousValue, steps, toWeeklyRequest,
+  axesFor, initialRecord, itemComplete, previousValue, resumeRecord, steps, toWeeklyRequest,
   type RecordState, type Step,
 } from '../lib/record';
 import type { Catalog } from '../lib/types';
@@ -19,7 +21,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   const navigate = useNavigate();
   const meQ = useMe();
   // 지난달 답은 전체 재확인 주에만 보여준다. 보통 주에는 부르지 않는다.
-  const trajQ = useTrajectory(meQ.data?.fullRecheck === true);
+  const trajQ = useTrajectory(meQ.data ? needsFullRecheck(meQ.data) : false);
   const save = useSaveWeek();
 
   const [s, setS] = useState<RecordState>(initialRecord);
@@ -74,7 +76,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
   useEffect(() => {
     if (!draftKey) return;
     const d = loadDraft<RecordState>(draftKey);
-    if (d) setS(d);
+    if (d && me) setS(resumeRecord(me, catalog, d));
   }, [draftKey]);
 
   useEffect(() => {
@@ -108,6 +110,12 @@ export function Record({ catalog }: { catalog: Catalog }) {
   const go = (d: number) => setS((p) => ({ ...p, index: Math.max(0, p.index + d) }));
 
   const submit = () => {
+    const incomplete = flow.findIndex((step) => step.kind === 'item' && !itemComplete(me, catalog, s, step.code));
+    if (incomplete >= 0) {
+      setS((prev) => ({ ...prev, index: incomplete }));
+      setError('아직 답하지 않은 질문을 확인해 주세요.');
+      return;
+    }
     if (sending.current) return;
     sending.current = true;
     setError(null);
@@ -148,7 +156,7 @@ export function Record({ catalog }: { catalog: Catalog }) {
             onClick={() => {
               setWeekMismatch(null);
               // 새 주차가 전체 재확인 주면 부분 기록으로는 저장할 수 없다. 흐름을 처음부터 연다.
-              if (meQ.data?.fullRecheck) {
+              if (meQ.data && needsFullRecheck(meQ.data)) {
                 setS({ ...initialRecord() });
               }
               setError(null);
@@ -216,7 +224,9 @@ export function Record({ catalog }: { catalog: Catalog }) {
           이번 주는 {catalog.items.length}가지를 모두 여쭤봅니다
         </h1>
         <p className="pt-4 text-ink-soft">
-          네 주에 한 번, 놓친 것이 없는지 처음부터 확인합니다. 지난번 답도 함께 보여드립니다.
+          {me.questionnaireUpgradeRequired
+            ? '화장실·옷 입기·세수·양치·식사 질문이 구체적으로 바뀌었습니다. 새 질문에 처음 답해 주세요. 예전 기록은 그대로 보관됩니다.'
+            : '네 주에 한 번, 놓친 것이 없는지 처음부터 확인합니다. 지난번 답도 함께 보여드립니다.'}
         </p>
       </Screen>
     );
@@ -260,10 +270,14 @@ export function Record({ catalog }: { catalog: Catalog }) {
     return (
       <Screen {...common} footer={footer(itemComplete(me, catalog, s, code))}>
         <h1 data-step-title tabIndex={-1} className="text-title font-semibold">{item.label}</h1>
+        {item.questionnaire ? (
+          <QuestionnaireEditor form={item.questionnaire} value={v}
+            onChange={(next) => set({ items: { ...s.items, [code]: next } })} />
+        ) : <>
         <p className="pt-4 text-ink-soft">요즘 어떠신가요?</p>
 
         {axes.map((axis) => {
-          const prev = me.fullRecheck
+          const prev = needsFullRecheck(me)
             ? previousValue(trajQ.data ?? [], code, axis, me.week)
             : undefined;
           return (
@@ -299,6 +313,8 @@ export function Record({ catalog }: { catalog: Catalog }) {
             onChange={(e) => set({ items: { ...s.items, [code]: { ...v, note: e.target.value } } })}
           />
         </label>
+        </>}
+
       </Screen>
     );
   }

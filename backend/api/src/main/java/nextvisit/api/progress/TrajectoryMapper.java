@@ -5,6 +5,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import nextvisit.api.common.Json;
+import nextvisit.api.catalog.QuestionnaireCatalog;
+import java.util.Map;
+import java.util.HashMap;
 import nextvisit.api.snapshots.Snapshot;
 import nextvisit.api.snapshots.SnapshotBody;
 import nextvisit.engine.Axis;
@@ -41,7 +44,31 @@ public class TrajectoryMapper {
                     changed = true;
                 }
             }
-            out.add(new TrajectoryDto(item.code(), item.label(), changed, axes));
+            List<TrajectoryDto.Observation> observations = new ArrayList<>();
+            Map<String, Set<List<String>>> seen = new HashMap<>();
+            Integer start = null;
+            var questionnaire = QuestionnaireCatalog.forItem(item.code());
+            if (questionnaire != null) {
+                for (int i = 0; i < snapshots.size(); i++) {
+                    var values = bodies.get(i).items().get(item.code());
+                    if (!QuestionnaireCatalog.isV2(values)) continue;
+                    int week = snapshots.get(i).getWeek();
+                    start = start == null ? week : Math.min(start, week);
+                    if (values.note() != null && !values.note().isBlank()) {
+                        observations.add(new TrajectoryDto.Observation(week, "note", "추가 관찰", List.of(values.note()), "CONFIRMED"));
+                    }
+                    for (var question : questionnaire.questions()) {
+                        List<String> answer = values.answers().get(question.code());
+                        if (answer == null || answer.isEmpty()) continue;
+                        List<String> labels = question.options().stream().filter(o -> answer.contains(o.code())).map(o -> o.label()).toList();
+                        observations.add(new TrajectoryDto.Observation(week, question.code(), question.label(), labels, values.answerSource()));
+                        seen.computeIfAbsent(question.code(), key -> new HashSet<>()).add(labels);
+                    }
+                }
+            }
+            if (!axes.isEmpty() || start == null) out.add(new TrajectoryDto(item.code(), item.label(), changed, axes));
+            if (start != null) out.add(new TrajectoryDto(item.code() + ":v2", item.label(),
+                seen.values().stream().anyMatch(values -> values.size() > 1), List.of(), 2, start, observations));
         }
         return out;
     }
@@ -56,7 +83,7 @@ public class TrajectoryMapper {
             Snapshot s = snapshots.get(i);
             SnapshotBody body = bodies.get(i);
             SnapshotBody.ItemValues iv = body.items().get(code);
-            if (iv == null) {
+            if (iv == null || QuestionnaireCatalog.isV2(iv)) {
                 continue;
             }
             SnapshotBody.Val v = iv.axis(axis);

@@ -2,6 +2,11 @@ package nextvisit.api.demo;
 
 import static nextvisit.api.ApiTestSupport.getMe;
 import static nextvisit.api.ApiTestSupport.json;
+import static nextvisit.api.ApiTestSupport.onboardDefault;
+import static nextvisit.api.ApiTestSupport.onboardingBody;
+import static nextvisit.api.ApiTestSupport.baselineItems;
+import static nextvisit.api.ApiTestSupport.postJson;
+import static nextvisit.api.ApiTestSupport.authed;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,6 +18,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import nextvisit.api.ApiTestSupport.Onboarded;
 import nextvisit.api.MutableClock;
 import nextvisit.api.TestClockConfig;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,7 +30,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** README §10 데모 시나리오를 HTTP로 끝까지. */
+    /** 공개 데모는 실제 온보딩 기준선에서 시작하고 케이스별 가상 시간만 진행한다. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -39,38 +46,44 @@ class DemoFlowTest {
     }
 
     @Test
-    void demoProducesTheThreeReadmeQuestionsAndTherapistSummary() throws Exception {
-        JsonNode demo = json(mapper, mvc.perform(post("/demo")).andExpect(status().isCreated()).andReturn());
+    void demoStartsAtWeekOneAndOnlyAdvancesItsOwnRecordedTimeline() throws Exception {
+        Map<String, Object> body = onboardingBody("딸", "RIGHT", "OFTEN", baselineItems(true), Map.of());
+        JsonNode demo = json(mapper, mvc.perform(postJson("/demo/cases", mapper, body))
+            .andExpect(status().isCreated()).andReturn());
         String token = demo.get("guardianToken").asText();
         assertEquals(8, demo.get("recoveryCode").asText().length());
-        assertTrue(demo.get("therapistUrl").asText().startsWith("/t/"));
-        assertTrue(demo.hasNonNull("therapistToken"));
-        String therapistToken = demo.get("therapistToken").asText();
-        assertTrue(therapistToken.matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"));
-        assertEquals("/t/" + therapistToken, demo.get("therapistUrl").asText());
 
         JsonNode me = json(mapper, mvc.perform(getMe(token, "/me")).andExpect(status().isOk()).andReturn());
-        assertEquals(6, me.get("week").asInt());
+        assertEquals(1, me.get("week").asInt());
+        assertEquals("2026-09-05", me.get("today").asText());
+        assertTrue(me.get("demoMode").asBoolean());
         assertTrue(me.get("recordedThisWeek").asBoolean());
-        assertEquals("2026-09-08", me.get("nextVisitDate").asText());
+        assertTrue(me.get("canAdvanceDemo").asBoolean());
+        assertEquals("2026-09-30", me.get("nextVisitDate").asText());
 
-        JsonNode card = json(mapper, mvc.perform(getMe(token, "/me/prep-card")).andExpect(status().isOk()).andReturn());
-        assertEquals(3, card.get("questions").size());
-        assertEquals("화장실 이용은 혼자 하심으로 바뀌셨는데 집 안에서 걷기는 6주째 그대로입니다. 집 안에서 걷기는 왜 안 늘고 있을까요?", card.get("questions").get(0).get("sentence").asText());
-        assertEquals("일어설 때 얼굴을 찡그리시는 걸 4주 중 3주 봤습니다. 통증일 수 있을까요?", card.get("questions").get(1).get("sentence").asText());
-        assertEquals("식사는 혼자 하심으로 바뀌셨는데 마비된 손은 안 씀으로 바뀌었습니다. 괜찮은 걸까요?", card.get("questions").get(2).get("sentence").asText());
-        assertEquals("TEMPLATE", card.get("questions").get(0).get("source").asText());
+        JsonNode advanced = json(mapper, mvc.perform(authed(post("/me/demo/advance"), token))
+            .andExpect(status().isOk()).andReturn());
+        assertEquals(2, advanced.get("week").asInt());
+        assertEquals("2026-09-12", advanced.get("today").asText());
+        assertFalse(advanced.get("recordedThisWeek").asBoolean());
+        assertFalse(advanced.get("canAdvanceDemo").asBoolean());
 
-        JsonNode progress = json(mapper, mvc.perform(getMe(token, "/me/progress")).andReturn());
-        assertFalse(progress.get("silent").asBoolean());
+        mvc.perform(authed(post("/me/demo/advance"), token))
+            .andExpect(status().isConflict())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code")
+                .value("DEMO_WEEK_NOT_RECORDED"));
 
-        JsonNode summary = json(mapper, mvc.perform(get(demo.get("therapistUrl").asText())).andExpect(status().isOk()).andReturn());
-        assertEquals(6, summary.get("weeks").size());
-        assertEquals(3, summary.get("freeNotes").size());
-        assertEquals("낮잠 자고 일어나면 어깨 쪽을 감싸신다", summary.get("freeNotes").get(2).get("text").asText());
+        clock.advanceDays(90);
+        JsonNode unchanged = json(mapper, mvc.perform(getMe(token, "/me")).andReturn());
+        assertEquals("2026-09-12", unchanged.get("today").asText());
+        assertEquals(2, unchanged.get("week").asInt());
 
-        JsonNode second = json(mapper, mvc.perform(post("/demo")).andReturn());
-        assertFalse(second.get("caseId").asText().equals(demo.get("caseId").asText()), "매번 새 케이스");
+        clock.set(TestClockConfig.DEFAULT_TODAY);
+        Onboarded ordinary = onboardDefault(mvc, mapper);
+        mvc.perform(authed(post("/me/demo/advance"), ordinary.token()))
+            .andExpect(status().isConflict())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code")
+                .value("DEMO_ONLY"));
     }
 
     @Test

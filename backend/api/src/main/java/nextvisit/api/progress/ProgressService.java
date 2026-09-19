@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import nextvisit.api.auth.AuthContext;
 import nextvisit.api.cases.CaseEntity;
-import nextvisit.api.common.WeekCalculator;
+import nextvisit.api.common.CaseTimeline;
 import nextvisit.api.engine.EngineBridge;
 import nextvisit.api.questions.QuestionCacheBody;
 import nextvisit.api.questions.QuestionService;
@@ -34,21 +34,21 @@ public class ProgressService {
     private final EngineBridge bridge;
     private final QuestionService questions;
     private final TrajectoryMapper trajectories;
-    private final WeekCalculator weeks;
+    private final CaseTimeline timeline;
 
     public ProgressService(SnapshotRepository snapshots, EngineBridge bridge, QuestionService questions,
-                           TrajectoryMapper trajectories, WeekCalculator weeks) {
+                           TrajectoryMapper trajectories, CaseTimeline timeline) {
         this.snapshots = snapshots;
         this.bridge = bridge;
         this.questions = questions;
         this.trajectories = trajectories;
-        this.weeks = weeks;
+        this.timeline = timeline;
     }
 
     public ProgressDto progress(AuthContext ctx) {
         CaseEntity kase = ctx.kase();
         List<Snapshot> snaps = snapshots.findByCaseIdOrderByWeekAsc(kase.getId());
-        int week = weeks.currentWeek(kase.getStartDate());
+        int week = timeline.currentWeek(kase);
         PipelineResult now = bridge.run(kase, snaps);
         Map<String, Verdict> previous = snaps.size() >= 2
             ? byKey(bridge.run(kase, snaps.subList(0, snaps.size() - 1)))

@@ -13,7 +13,10 @@ public record SnapshotBody(
 ) {
     public record Val(int value, String source) {}
 
-    public record ItemValues(Val level, Val aid, Val consistency, Val hand, String note) {
+    public record ItemValues(Val level, Val aid, Val consistency, Val hand, String note, Integer questionnaireVersion, Map<String, List<String>> answers, String answerSource) {
+        public ItemValues(Val level, Val aid, Val consistency, Val hand, String note) {
+            this(level, aid, consistency, hand, note, null, null, null);
+        }
         public Val axis(Axis axis) {
             return switch (axis) {
                 case LEVEL -> level;

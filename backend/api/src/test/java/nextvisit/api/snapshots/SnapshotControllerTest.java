@@ -162,4 +162,87 @@ class SnapshotControllerTest {
         assertEquals(1, body(o.caseId(), 2).items().get("toilet").level().value());
         assertEquals(2, snapshots.findByCaseIdOrderByWeekAsc(UUID.fromString(o.caseId())).size());
     }
+    private static Map<String, Object> v2(String question, String value) {
+        return Map.of("questionnaireVersion", 2, "answers", Map.of(question, java.util.List.of(value)));
+    }
+
+    private static Map<String, Object> revisedItems() {
+        Map<String, Object> items = baselineItems(true);
+        items.put("toilet", Map.of("questionnaireVersion", 2, "answers", Map.of(
+            "transfer", java.util.List.of("4"), "clothing", java.util.List.of("3"), "hygiene", java.util.List.of("2"))));
+        items.put("dressing", v2("assistance", "4"));
+        items.put("grooming", Map.of("questionnaireVersion", 2, "answers", Map.of(
+            "washing", java.util.List.of("unknown"), "brushing", java.util.List.of("not_performed"))));
+        items.put("feeding", v2("route", "tube"));
+        return items;
+    }
+
+    @Test
+    void upgradeFlagUsesLatestSnapshotAndNewAnswersSurviveNoChange() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        mvc.perform(getMe(o.token(), "/me")).andExpect(jsonPath("$.questionnaireUpgradeRequired").value(true));
+        clock.advanceDays(7);
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(false, revisedItems(), Map.of())))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.questionsRefreshed").value(true));
+        mvc.perform(getMe(o.token(), "/me")).andExpect(jsonPath("$.questionnaireUpgradeRequired").value(false));
+        clock.advanceDays(7);
+        mvc.perform(putJson(o.token(), "/me/weeks/3", mapper, weekly(true, Map.of(), Map.of())))
+            .andExpect(status().isOk());
+        var carried = mapper.valueToTree(body(o.caseId(), 3));
+        assertEquals(2, carried.path("items").path("feeding").path("questionnaireVersion").asInt());
+        assertEquals("CARRIED", carried.path("items").path("feeding").path("answerSource").asText());
+        assertEquals("tube", carried.path("items").path("feeding").path("answers").path("route").get(0).asText());
+        mvc.perform(getMe(o.token(), "/me/trajectory")).andExpect(status().isOk());
+        mvc.perform(getMe(o.token(), "/me/progress")).andExpect(status().isOk());
+    }
+
+    @Test
+    void sameWeekLegacyWriteCannotDowngradeAnUpgradedCategory() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        clock.advanceDays(7);
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(false, Map.of("dressing", v2("assistance", "4")), Map.of())))
+            .andExpect(status().isOk());
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(false, Map.of("dressing", item(2, null, 2, 1, null)), Map.of())))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void sameWeekNoChangeCannotRestoreOldSchemaFromPriorWeek() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        clock.advanceDays(7);
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(false, revisedItems(), Map.of())))
+            .andExpect(status().isOk());
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(true, Map.of(), Map.of())))
+            .andExpect(status().isOk());
+        mvc.perform(getMe(o.token(), "/me")).andExpect(jsonPath("$.questionnaireUpgradeRequired").value(false));
+        assertEquals(2, mapper.valueToTree(body(o.caseId(), 2)).path("items").path("dressing").path("questionnaireVersion").asInt());
+    }
+
+    @Test
+    void sameWeekCorrectionPreservesOmittedConfirmedAnswersAndNoteUntilNextWeek() throws Exception {
+        Onboarded o = onboardDefault(mvc, mapper);
+        clock.advanceDays(7);
+        var dressing = Map.of("questionnaireVersion", 2, "answers", Map.of("assistance", java.util.List.of("3")),
+            "note", "단추를 도와드림");
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(false, Map.of("dressing", dressing), Map.of())))
+            .andExpect(status().isOk());
+        var confirmed = body(o.caseId(), 2).items().get("dressing");
+        assertEquals("CONFIRMED", confirmed.answerSource());
+        assertEquals("단추를 도와드림", confirmed.note());
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper,
+            weekly(false, Map.of("bathing", baselineItems(true).get("bathing")), Map.of())))
+            .andExpect(status().isOk());
+        assertEquals(confirmed, body(o.caseId(), 2).items().get("dressing"));
+        mvc.perform(putJson(o.token(), "/me/weeks/2", mapper, weekly(true, Map.of(), Map.of())))
+            .andExpect(status().isOk());
+        assertEquals(confirmed, body(o.caseId(), 2).items().get("dressing"));
+        clock.advanceDays(7);
+        mvc.perform(putJson(o.token(), "/me/weeks/3", mapper, weekly(true, Map.of(), Map.of())))
+            .andExpect(status().isOk());
+        var carried = body(o.caseId(), 3).items().get("dressing");
+        assertEquals(confirmed.answers(), carried.answers());
+        assertEquals("CARRIED", carried.answerSource());
+        assertNull(carried.note());
+    }
+
 }

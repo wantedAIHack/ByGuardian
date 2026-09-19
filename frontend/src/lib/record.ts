@@ -1,3 +1,4 @@
+import { needsFullRecheck, questionnaireComplete, questionnaireInput } from './questionnaire';
 import type { Axis, Catalog, ItemInput, Me, Trajectory, WeeklyRecordRequest } from './types';
 
 export interface RecordState {
@@ -37,7 +38,7 @@ export type Step =
  */
 export function steps(me: Me, c: Catalog, s: RecordState): Step[] {
   const out: Step[] = [];
-  if (me.fullRecheck) {
+  if (needsFullRecheck(me)) {
     out.push({ kind: 'recheck-intro' });
     for (const item of c.items) out.push({ kind: 'item', code: item.code });
   } else {
@@ -63,6 +64,9 @@ export function axesFor(me: Me, c: Catalog, code: string): Axis[] {
 
 export function itemComplete(me: Me, c: Catalog, s: RecordState, code: string): boolean {
   const v = s.items[code] ?? EMPTY;
+  const form = c.items.find((i) => i.code === code)?.questionnaire;
+  if (form) return v.questionnaireVersion === form.version
+    && questionnaireComplete(form, v.answers ?? {}) && (v.note?.length ?? 0) <= 500;
   return axesFor(me, c, code).every((a) => {
     if (a === 'LEVEL') return v.level !== null;
     if (a === 'AID') return v.aid !== null;
@@ -73,10 +77,15 @@ export function itemComplete(me: Me, c: Catalog, s: RecordState, code: string): 
 
 export function toWeeklyRequest(me: Me, c: Catalog, s: RecordState): WeeklyRecordRequest {
   // 전체 재확인 주는 8항목 전부다. 서버가 noChange=true나 부족한 항목을 400으로 막는다.
-  const codes = me.fullRecheck ? c.items.map((i) => i.code) : s.selected;
+  const codes = needsFullRecheck(me) ? c.items.map((i) => i.code) : s.selected;
   const changedItems: Record<string, ItemInput> = {};
   for (const code of codes) {
     const v = s.items[code] ?? EMPTY;
+    const form = c.items.find((i) => i.code === code)?.questionnaire;
+    if (form) {
+      changedItems[code] = questionnaireInput(form, v);
+      continue;
+    }
     changedItems[code] = {
       level: v.level,
       aid: v.aid,
@@ -87,7 +96,7 @@ export function toWeeklyRequest(me: Me, c: Catalog, s: RecordState): WeeklyRecor
   }
   const text = s.freeNote.text.trim();
   return {
-    noChange: me.fullRecheck ? false : s.noChange === true,
+    noChange: needsFullRecheck(me) ? false : s.noChange === true,
     changedItems,
     // 신호가 켜진 케이스에 null을 보내면 서버가 400을 낸다. "없었어요"는 {}다.
     painSignal: me.signalsEnabled ? (s.painSignal ?? {}) : null,
@@ -104,4 +113,13 @@ export function previousValue(
   if (!series) return undefined;
   const earlier = series.values.filter((p) => p.week < beforeWeek);
   return earlier[earlier.length - 1];
+}
+
+/** Revisit unanswered revised questions instead of submitting an old draft as v2. */
+export function resumeRecord(me: Me, c: Catalog, s: RecordState): RecordState {
+  if (me.questionnaireUpgradeRequired && s.noChange === true) return { ...s, index: 0 };
+  const flow = steps(me, c, s);
+  const incomplete = flow.findIndex((step, index) => index < s.index && step.kind === 'item'
+    && !itemComplete(me, c, s, step.code));
+  return incomplete < 0 ? s : { ...s, index: incomplete };
 }

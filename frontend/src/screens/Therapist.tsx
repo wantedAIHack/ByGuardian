@@ -1,3 +1,4 @@
+import { QuestionnaireHistory } from '../ui/QuestionnaireHistory';
 import { ScrollRegion } from '../ui/ScrollRegion';
 import { ObservationValue } from '../ui/ObservationValue';
 import { useState } from 'react';
@@ -47,8 +48,12 @@ export function Therapist() {
     );
   }
 
-  const changed = data.items.filter((i) => i.changed);
-  const unchanged = data.items.filter((i) => !i.changed);
+  const revised = data.items.filter((i) => i.questionnaireVersion === 2);
+  const migrated = new Set(revised.map((i) => i.code.replace(/:v2$/, '')));
+  const legacy = data.items.filter((i) => i.questionnaireVersion !== 2);
+  const changed = legacy.filter((i) => i.changed || migrated.has(i.code)).map((i) =>
+    migrated.has(i.code) ? { ...i, label: `${i.label} (이전 질문)` } : i);
+  const unchanged = legacy.filter((i) => !i.changed && !migrated.has(i.code));
   const noteWeeks = new Set(data.freeNotes.map((note) => note.week));
   // 치료사 토큰이 URL fragment로 오므로 hash를 쓰지 않고 스크롤과 초점만 옮긴다.
   const showNote = (week: number) => {
@@ -113,6 +118,13 @@ export function Therapist() {
         </ScrollRegion>
         <p className="pt-4 text-small text-ink-soft">지난 값 유지: 달라진 것 없음으로 이어간 기록</p>
       </section>
+
+      {revised.map((item) => (
+        <section key={item.code} className="note-surface print-flow mt-6 min-w-0">
+          <h2 className="font-semibold">{item.label}</h2>
+          <QuestionnaireHistory item={item} />
+        </section>
+      ))}
 
       {data.signalsEnabled ? (
         <section className="note-surface mt-6 min-w-0">
