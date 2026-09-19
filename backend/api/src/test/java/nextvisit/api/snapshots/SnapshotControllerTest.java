@@ -173,6 +173,7 @@ class SnapshotControllerTest {
         items.put("dressing", v2("assistance", "4"));
         items.put("grooming", Map.of("questionnaireVersion", 2, "answers", Map.of(
             "washing", java.util.List.of("unknown"), "brushing", java.util.List.of("not_performed"))));
+        items.put("bathing", v2("assistance", "2"));
         items.put("feeding", v2("route", "tube"));
         return items;
     }

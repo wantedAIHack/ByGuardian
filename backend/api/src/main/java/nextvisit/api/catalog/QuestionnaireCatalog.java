@@ -65,6 +65,13 @@ public final class QuestionnaireCatalog {
             assistance("brushing", "양치할 때 어느 정도 도움이 필요했나요?", null, null,
                 "준비부터 마무리까지 혼자 함", "물품 준비나 지켜보기·말 안내가 필요함", "일부 동작에 직접 도움", "대부분의 동작에 직접 도움", "보호자가 전부 도움"),
             multiple("risks", "세수나 양치 중 다음과 같은 일이 있었나요?", options("body_unsteady", "몸이 흔들려 급히 붙잡음", "fall", "넘어지거나 주저앉음", "cough", "양치·헹굼 중 기침이나 사레", "other", "기타", "none", "없었음", "unknown", "직접 보지 못함"), null))));
+        out.put("bathing", new Questionnaire(VERSION, List.of(
+            assistance("assistance", "목욕할 때 어느 정도 참여하셨나요?", null, null,
+                "머리 감기·헹구기·닦기 등을 스스로 수행",
+                "준비 과정이나 안전을 위한 감시하에 스스로 수행",
+                "각 활동에서 신체적인 도움이 필요함 (예: 머리를 감겨주거나 손이 닿지 않는 등 부위를 도와줌)",
+                "가슴이나 팔처럼 손이 닿는 부위만 혼자 가능",
+                "모든 과정에 참여하지 않음"))));
         out.put("feeding", new Questionnaire(VERSION, List.of(
             new Question("route", "이번 주 음식이나 영양을 어떤 방법으로 섭취하셨나요?", null, "single", true,
                 options("oral", "입으로 먹음", "tube", "영양관으로 공급받음", "both", "입으로 먹기와 영양관을 함께 사용함", "unknown", "직접 보지 못함", "not_performed", "이번 주 하지 않음"), null, List.of()),

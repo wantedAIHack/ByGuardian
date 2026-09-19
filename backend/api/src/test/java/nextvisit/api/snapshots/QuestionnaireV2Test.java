@@ -39,12 +39,28 @@ class QuestionnaireV2Test {
     Snapshot snap(int week, SnapshotBody body) {
         return new Snapshot(UUID.randomUUID(), week, SnapshotKind.WEEKLY, false, UUID.randomUUID(), json.toJson(body), Instant.EPOCH);
     }
-    @Test void catalogHasExactlyFourQuestionnairesAndEightCategories() {
+    @Test void catalogHasBathingQuestionnaireAndEightCategories() {
         var catalog = mapper.valueToTree(new CatalogController().catalog());
         assertEquals(8, catalog.path("items").size());
         int count = 0;
         for (var item : catalog.path("items")) if (item.path("questionnaire").path("version").asInt() == 2) count++;
-        assertEquals(4, count);
+        assertEquals(5, count);
+
+        var bathing = catalog.path("items").get(6);
+        assertEquals("bathing", bathing.path("code").asText());
+        var question = bathing.path("questionnaire").path("questions").get(0);
+        assertEquals("assistance", question.path("code").asText());
+        assertEquals("목욕할 때 어느 정도 참여하셨나요?", question.path("label").asText());
+        List<String> labels = new ArrayList<>();
+        question.path("options").forEach(option -> labels.add(option.path("label").asText()));
+        assertEquals(List.of(
+            "머리 감기·헹구기·닦기 등을 스스로 수행",
+            "준비 과정이나 안전을 위한 감시하에 스스로 수행",
+            "각 활동에서 신체적인 도움이 필요함 (예: 머리를 감겨주거나 손이 닿지 않는 등 부위를 도와줌)",
+            "가슴이나 팔처럼 손이 닿는 부위만 혼자 가능",
+            "모든 과정에 참여하지 않음",
+            "직접 보지 못함",
+            "이번 주 하지 않음"), labels);
     }
     @Test void unknownAndNotPerformedRoundTripWithoutLegacyScores() {
         var body = apply("grooming", Map.of("washing", List.of("unknown"), "brushing", List.of("not_performed")));
@@ -54,6 +70,20 @@ class QuestionnaireV2Test {
         assertEquals("CONFIRMED", stored.path("answerSource").asText());
         assertNull(body.items().get("grooming").level());
         assertEquals(body, json.fromJson(json.toJson(body), SnapshotBody.class));
+    }
+    @Test void bathingAnswerRoundTripsToReportAndEndsLegacyAnalysis() {
+        var updated = apply("bathing", Map.of("assistance", List.of("2")));
+        var stored = mapper.valueToTree(updated.items().get("bathing"));
+        assertEquals(2, stored.path("questionnaireVersion").asInt());
+        assertEquals("2", stored.path("answers").path("assistance").get(0).asText());
+        assertTrue(stored.path("level").isNull());
+
+        var snapshots = List.of(snap(1, legacy()), snap(2, updated));
+        var report = new TrajectoryMapper(json).items(snapshots).stream()
+            .filter(item -> item.code().equals("bathing:v2")).findFirst().orElseThrow();
+        assertEquals(List.of("각 활동에서 신체적인 도움이 필요함 (예: 머리를 감겨주거나 손이 닿지 않는 등 부위를 도와줌)"),
+            report.observations().get(0).answers());
+        assertFalse(new EngineBridge(json).toCaseInput(kase, snapshots).series().containsKey("bathing"));
     }
     @Test void tubeOnlySkipsOralAssistanceAndRejectsInactiveAnswers() {
         assertDoesNotThrow(() -> apply("feeding", Map.of("route", List.of("tube"))));
@@ -141,7 +171,7 @@ class QuestionnaireV2Test {
         var v2WithAxes = mapper.convertValue(Map.of("questionnaireVersion", 2, "level", 3,
             "answers", Map.of("assistance", List.of("4"))), ItemInput.class);
         assertThrows(ValidationException.class, () -> assembler.build(kase, Map.of("dressing", v2WithAxes), legacy(), null, null, null));
-        assertThrows(ValidationException.class, () -> apply("bathing", Map.of("assistance", List.of("4"))));
+        assertDoesNotThrow(() -> apply("bathing", Map.of("assistance", List.of("4"))));
         assertThrows(ValidationException.class, () -> apply("dressing", Map.of("assistance", Arrays.asList((String) null))));
         assertThrows(ValidationException.class, () -> apply("feeding", Map.of("route", List.of("tube"), "parts", List.of("cup"))));
         assertThrows(ValidationException.class, () -> apply("grooming", Map.of("washing", List.of("4"), "brushing", List.of("4"), "risks", List.of("none", "fall"))));
