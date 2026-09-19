@@ -65,6 +65,8 @@ test('mobile baseline saves activity-specific observations without hidden answer
   expect(body.baseline.items.feeding?.answers?.assistance).toBeUndefined();
   expect(body.baseline.items.feeding?.answers?.parts).toBeUndefined();
   expect(body.baseline.items.grooming?.answers).toEqual({ washing: ['unknown'], brushing: ['not_performed'] });
+  expect(body.baseline.items.bathing).toMatchObject({ questionnaireVersion: 2,
+    answers: { assistance: ['2'] }, level: null, consistency: null });
   expect(body.baseline.items.toilet?.answers?.management).toEqual(['catheter']);
   expect(body.baseline.items.toilet?.answers?.night_help).toEqual(['physical']);
   const account = await response.json() as OnboardingResponse;
@@ -74,9 +76,12 @@ test('mobile baseline saves activity-specific observations without hidden answer
   const trajectory = await (await request.get(`${API}/me/trajectory`, { headers })).json() as Trajectory[];
   expect(trajectory.find((i) => i.code === 'toilet:v2')?.observations?.find((o) => o.question === 'note')?.answers)
     .toEqual(['밤에 바지를 올릴 때 도왔어요.']);
+  expect(trajectory.find((i) => i.code === 'bathing:v2')?.observations?.find((o) => o.question === 'assistance')?.answers)
+    .toEqual(['각 활동에서 신체적인 도움이 필요함 (예: 머리를 감겨주거나 손이 닿지 않는 등 부위를 도와줌)']);
   await page.goto('/trajectory');
   await expect(page.getByText('밤에 바지를 올릴 때 도왔어요.', { exact: true })).toBeVisible();
   await expect(page.getByText('직접 보지 못함', { exact: true })).toBeVisible();
   await expect(page.getByText('이번 주 하지 않음', { exact: true })).toBeVisible();
+  await expect(page.getByText('각 활동에서 신체적인 도움이 필요함 (예: 머리를 감겨주거나 손이 닿지 않는 등 부위를 도와줌)', { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
