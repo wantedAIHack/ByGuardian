@@ -113,9 +113,11 @@ test('질문 이동에만 초점을 옮기고 작은 높이에서도 다음 버�
   await expect(page.getByRole('button', { name: '다음', exact: true })).toBeFocused();
   await expect(page.getByRole('button', { name: '다음', exact: true })).toBeInViewport();
   await expect(page.locator('.flow-footer')).toHaveCSS('position', 'static');
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await page.keyboard.press('Enter');
   await expect(heading).toHaveText('집 안에서 걷기');
   await expect(heading).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
   await page.keyboard.press('Shift+Tab');
   await expect(page.getByRole('button', { name: '← 뒤로' })).toBeFocused();
   await page.keyboard.press('Enter');
