@@ -114,6 +114,8 @@ export NEXTVISIT_DB_USER=nextvisit_integration
 export NEXTVISIT_DB_PASSWORD=nextvisit_integration
 export NEXTVISIT_CORS_ORIGINS=http://127.0.0.1:14173
 export NEXTVISIT_DEMO_ENABLED=true
+# Enables the deterministic six-week fixture only inside this disposable stack.
+export NEXTVISIT_INTERNAL_SEED_ENABLED=true
 export SERVER_ADDRESS=127.0.0.1
 export SERVER_PORT=18080
 export VITE_API_BASE=http://127.0.0.1:18080
