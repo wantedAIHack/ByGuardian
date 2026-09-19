@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
 /** 진행 수치는 건강 상태가 아니라 지금 작성 중인 질문의 위치다. */
 export function Screen({ step, total, stageLabel, focusKey, onBack, children, footer }: {
@@ -6,9 +6,11 @@ export function Screen({ step, total, stageLabel, focusKey, onBack, children, fo
   onBack?: () => void; children: ReactNode; footer?: ReactNode;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focusKey === undefined) return;
     contentRef.current?.querySelector<HTMLElement>('[data-step-title]')?.focus();
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
   }, [focusKey]);
   const progress = step !== undefined && total !== undefined && total > 0;
   return (
