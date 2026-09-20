@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +30,35 @@ public class QuestionSynthesisPrompt {
         각 질문에 근거를 적으세요. detections에는 참고한 변화의 id를, noteWeeks에는 참고한 보호자 기록의 week를 넣고, 둘 중 적어도 하나는 비우지 마세요.
         마크다운이나 설명 없이 정확히 {"questions":[{"sentence":"오후마다 어깨를 자주 만지시는데 어떤 점을 살펴보면 좋을까요?","detections":["D1"],"noteWeeks":[3]}]} 형태의 JSON 객체 하나만 반환하세요.""";
 
+    /**
+     * 재시도 프롬프트는 규칙 이름만으로는 쓸모가 없다. qwen3:4b에게 "QUESTION_MARK을
+     * 위반했습니다"는 아무 뜻이 없어서, 운영 실측에서 같은 어미("...확인해 주시겠어요?")를
+     * 세 번 반복하고 세 번 다 거부됐다(temperature 0.1, seed 0이라 재시도가 사실상 같은
+     * 답을 낸다). 규칙마다 무엇을 어떻게 고칠지 한 문장으로 적어 재시도가 수렴하게 한다.
+     */
+    static final Map<String, String> RETRY_GUIDANCE = Map.ofEntries(
+        Map.entry("JSON_OBJECT", "설명이나 마크다운 없이 JSON 객체 하나만 반환하세요."),
+        Map.entry("ROOT_FIELDS", "최상위에는 questions 키 하나만 두세요."),
+        Map.entry("QUESTIONS_ARRAY", "questions의 값은 배열이어야 합니다."),
+        Map.entry("QUESTION_COUNT", "질문은 1개 이상 3개 이하로 넣으세요."),
+        Map.entry("QUESTION_FIELDS", "질문마다 sentence, detections, noteWeeks 세 키만 두고,"
+            + " detections는 문자열 배열, noteWeeks는 정수 배열이며 같은 값을 두 번 넣지 마세요."),
+        Map.entry("SENTENCE_LENGTH", "질문 한 문장은 10자 이상 160자 이하여야 합니다."),
+        Map.entry("MARKDOWN", "줄바꿈과 마크다운 기호(*, _, #, `, [, ], |, \\)를 쓰지 마세요."),
+        Map.entry("QUESTION_MARK", "질문은 한 문장이고 마침표와 느낌표 없이 물음표 하나로 끝나야 하며,"
+            + " 어미는 '~나요?', '~까요?', '~가요?', '~습니까?' 중 하나여야 합니다."
+            + " '~주시겠어요?'나 '~어요?' 같은 다른 어미는 쓰지 마세요."),
+        Map.entry("FORBIDDEN_WORD", "'개선', '악화', '호전', '회복', '위험', '정상', '재활', '치료',"
+            + " '운동', '낙상', '진단', '점수', '처방', '때문', '약', '진통제', '복용'과"
+            + " '좋아지다', '나빠지다', '나아지다'를 쓰지 마세요."),
+        Map.entry("DIRECTIVE", "무엇을 하라고 시키는 말투를 쓰지 말고 보호자가 여쭤보는 질문으로만 쓰세요."),
+        Map.entry("BASIS_EMPTY", "detections와 noteWeeks 중 적어도 하나는 비우지 마세요."),
+        Map.entry("UNKNOWN_DETECTION", "detections에는 입력 detections에 있는 id만 넣으세요."),
+        Map.entry("UNKNOWN_NOTE_WEEK", "noteWeeks에는 입력 notes에 있는 week만 넣으세요."),
+        Map.entry("UNSUPPORTED_NUMBER", "근거로 댄 변화 문장과 보호자 기록에 있는 숫자만 쓰고,"
+            + " 주차는 'N주' 형태로만 쓰세요."),
+        Map.entry("DUPLICATE", "질문끼리 같은 문장을 쓰지 마세요."));
+
     private final ObjectMapper mapper;
 
     public QuestionSynthesisPrompt(ObjectMapper mapper) {
@@ -39,9 +69,7 @@ public class QuestionSynthesisPrompt {
         Payload payload = new Payload(
             input.detections().stream().map(d -> new DetectionPayload(d.id(), d.sentence())).toList(),
             input.notes().stream().map(n -> new NotePayload(n.week(), n.timeTagLabel(), n.itemLabel(), n.text())).toList());
-        String system = retryRule
-            .map(rule -> SYSTEM + "\n직전 응답은 검증 규칙 " + rule + "을 위반했습니다. 이 규칙을 지켜 다시 만드세요.")
-            .orElse(SYSTEM);
+        String system = retryRule.map(QuestionSynthesisPrompt::retrySystem).orElse(SYSTEM);
         return new LlmPrompt(system, json(payload));
     }
 
@@ -51,6 +79,12 @@ public class QuestionSynthesisPrompt {
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("synthesis prompt serialization failed", e);
         }
+    }
+
+    private static String retrySystem(String rule) {
+        String guidance = RETRY_GUIDANCE.get(rule);
+        return SYSTEM + "\n직전 응답은 검증 규칙 " + rule + "을 위반했습니다. "
+            + (guidance == null ? "" : guidance + " ") + "이 규칙을 지켜 다시 만드세요.";
     }
 
     record Payload(List<DetectionPayload> detections, List<NotePayload> notes) {}
