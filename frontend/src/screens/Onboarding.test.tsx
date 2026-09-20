@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -101,7 +101,10 @@ describe('온보딩 신원 단계', () => {
     expect(screen.getByText('마비되신 쪽이 어디인가요?')).toBeInTheDocument();
   });
 
-  it('외래일은 건너뛸 수 있다', async () => {
+  // 진료일을 건너뛰면 진료 준비 카드로 가는 링크가 홈에 영영 뜨지 않는다
+  // (Home은 isVisitSoon, 즉 D-3~당일에만 링크를 낸다). 그 화면이 이 제품의
+  // 핵심이라, 날짜를 받지 못한 채로는 온보딩을 끝내지 않는다.
+  it('외래일을 넣어야 다음으로 갈 수 있다', async () => {
     const user = userEvent.setup();
     localStorage.setItem(ONBOARDING_DRAFT, JSON.stringify({
       step: 5, relation: '딸', relationOther: '', diagnosis: 'STROKE',
@@ -109,7 +112,11 @@ describe('온보딩 신원 단계', () => {
     }));
 
     renderScreen();
-    await user.click(screen.getByRole('button', { name: '건너뛰기' }));
+    expect(screen.queryByRole('button', { name: '건너뛰기' })).toBeNull();
+    expect(screen.getByRole('button', { name: '다음' })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('다음 진료일'), { target: { value: '2026-10-28' } });
+    await user.click(screen.getByRole('button', { name: '다음' }));
     expect(screen.getByText(/8가지로 한 번 여쭤보겠습니다/)).toBeInTheDocument();
   });
 });
@@ -133,7 +140,8 @@ async function toDateStep(user: ReturnType<typeof userEvent.setup>) {
 
 async function toBaselineIntro(user: ReturnType<typeof userEvent.setup>) {
   await toDateStep(user);
-  await user.click(screen.getByRole('button', { name: '건너뛰기' }));
+  fireEvent.change(screen.getByLabelText('다음 진료일'), { target: { value: '2026-10-28' } });
+  await user.click(screen.getByRole('button', { name: '다음' }));
   await screen.findByText('지금 상태를 8가지로 한 번 여쭤보겠습니다.');
 }
 
@@ -214,9 +222,8 @@ describe('판정 문구 화이트리스트', () => {
       [
         '← 뒤로', '기본 정보',
         '다음 진료일이 정해져 있나요?',
-        '모르시면 건너뛰셔도 됩니다. 나중에 설정에서 넣으실 수 있습니다.',
+        '진료일에 맞춰 여쭤볼 것을 준비해 드립니다. 정확하지 않아도 괜찮고, 설정에서 고치실 수 있습니다.',
         '다음',
-        '건너뛰기',
       ].join(''),
     );
   });

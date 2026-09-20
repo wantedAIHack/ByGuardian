@@ -7,7 +7,23 @@ import { AsyncState } from '../ui/AsyncState';
 import { PageHeader } from '../ui/PageHeader';
 import { ApiError, api } from '../lib/api';
 import { captureTherapistToken, clearTherapistToken } from '../lib/therapistToken';
-import type { TherapistSummary } from '../lib/types';
+import type { Trajectory, TherapistSummary } from '../lib/types';
+
+/**
+ * v2 문항 항목의 한 줄. 대표는 항목의 첫 문항이다 — '추가 관찰'(question === 'note')은
+ * 문항이 아니라 보호자 메모라 건너뛴다. 답이 하나도 없으면 줄을 만들지 않는다.
+ */
+function primaryRow(item: Trajectory) {
+  const observations = item.observations ?? [];
+  const first = observations.find((o) => o.question !== 'note');
+  if (!first) return null;
+  const byWeek = new Map<number, { label: string; source: string }>();
+  for (const o of observations) {
+    if (o.question !== first.question) continue;
+    byWeek.set(o.week, { label: o.answers.join(' · '), source: o.source });
+  }
+  return { code: item.code, label: item.label, questionLabel: first.label, byWeek };
+}
 
 export function Therapist() {
   const [token] = useState(captureTherapistToken);
@@ -53,10 +69,20 @@ export function Therapist() {
   const legacy = data.items.filter((i) => i.questionnaireVersion !== 2);
   const changed = legacy.filter((i) => i.changed || migrated.has(i.code)).map((i) =>
     migrated.has(i.code) ? { ...i, label: `${i.label} (이전 질문)` } : i);
+  // v2 문항 항목은 축 값을 쓰지 않아 axes가 비어 있다. 그렇다고 표에서 빼면 새 케이스
+  // (8항목 중 5개가 v2)는 주차별로 볼 것이 한 줄도 남지 않는다. 항목의 첫 문항을
+  // 대표로 삼아 한 줄씩 싣는다 — 아래 항목별 기록이 그 문항을 맨 앞에 보여주는 것과
+  // 같은 순서라, 치료사가 표에서 본 줄을 그대로 아래에서 자세히 읽을 수 있다.
+  const revisedRows = revised.map(primaryRow).filter((r) => r !== null);
+  // v2 항목은 바뀌었든 아니든 줄을 싣는다. "같은 기간 변화 없음"에 넣어서는 안 된다 —
+  // v2 기록은 versionStartWeek부터라 그 말이 표가 덮는 기간 전체를 가리키게 되고,
+  // 문항이 바뀌기 전 주차까지 "변화 없었다"고 잘못 말하게 된다. 답을 그대로 실어
+  // 치료사가 직접 보게 하고, 판단은 하지 않는다.
   const unchanged = legacy.filter((i) => !i.changed && !migrated.has(i.code));
   const unchangedLine = unchanged.length > 0
     ? `같은 기간 변화 없음 — ${unchanged.map((i) => i.label).join(', ')}`
     : null;
+  const hasRows = changed.length > 0 || revisedRows.length > 0;
   const noteWeeks = new Set(data.freeNotes.map((note) => note.week));
   // 치료사 토큰이 URL fragment로 오므로 hash를 쓰지 않고 스크롤과 초점만 옮긴다.
   const showNote = (week: number) => {
@@ -76,7 +102,7 @@ export function Therapist() {
 
       <section className="note-surface mt-6 min-w-0">
         <h2 className="font-semibold">주차별 관찰</h2>
-        {changed.length > 0 ? (
+        {hasRows ? (
           <ScrollRegion label="주차별 관찰 표">
             <table className="sticky-col min-w-max border-collapse">
               <thead>
@@ -109,6 +135,19 @@ export function Therapist() {
                     </tr>
                   )),
                 )}
+                {revisedRows.map((r) => (
+                  <tr key={r.code}>
+                    <th scope="row" className="border-b border-line px-3 py-4 text-left font-normal align-top">
+                      <span className="block font-semibold">{r.label}</span>
+                      <span className="text-small text-ink-soft">{r.questionLabel}</span>
+                    </th>
+                    {data.weeks.map((w) => (
+                      <td key={w} className="border-b border-line px-3 py-4 align-top">
+                        <ObservationValue point={r.byWeek.get(w)} />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
                 {/* 변화 없는 항목은 한 줄로 접는다 */}
                 {unchangedLine ? (
                   <tr>
