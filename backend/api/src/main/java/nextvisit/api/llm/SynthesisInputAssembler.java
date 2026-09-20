@@ -2,6 +2,7 @@ package nextvisit.api.llm;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -50,20 +51,40 @@ public class SynthesisInputAssembler {
         return new SynthesisInput(detections, picked);
     }
 
+    /**
+     * 한 주의 보호자 원문을 줄로 만든다. 같은 글은 한 줄만 남긴다 — 전체 재확인 주는 항목마다
+     * 메모칸이 있어 한 문장이 자유 기록까지 합쳐 여섯 번 들어올 수 있고, 그 반복을 그대로
+     * 넘기면 LLM 정리가 세 번 다 실패해 보호자가 템플릿 질문만 보게 된다. 줄을 지우는 대신
+     * 남은 줄이 시간대(자유 기록)와 항목(첫 항목 메모)을 함께 갖게 해 근거를 잃지 않는다.
+     */
     public static List<SynthesisInput.NoteLine> noteLines(int week, SnapshotBody body) {
         List<SynthesisInput.NoteLine> lines = new ArrayList<>();
         if (body == null) {
             return lines;
         }
+        Map<String, Integer> indexByText = new HashMap<>();
         if (body.freeNote() != null && hasText(body.freeNote().text())) {
-            lines.add(new SynthesisInput.NoteLine(week, timeTagLabel(body.freeNote().timeTag()), null,
-                body.freeNote().text().strip()));
+            String text = body.freeNote().text().strip();
+            indexByText.put(text, lines.size());
+            lines.add(new SynthesisInput.NoteLine(week, timeTagLabel(body.freeNote().timeTag()), null, text));
         }
         if (body.items() != null) {
             for (Map.Entry<String, SnapshotBody.ItemValues> entry : body.items().entrySet()) {
                 SnapshotBody.ItemValues values = entry.getValue();
-                if (values != null && hasText(values.note())) {
-                    lines.add(new SynthesisInput.NoteLine(week, null, itemLabel(entry.getKey()), values.note().strip()));
+                if (values == null || !hasText(values.note())) {
+                    continue;
+                }
+                String text = values.note().strip();
+                Integer at = indexByText.get(text);
+                if (at == null) {
+                    indexByText.put(text, lines.size());
+                    lines.add(new SynthesisInput.NoteLine(week, null, itemLabel(entry.getKey()), text));
+                    continue;
+                }
+                SynthesisInput.NoteLine kept = lines.get(at);
+                if (kept.itemLabel() == null) {
+                    lines.set(at, new SynthesisInput.NoteLine(
+                        week, kept.timeTagLabel(), itemLabel(entry.getKey()), text));
                 }
             }
         }

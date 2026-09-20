@@ -68,6 +68,40 @@ class SynthesisInputAssemblerTest {
         assertThat(input.notes()).extracting(SynthesisInput.NoteLine::week).containsExactly(2, 3);
     }
 
+    // 전체 재확인 주는 항목마다 메모칸이 있어 보호자가 같은 글을 여러 항목에 남기기 쉽다.
+    // 그대로 넘기면 한 문장이 프롬프트에 여섯 번까지 들어가고, 그 반복이 LLM 정리를
+    // 세 번 다 실패시켜 보호자가 템플릿 질문만 보게 된다.
+    @Test
+    void collapsesTheSameNoteRepeatedAcrossItemsIntoOneLine() {
+        Map<String, String> sameNoteEverywhere = new LinkedHashMap<>();
+        for (String code : List.of("toilet", "dressing", "grooming", "bathing", "feeding")) {
+            sameNoteEverywhere.put(code, "합성: 문턱 넘으실 때 오른쪽으로 기우심");
+        }
+        SortedMap<Integer, SnapshotBody> bodies = new TreeMap<>();
+        bodies.put(4, body("합성: 문턱 넘으실 때 오른쪽으로 기우심", "EVENING", sameNoteEverywhere));
+
+        SynthesisInput input = new SynthesisInputAssembler(props(4000)).assemble(List.of(), bodies);
+
+        // 시간대는 자유 기록에서, 항목은 첫 항목 메모에서 이어받아 한 줄로 합친다.
+        assertThat(input.notes()).containsExactly(new SynthesisInput.NoteLine(
+            4, "저녁", ObservationSet.STROKE.item("toilet").label(), "합성: 문턱 넘으실 때 오른쪽으로 기우심"));
+    }
+
+    @Test
+    void keepsDifferentNotesFromDifferentItems() {
+        Map<String, String> notes = new LinkedHashMap<>();
+        notes.put("toilet", "합성: 화장실은 혼자 하심");
+        notes.put("feeding", "합성: 숟가락을 놓치심");
+        SortedMap<Integer, SnapshotBody> bodies = new TreeMap<>();
+        bodies.put(5, body(null, null, notes));
+
+        SynthesisInput input = new SynthesisInputAssembler(props(4000)).assemble(List.of(), bodies);
+
+        assertThat(input.notes()).containsExactly(
+            new SynthesisInput.NoteLine(5, null, ObservationSet.STROKE.item("toilet").label(), "합성: 화장실은 혼자 하심"),
+            new SynthesisInput.NoteLine(5, null, ObservationSet.STROKE.item("feeding").label(), "합성: 숟가락을 놓치심"));
+    }
+
     @Test
     void skipsBlankNotesAndReportsNoNote() {
         SnapshotBody blank = body("   ", "EVENING", Map.of("toilet", ""));
