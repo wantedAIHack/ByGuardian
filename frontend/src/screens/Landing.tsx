@@ -15,7 +15,7 @@ export function Landing() {
         <p className="landing-description">집에서 보신 것을 남겨두시면, 다음에 병원 가실 때 여쭤볼 것을 만들어 드립니다.</p>
         <div className="landing-actions">
           <Link className="btn" to="/onboarding">관찰 기록 시작하기 <span aria-hidden="true">→</span></Link>
-          <Link className="text-link" to="/demo">먼저 둘러보기 <span aria-hidden="true">↗</span></Link>
+          <Link className="text-link" to="/demo">데모 체험하기 <span aria-hidden="true">↗</span></Link>
         </div>
       </section>
       <section className="sample-notebook" aria-label="관찰 노트 예시">
