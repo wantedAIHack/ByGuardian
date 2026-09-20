@@ -1,6 +1,7 @@
 package nextvisit.api.llm;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -93,6 +94,28 @@ public class SynthesisInputAssembler {
 
     public static boolean hasNote(SnapshotBody body) {
         return !noteLines(0, body).isEmpty();
+    }
+
+    /**
+     * 원문이 얇으면 LLM을 부르지 않는다 — 2026-09-20 운영 실측에서 한 주 원문이 10자 안팎일 때
+     * ("혼자 하심.", "조금 나음.") qwen3:4b가 남은 자리를 지어낸 말로 메우고 비문을 냈다
+     * ("조금 나는 이유가 무엇일까요?"). 26자 이상 표본 6개는 모두 멀쩡했다. 그 사이 구간은
+     * 들쭉날쭉해 경계를 20자에 둔다. 부르지 않으면 캐시는 READY로 남고 보호자는 규칙 엔진
+     * 템플릿을 받는다 — 템플릿은 언제나 근거에 붙어 있어 지어낸 문장보다 낫다.
+     */
+    static final int MIN_NOTE_CHARS = 20;
+
+    /** 한 주의 원문 글자 수. 같은 글이 여러 항목에 들어갔으면 한 번만 센다. */
+    public static int noteChars(SnapshotBody body) {
+        return noteLines(0, body).stream().mapToInt(line -> line.text().length()).sum();
+    }
+
+    public static int noteChars(Collection<SnapshotBody> bodies) {
+        return bodies.stream().mapToInt(SynthesisInputAssembler::noteChars).sum();
+    }
+
+    public static boolean worthSynthesizing(Collection<SnapshotBody> bodies) {
+        return noteChars(bodies) >= MIN_NOTE_CHARS;
     }
 
     private static boolean hasText(String text) {
