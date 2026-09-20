@@ -102,6 +102,41 @@ class SynthesisInputAssemblerTest {
             new SynthesisInput.NoteLine(5, null, ObservationSet.STROKE.item("feeding").label(), "합성: 숟가락을 놓치심"));
     }
 
+    // 실측: 보호자 원문이 총 10자 이하인 주("혼자 하심.", "조금 나음.")에서는 qwen3:4b가
+    // 남은 자리를 지어낸 말로 메우고 비문을 낸다("조금 나는 이유가 무엇일까요?"). 26자
+    // 이상에서는 6개 표본이 모두 멀쩡했다. 원문이 얇으면 LLM을 부르지 않고 규칙 엔진
+    // 템플릿을 그대로 쓴다 — 템플릿은 언제나 근거에 붙어 있다.
+    @Test
+    void countsNoteCharactersAfterCollapsingDuplicates() {
+        Map<String, String> sameNote = new LinkedHashMap<>();
+        sameNote.put("toilet", "합성: 혼자 하심");
+        sameNote.put("dressing", "합성: 혼자 하심");
+        // 같은 글이 세 번 들어와도 한 번만 센다.
+        assertThat(SynthesisInputAssembler.noteChars(body("합성: 혼자 하심", "EVENING", sameNote)))
+            .isEqualTo("합성: 혼자 하심".length());
+    }
+
+    @Test
+    void addsUpNoteCharactersAcrossWeeks() {
+        SortedMap<Integer, SnapshotBody> bodies = new TreeMap<>();
+        bodies.put(2, body("합성: 열두 자짜리 메모", null, Map.of()));
+        bodies.put(3, body(null, null, Map.of("toilet", "합성: 또 다른 메모")));
+        assertThat(SynthesisInputAssembler.noteChars(bodies.values()))
+            .isEqualTo("합성: 열두 자짜리 메모".length() + "합성: 또 다른 메모".length());
+    }
+
+    @Test
+    void thinNotesDoNotEarnAnLlmCall() {
+        SortedMap<Integer, SnapshotBody> thin = new TreeMap<>();
+        thin.put(2, body("혼자 하심.", "EVENING", Map.of()));
+        thin.put(3, body("조금 나음.", "EVENING", Map.of()));
+        assertThat(SynthesisInputAssembler.worthSynthesizing(thin.values())).isFalse();
+
+        SortedMap<Integer, SnapshotBody> enough = new TreeMap<>(thin);
+        enough.put(4, body("아침에는 혼자 하시는데 저녁에는 도와드렸어요.", "EVENING", Map.of()));
+        assertThat(SynthesisInputAssembler.worthSynthesizing(enough.values())).isTrue();
+    }
+
     @Test
     void skipsBlankNotesAndReportsNoNote() {
         SnapshotBody blank = body("   ", "EVENING", Map.of("toilet", ""));

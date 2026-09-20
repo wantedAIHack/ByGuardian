@@ -72,7 +72,10 @@ public class QuestionService {
         String js = json.toJson(body);
         Instant now = Instant.now(clock);
         // 2026-09-17 정리 설계 3.1: 보호자 원문이 하나도 없으면 LLM을 부르지 않는다.
-        boolean generateWithLlm = properties.enabled() && snaps.stream().anyMatch(this::hasNote);
+        // 2026-09-20: 원문이 있어도 너무 얇으면 부르지 않는다 — 실측에서 모델이 모자란
+        // 자리를 지어낸 말로 메웠다. 기준은 SynthesisInputAssembler.MIN_NOTE_CHARS.
+        boolean generateWithLlm = properties.enabled()
+            && SynthesisInputAssembler.worthSynthesizing(snaps.stream().map(this::bodyOf).toList());
         QuestionCacheStatus status = generateWithLlm
             ? QuestionCacheStatus.LLM_PENDING : QuestionCacheStatus.READY;
         UUID generationId = UUID.randomUUID();
@@ -90,8 +93,8 @@ public class QuestionService {
         return body;
     }
 
-    private boolean hasNote(Snapshot snapshot) {
-        return SynthesisInputAssembler.hasNote(json.fromJson(snapshot.getBody(), SnapshotBody.class));
+    private SnapshotBody bodyOf(Snapshot snapshot) {
+        return json.fromJson(snapshot.getBody(), SnapshotBody.class);
     }
 
     @Transactional(readOnly = true)
