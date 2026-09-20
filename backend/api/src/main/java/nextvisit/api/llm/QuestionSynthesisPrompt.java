@@ -28,6 +28,7 @@ public class QuestionSynthesisPrompt {
         질문 문장 하나에는 물음표를 정확히 하나만, 문장 맨 끝에 쓰고 마침표, 느낌표, 온점(。)은 쓰지 마세요.
         질문은 1개에서 3개까지이고 서로 겹치지 않게 하세요.
         각 질문에 근거를 적으세요. detections에는 참고한 변화의 id를, noteWeeks에는 참고한 보호자 기록의 week를 넣고, 둘 중 적어도 하나는 비우지 마세요.
+        예시 문장의 낱말(어깨, 오후 등)을 베끼지 말고, 입력 notes에 실제로 적힌 말만 쓰세요.
         마크다운이나 설명 없이 정확히 {"questions":[{"sentence":"오후마다 어깨를 자주 만지시는데 어떤 점을 살펴보면 좋을까요?","detections":["D1"],"noteWeeks":[3]}]} 형태의 JSON 객체 하나만 반환하세요.""";
 
     /**
@@ -69,7 +70,8 @@ public class QuestionSynthesisPrompt {
         Payload payload = new Payload(
             input.detections().stream().map(d -> new DetectionPayload(d.id(), d.sentence())).toList(),
             input.notes().stream().map(n -> new NotePayload(n.week(), n.timeTagLabel(), n.itemLabel(), n.text())).toList());
-        String system = retryRule.map(QuestionSynthesisPrompt::retrySystem).orElse(SYSTEM);
+        String base = input.detections().isEmpty() ? SYSTEM + NO_DETECTIONS : SYSTEM;
+        String system = retryRule.map(rule -> retrySystem(base, rule)).orElse(base);
         return new LlmPrompt(system, json(payload));
     }
 
@@ -81,9 +83,18 @@ public class QuestionSynthesisPrompt {
         }
     }
 
-    private static String retrySystem(String rule) {
+    /**
+     * 규칙 엔진이 그 주에 아무 변화도 찾지 못하면 detections가 빈 배열로 간다. 그런데
+     * 위 예시는 늘 {@code "detections":["D1"]}이라, 모델이 그 D1을 그대로 베껴
+     * UNKNOWN_DETECTION으로 세 번 다 거부됐다. 비었을 때만 이 줄을 덧붙인다.
+     */
+    static final String NO_DETECTIONS =
+        "\n이번 입력에는 detections가 없습니다. 각 질문의 detections는 반드시 빈 배열([])로 두고,"
+            + " 근거는 noteWeeks로만 대세요.";
+
+    private static String retrySystem(String base, String rule) {
         String guidance = RETRY_GUIDANCE.get(rule);
-        return SYSTEM + "\n직전 응답은 검증 규칙 " + rule + "을 위반했습니다. "
+        return base + "\n직전 응답은 검증 규칙 " + rule + "을 위반했습니다. "
             + (guidance == null ? "" : guidance + " ") + "이 규칙을 지켜 다시 만드세요.";
     }
 
