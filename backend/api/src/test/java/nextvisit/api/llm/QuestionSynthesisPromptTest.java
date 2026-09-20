@@ -50,6 +50,27 @@ class QuestionSynthesisPromptTest {
             .doesNotContain("/no_think");
     }
 
+    // 규칙 엔진이 아무 변화도 못 찾은 주가 있다. 그때 detections는 빈 배열로 가는데,
+    // 시스템 프롬프트의 예시는 늘 "detections":["D1"]이라 4B 모델이 그 D1을 그대로
+    // 베꼈고 UNKNOWN_DETECTION으로 세 번 다 거부됐다(운영 실측 20회 중 3회).
+    @Test
+    void emptyDetectionsTellTheModelToLeaveThemEmpty() {
+        SynthesisInput noDetections = new SynthesisInput(List.of(), input.notes());
+        String system = prompts.build(noDetections, Optional.empty()).systemMessage();
+
+        assertThat(system).contains("detections가 없습니다").contains("빈 배열");
+        assertThat(prompts.build(input, Optional.empty()).systemMessage())
+            .doesNotContain("detections가 없습니다");
+    }
+
+    // 예시 문장의 "어깨"가 보호자 기록에 없는데도 질문에 실려 나왔다. 보호자가 그 질문을
+    // 그대로 진료실에서 여쭙게 되므로, 예시를 베끼지 말라고 못박는다.
+    @Test
+    void systemMessageForbidsCopyingTheExampleWording() {
+        assertThat(prompts.build(input, Optional.empty()).systemMessage())
+            .contains("예시 문장의 낱말");
+    }
+
     @Test
     void retryNamesTheViolatedRule() {
         String system = prompts.build(input, Optional.of("UNSUPPORTED_NUMBER")).systemMessage();
