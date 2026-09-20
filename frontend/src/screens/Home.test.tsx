@@ -51,7 +51,7 @@ describe('홈', () => {
     expect(screen.getByRole('link', { name: '관찰 기록 시작하기' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /이어받기/ })).toBeInTheDocument();
     // 심사위원이 온보딩 열여덟 화면을 거치지 않고 데이터 있는 화면을 볼 수 있는 유일한 통로.
-    expect(screen.getByRole('link', { name: '먼저 둘러보기' })).toHaveAttribute('href', '/demo');
+    expect(screen.getByRole('link', { name: '데모 체험하기' })).toHaveAttribute('href', '/demo');
   });
 
   it('판정 문구를 만들지 않는다 — 토큰 없음', () => {
@@ -66,7 +66,7 @@ describe('홈', () => {
         '보호자의 일상 관찰 노트',
         '집에서의 관찰을,다음 진료의 질문으로',
         '집에서 보신 것을 남겨두시면, 다음에 병원 가실 때 여쭤볼 것을 만들어 드립니다.',
-        '관찰 기록 시작하기 →', '먼저 둘러보기 ↗',
+        '관찰 기록 시작하기 →', '데모 체험하기 ↗',
         '나의 관찰 노트예시집에서 본 장면을남겨요',
         '관찰한 내용을 모아 진료실에서 여쭤볼 질문을 준비합니다.',
         '기록에서 질문으로,질문에서 대화로.',
