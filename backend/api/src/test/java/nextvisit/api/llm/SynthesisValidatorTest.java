@@ -27,6 +27,40 @@ class SynthesisValidatorTest {
             + ",\"noteWeeks\":" + weeks + "}]}";
     }
 
+    // 운영 실측: qwen3:4b가 짧은 메모("하루 3번 정도 다녀오셨습니다.")에서
+    // "화장실 이용이 잘 되나요까요?"를 내놓았다. 어미가 겹친 비문인데 기존 15규칙을
+    // 모두 통과해 보호자에게 그대로 나갔다. 재시도 3회로도 회복되지 않으므로,
+    // 막아서 안전한 템플릿으로 떨어지게 하는 편이 낫다.
+    @Test
+    void rejectsStackedInterrogativeEndings() {
+        assertThatThrownBy(() -> validator.validate(input, one("화장실 이용이 잘 되나요까요?", "[]", "[3]")))
+            .isInstanceOf(SynthesisValidator.Rejected.class)
+            .hasMessage(SynthesisValidator.Rule.STACKED_ENDING.name());
+    }
+
+    @Test
+    void acceptsASingleInterrogativeEnding() {
+        assertThat(validator.validate(input, one("화장실 이용이 잘 되나요?", "[]", "[3]")).questions())
+            .extracting(SynthesisValidator.Question::sentence)
+            .containsExactly("화장실 이용이 잘 되나요?");
+    }
+
+    // 같은 모델이 프롬프트를 조금 바꾸자 "조금 나ём다고"처럼 키릴 문자를 섞어 냈다.
+    // 한국어 질문에 키릴·그리스 문자가 들어갈 일은 없다.
+    @Test
+    void rejectsNonKoreanScripts() {
+        assertThatThrownBy(() -> validator.validate(input, one("화장실 이용이 조금 나ём다고 하면 어떨까요?", "[]", "[3]")))
+            .isInstanceOf(SynthesisValidator.Rejected.class)
+            .hasMessage(SynthesisValidator.Rule.NON_KOREAN_SCRIPT.name());
+    }
+
+    // 라틴 문자는 보호자가 실제로 쓴다(TV, CT). 키릴·그리스만 막고 이건 막지 않는다.
+    @Test
+    void keepsLatinLettersThatCaregiversActuallyWrite() {
+        assertThat(validator.validate(input, one("TV 보시는 동안 어깨를 만지시는데 어떤 점을 살펴보면 좋을까요?", "[]", "[3]")).questions())
+            .hasSize(1);
+    }
+
     @Test
     void acceptsGroundedQuestionsAndNormalizesSentences() {
         String content = "{\"questions\":["

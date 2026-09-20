@@ -40,6 +40,19 @@ public class SynthesisValidator {
         "[\\r\\n\\u2028\\u2029\\p{Cf}\\\\`*_~#<>\\[\\]|]|^\\s*(?:>|[-+=]|\\d{1,9}[.)](?:\\s|$))");
     private static final Pattern INTERROGATIVE_ENDING = Pattern.compile(
         "(?:나요|까요|가요|습니까|지요|죠)\\?$");
+    /**
+     * 어미를 겹쳐 쓴 비문을 막는다. 운영에서 qwen3:4b가 짧은 메모에 "화장실 이용이 잘
+     * 되나요까요?"를 내놓았는데, 끝이 "까요?"라 INTERROGATIVE_ENDING을 통과해 보호자에게
+     * 그대로 나갔다. 재시도 세 번으로도 같은 문장이 반복돼 템플릿으로 떨어뜨리는 편이 낫다.
+     */
+    private static final Pattern STACKED_ENDING = Pattern.compile(
+        "(?:나요|까요|가요|지요|죠)(?:나요|까요|가요|지요|죠)\\?$");
+    /**
+     * 한국어 질문에 키릴·그리스 문자가 섞일 일은 없다. 같은 모델이 "조금 나ём다고"처럼
+     * 다른 문자를 끼워 넣은 적이 있다. 라틴 문자와 숫자는 보호자가 실제로 쓰므로(TV, 2번)
+     * 막지 않는다.
+     */
+    private static final Pattern NON_KOREAN_SCRIPT = Pattern.compile("[\\u0370-\\u03FF\\u0400-\\u04FF]");
     /** 옛 QuestionOutputGuard의 지시형 패턴에서 '해야'만 뺐다. "어떻게 해야 할까요?"는 보호자의 질문이다. */
     private static final Pattern DIRECTIVE = Pattern.compile(
         "(?:세요|십시오|해\\s*주세요|기\\s*바랍니다|"
@@ -147,6 +160,12 @@ public class SynthesisValidator {
         if (!INTERROGATIVE_ENDING.matcher(s).find()) {
             throw new Rejected(Rule.QUESTION_MARK);
         }
+        if (STACKED_ENDING.matcher(s).find()) {
+            throw new Rejected(Rule.STACKED_ENDING);
+        }
+        if (NON_KOREAN_SCRIPT.matcher(s).find()) {
+            throw new Rejected(Rule.NON_KOREAN_SCRIPT);
+        }
         // 공백/서식 제어문자를 지운 사본으로만 금지어·판단 표현을 검사한다 — "치 료"처럼 끼워넣어 피해가지 못하게.
         String strippedForWordCheck = STRIP_FOR_WORD_CHECK.matcher(s).replaceAll("");
         if (Templates.containsForbiddenWord(strippedForWordCheck)) {
@@ -251,6 +270,8 @@ public class SynthesisValidator {
         SENTENCE_LENGTH,
         MARKDOWN,
         QUESTION_MARK,
+        STACKED_ENDING,
+        NON_KOREAN_SCRIPT,
         FORBIDDEN_WORD,
         DIRECTIVE,
         BASIS_EMPTY,
