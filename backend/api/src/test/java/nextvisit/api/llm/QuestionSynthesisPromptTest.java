@@ -53,6 +53,36 @@ class QuestionSynthesisPromptTest {
     @Test
     void retryNamesTheViolatedRule() {
         String system = prompts.build(input, Optional.of("UNSUPPORTED_NUMBER")).systemMessage();
-        assertThat(system).endsWith("직전 응답은 검증 규칙 UNSUPPORTED_NUMBER을 위반했습니다. 이 규칙을 지켜 다시 만드세요.");
+        assertThat(system)
+            .contains("직전 응답은 검증 규칙 UNSUPPORTED_NUMBER을 위반했습니다.")
+            .endsWith("이 규칙을 지켜 다시 만드세요.");
+    }
+
+    // 규칙 이름만 돌려주면 모델이 무엇을 고쳐야 할지 알 수 없다. 운영 실측에서
+    // qwen3:4b는 "...확인해 주시겠어요?"를 세 번 연속으로 내놓고(temperature 0.1,
+    // seed 0이라 재시도가 같은 답을 반복한다) QUESTION_MARK으로 세 번 다 거부돼
+    // 보호자가 템플릿 질문만 받았다. 어미를 짚어 주면 같은 입력에서 통과한다.
+    @Test
+    void retryTellsTheModelWhatToFixNotJustTheRuleName() {
+        String system = prompts.build(input, Optional.of("QUESTION_MARK")).systemMessage();
+        assertThat(system)
+            .contains("'~나요?'")
+            .contains("'~까요?'")
+            .contains("'~주시겠어요?'");
+    }
+
+    @Test
+    void everyValidatorRuleHasRetryGuidance() {
+        for (SynthesisValidator.Rule rule : SynthesisValidator.Rule.values()) {
+            assertThat(QuestionSynthesisPrompt.RETRY_GUIDANCE)
+                .as("retry guidance for %s", rule)
+                .containsKey(rule.name());
+        }
+    }
+
+    @Test
+    void unknownRuleStillProducesAUsablePrompt() {
+        String system = prompts.build(input, Optional.of("NOT_A_RULE")).systemMessage();
+        assertThat(system).endsWith("직전 응답은 검증 규칙 NOT_A_RULE을 위반했습니다. 이 규칙을 지켜 다시 만드세요.");
     }
 }
