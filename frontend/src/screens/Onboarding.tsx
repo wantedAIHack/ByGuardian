@@ -207,14 +207,15 @@ export function Onboarding({ catalog, mode = 'standard' }: { catalog: Catalog; m
         footer={
           <div className="flex flex-col gap-3">
             <Button disabled={!s.nextVisitDate} onClick={() => go(1)}>다음</Button>
-            <Button variant="quiet" onClick={() => set({ nextVisitDate: null, step: s.step + 1 })}>
-              건너뛰기
-            </Button>
           </div>
         }
       >
         <h1 data-step-title tabIndex={-1} className="text-title font-semibold">다음 진료일이 정해져 있나요?</h1>
-        <Notice>모르시면 건너뛰셔도 됩니다. 나중에 설정에서 넣으실 수 있습니다.</Notice>
+        {/* 건너뛰기를 두지 않는다. 진료 준비 카드로 가는 링크는 홈에 하나뿐이고
+            진료일 D-3~당일에만 뜨므로(isVisitSoon), 날짜가 없으면 이 제품의 핵심
+            화면에 도달할 방법이 아예 없다. 정확한 날짜가 아니어도 괜찮다고 말해
+            모르는 보호자가 막히지 않게 한다. */}
+        <Notice>진료일에 맞춰 여쭤볼 것을 준비해 드립니다. 정확하지 않아도 괜찮고, 설정에서 고치실 수 있습니다.</Notice>
         {/* 화면에는 위 h2가 질문을 말하지만, 화면 읽기 도구에는 이름 없는
             textbox로만 들렸다. 날짜 입력은 값이 비어 있을 때 placeholder도
             없어서 무엇을 넣는 칸인지 들을 방법이 아예 없다. */}

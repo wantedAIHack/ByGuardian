@@ -274,9 +274,9 @@ describe('치료사용 요약', () => {
     expect(cells?.[2]?.textContent).toBe('혼자 하심직접 확인');
   });
 
-  // 실사용 재현: 새 케이스는 8개 중 5개가 v2 문항이라 표에 들어가는 legacy 항목이
-  // 이동 3개뿐이다. 그 셋이 안 바뀌면 표에는 데이터 줄이 하나도 남지 않는다.
-  it('v2 문항만 바뀐 케이스에서 데이터 없는 표를 내지 않는다', async () => {
+  // 표에 실을 줄이 정말 하나도 없을 때만 표를 접는다 — v2 항목에 답이 하나도 없어
+  // 대표 문항을 못 고르는 경우다.
+  it('실을 줄이 하나도 없으면 데이터 없는 표를 내지 않는다', async () => {
     const v2Only: TherapistSummary = {
       ...summary,
       weeks: [4, 5, 6],
@@ -293,18 +293,9 @@ describe('치료사용 요약', () => {
           }],
         },
         {
-          code: 'toilet:v2', label: '화장실 이용', changed: true, axes: [],
+          code: 'toilet:v2', label: '화장실 이용', changed: false, axes: [],
           questionnaireVersion: 2, versionStartWeek: 4,
-          observations: [
-            {
-              week: 4, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
-              answers: ['본인이 대부분 하고 일부 동작에 직접 도움'], source: 'CONFIRMED',
-            },
-            {
-              week: 6, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
-              answers: ['혼자 앉고 일어섬'], source: 'CONFIRMED',
-            },
-          ],
+          observations: [],
         },
       ],
     };
@@ -316,6 +307,72 @@ describe('치료사용 요약', () => {
     expect(screen.getByText('같은 기간 변화 없음 — 침대·의자에서 옮겨 앉기')).toBeInTheDocument();
     // 바뀐 v2 항목이 아래에 있다는 것을 알린다.
     expect(screen.getByText('주차별 문항과 답은 아래 항목별 기록에 있습니다.')).toBeInTheDocument();
+  });
+
+  // 새 케이스는 8항목 중 5개가 v2 문항이라 표에 들어갈 legacy 항목이 이동 3개뿐이다.
+  // v2 항목을 표에서 빼면 치료사가 처음 보는 화면에서 주차별 변화를 볼 수 없다.
+  // 항목의 첫 문항(대표 문항) 답을 한 줄로 실어 한눈에 보이게 한다.
+  it('v2 문항 항목도 주차별 표에 한 줄로 싣는다', async () => {
+    const v2: TherapistSummary = {
+      ...summary,
+      weeks: [4, 5, 6],
+      items: [
+        {
+          code: 'transfer', label: '침대·의자에서 옮겨 앉기', changed: false,
+          axes: [{
+            axis: 'LEVEL', axisLabel: '도움 수준',
+            values: [{ week: 4, value: 1, label: '손 잡아드림', source: 'CONFIRMED' }],
+          }],
+        },
+        {
+          code: 'toilet:v2', label: '화장실 이용', changed: true, axes: [],
+          questionnaireVersion: 2, versionStartWeek: 4,
+          observations: [
+            { week: 4, question: 'note', label: '추가 관찰', answers: ['문턱에서 기우심'], source: 'CONFIRMED' },
+            {
+              week: 4, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
+              answers: ['본인이 대부분 하고 일부 동작에 직접 도움'], source: 'CONFIRMED',
+            },
+            {
+              week: 5, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
+              answers: ['지켜보기나 말 안내 후 혼자 앉고 일어섬'], source: 'CARRIED',
+            },
+            {
+              week: 6, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
+              answers: ['혼자 앉고 일어섬'], source: 'CONFIRMED',
+            },
+          ],
+        },
+      ],
+    };
+    renderIt(v2);
+    const table = await screen.findByRole('table');
+    const row = within(table).getByRole('row', { name: /화장실 이용/ });
+
+    // 대표 문항은 '추가 관찰' 메모가 아니라 첫 실제 문항이다.
+    expect(within(row).getByText('변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?')).toBeInTheDocument();
+    expect(within(row).getByText('본인이 대부분 하고 일부 동작에 직접 도움')).toBeInTheDocument();
+    expect(within(row).getByText('혼자 앉고 일어섬')).toBeInTheDocument();
+    expect(within(row).getByText('지난 값 유지')).toBeInTheDocument();
+  });
+
+  it('기록이 없는 주차는 v2 줄에서도 미기록으로 둔다', async () => {
+    const v2: TherapistSummary = {
+      ...summary,
+      weeks: [4, 5, 6],
+      items: [{
+        code: 'bathing:v2', label: '목욕', changed: true, axes: [],
+        questionnaireVersion: 2, versionStartWeek: 5,
+        observations: [
+          { week: 5, question: 'assistance', label: '목욕할 때 어느 정도 참여하셨나요?', answers: ['가슴이나 팔처럼 손이 닿는 부위만 혼자 가능'], source: 'CONFIRMED' },
+          { week: 6, question: 'assistance', label: '목욕할 때 어느 정도 참여하셨나요?', answers: ['준비 과정이나 안전을 위한 감시하에 스스로 수행'], source: 'CONFIRMED' },
+        ],
+      }],
+    };
+    renderIt(v2);
+    const table = await screen.findByRole('table');
+    const row = within(table).getByRole('row', { name: /목욕/ });
+    expect(within(row).getByText('미기록')).toBeInTheDocument();
   });
 
   it('기록 밀도와 작성자 변경을 보여준다', async () => {

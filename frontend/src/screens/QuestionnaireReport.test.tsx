@@ -44,7 +44,8 @@ describe('새 문항의 사실 기록', () => {
       density: { totalWeeks: 7, recordedWeeks: 2, confirmedWeeks: 1, authors: ['딸'] }, disclaimer: '보호자 관찰 기록입니다.',
     })));
     show(<Therapist />);
-    expect(await screen.findByText('직접 보지 못했어요')).toBeInTheDocument();
+    // 대표 문항 답은 주차별 개요 표와 아래 항목별 상세 두 군데에 나온다.
+    expect(await screen.findAllByText('직접 보지 못했어요')).toHaveLength(2);
     expect(screen.getByText('치약을 짜는 것만 도왔어요.')).toBeInTheDocument();
     expect(screen.queryByText(/같은 기간 변화 없음 — 세수/)).not.toBeInTheDocument();
   });
@@ -60,7 +61,7 @@ it('문항 전환 전 기록을 전체 기간 변화 없음으로 잘못 요약�
     density: { totalWeeks: 7, recordedWeeks: 3, confirmedWeeks: 2, authors: ['딸'] }, disclaimer: '보호자 관찰 기록입니다.',
   })));
   show(<Therapist />);
-  expect(await screen.findByText('직접 보지 못했어요')).toBeInTheDocument();
+  expect(await screen.findAllByText('직접 보지 못했어요')).toHaveLength(2);
   expect(screen.queryByText(/같은 기간 변화 없음 — 세수/)).not.toBeInTheDocument();
   expect(screen.getByText('지켜보면 됨')).toBeInTheDocument();
   expect(screen.getByText('세수·양치 (이전 질문)')).toBeInTheDocument();
