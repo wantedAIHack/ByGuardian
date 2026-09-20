@@ -274,6 +274,50 @@ describe('치료사용 요약', () => {
     expect(cells?.[2]?.textContent).toBe('혼자 하심직접 확인');
   });
 
+  // 실사용 재현: 새 케이스는 8개 중 5개가 v2 문항이라 표에 들어가는 legacy 항목이
+  // 이동 3개뿐이다. 그 셋이 안 바뀌면 표에는 데이터 줄이 하나도 남지 않는다.
+  it('v2 문항만 바뀐 케이스에서 데이터 없는 표를 내지 않는다', async () => {
+    const v2Only: TherapistSummary = {
+      ...summary,
+      weeks: [4, 5, 6],
+      items: [
+        {
+          code: 'transfer', label: '침대·의자에서 옮겨 앉기', changed: false,
+          axes: [{
+            axis: 'LEVEL', axisLabel: '도움 수준',
+            values: [
+              { week: 4, value: 1, label: '손 잡아드림', source: 'CONFIRMED' },
+              { week: 5, value: 1, label: '손 잡아드림', source: 'CARRIED' },
+              { week: 6, value: 1, label: '손 잡아드림', source: 'CARRIED' },
+            ],
+          }],
+        },
+        {
+          code: 'toilet:v2', label: '화장실 이용', changed: true, axes: [],
+          questionnaireVersion: 2, versionStartWeek: 4,
+          observations: [
+            {
+              week: 4, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
+              answers: ['본인이 대부분 하고 일부 동작에 직접 도움'], source: 'CONFIRMED',
+            },
+            {
+              week: 6, question: 'transfer', label: '변기에 앉고 일어설 때 어느 정도 도움이 필요했나요?',
+              answers: ['혼자 앉고 일어섬'], source: 'CONFIRMED',
+            },
+          ],
+        },
+      ],
+    };
+    renderIt(v2Only);
+    await screen.findByRole('heading', { name: '주차별 관찰' });
+    // 줄이 없으면 주차 열만 남은 표를 세우지 않는다.
+    expect(screen.queryByRole('table')).toBeNull();
+    // 바뀐 것이 없는 항목은 그대로 한 줄로 알린다.
+    expect(screen.getByText('같은 기간 변화 없음 — 침대·의자에서 옮겨 앉기')).toBeInTheDocument();
+    // 바뀐 v2 항목이 아래에 있다는 것을 알린다.
+    expect(screen.getByText('주차별 문항과 답은 아래 항목별 기록에 있습니다.')).toBeInTheDocument();
+  });
+
   it('기록 밀도와 작성자 변경을 보여준다', async () => {
     renderIt();
     expect(await screen.findByText(/6주 중 5주 기록/)).toBeInTheDocument();

@@ -54,6 +54,9 @@ export function Therapist() {
   const changed = legacy.filter((i) => i.changed || migrated.has(i.code)).map((i) =>
     migrated.has(i.code) ? { ...i, label: `${i.label} (이전 질문)` } : i);
   const unchanged = legacy.filter((i) => !i.changed && !migrated.has(i.code));
+  const unchangedLine = unchanged.length > 0
+    ? `같은 기간 변화 없음 — ${unchanged.map((i) => i.label).join(', ')}`
+    : null;
   const noteWeeks = new Set(data.freeNotes.map((note) => note.week));
   // 치료사 토큰이 URL fragment로 오므로 hash를 쓰지 않고 스크롤과 초점만 옮긴다.
   const showNote = (week: number) => {
@@ -73,49 +76,61 @@ export function Therapist() {
 
       <section className="note-surface mt-6 min-w-0">
         <h2 className="font-semibold">주차별 관찰</h2>
-        <ScrollRegion label="주차별 관찰 표">
-          <table className="sticky-col min-w-max border-collapse">
-            <thead>
-              <tr>
-                <th scope="col" className="border-b border-line px-3 py-2 text-left">항목</th>
-                {data.weeks.map((w) => (
-                  <th scope="col" key={w} className="border-b border-line px-3 py-2 text-left">{w}주</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {changed.map((item) =>
-                item.axes.map((a) => (
-                  <tr key={`${item.code}-${a.axis}`}>
-                    <th scope="row" className="border-b border-line px-3 py-4 text-left font-normal align-top">
-                      <span className="block font-semibold">{item.label}</span>
-                      <span className="text-small text-ink-soft">{a.axisLabel}</span>
-                    </th>
-                    {data.weeks.map((w) => {
-                      const p = a.values.find((v) => v.week === w);
-                      return (
-                        <td
-                          key={w}
-                          className="border-b border-line px-3 py-4 align-top"
-                        >
-                          <ObservationValue point={p} />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                )),
-              )}
-              {/* 변화 없는 항목은 한 줄로 접는다 */}
-              {unchanged.length > 0 ? (
+        {changed.length > 0 ? (
+          <ScrollRegion label="주차별 관찰 표">
+            <table className="sticky-col min-w-max border-collapse">
+              <thead>
                 <tr>
-                  <td className="px-3 py-2 text-ink-soft" colSpan={data.weeks.length + 1}>
-                    같은 기간 변화 없음 — {unchanged.map((i) => i.label).join(', ')}
-                  </td>
+                  <th scope="col" className="border-b border-line px-3 py-2 text-left">항목</th>
+                  {data.weeks.map((w) => (
+                    <th scope="col" key={w} className="border-b border-line px-3 py-2 text-left">{w}주</th>
+                  ))}
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </ScrollRegion>
+              </thead>
+              <tbody>
+                {changed.map((item) =>
+                  item.axes.map((a) => (
+                    <tr key={`${item.code}-${a.axis}`}>
+                      <th scope="row" className="border-b border-line px-3 py-4 text-left font-normal align-top">
+                        <span className="block font-semibold">{item.label}</span>
+                        <span className="text-small text-ink-soft">{a.axisLabel}</span>
+                      </th>
+                      {data.weeks.map((w) => {
+                        const p = a.values.find((v) => v.week === w);
+                        return (
+                          <td
+                            key={w}
+                            className="border-b border-line px-3 py-4 align-top"
+                          >
+                            <ObservationValue point={p} />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )),
+                )}
+                {/* 변화 없는 항목은 한 줄로 접는다 */}
+                {unchangedLine ? (
+                  <tr>
+                    <td className="px-3 py-2 text-ink-soft" colSpan={data.weeks.length + 1}>
+                      {unchangedLine}
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </ScrollRegion>
+        ) : (
+          // 표에 낼 축이 하나도 없으면 주차 열만 선 빈 표를 세우지 않는다. 새 케이스는
+          // 8개 중 5개가 v2 문항이라 여기로 오는 것이 보통이고, 그 항목들의 주차별
+          // 기록은 아래 항목별 구역이 그대로 보여준다.
+          <>
+            {unchangedLine ? <p className="pt-3 text-ink-soft">{unchangedLine}</p> : null}
+            {revised.length > 0 ? (
+              <p className="pt-3 text-ink-soft">주차별 문항과 답은 아래 항목별 기록에 있습니다.</p>
+            ) : null}
+          </>
+        )}
         <p className="pt-4 text-small text-ink-soft">지난 값 유지: 달라진 것 없음으로 이어간 기록</p>
       </section>
 
